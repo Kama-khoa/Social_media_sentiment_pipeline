@@ -1,0 +1,57 @@
+crawl:
+  max_videos_per_keyword: 50
+  max_comments_per_video: 500
+  max_pages_per_crawl: 20
+  notable_channel_min_subscribers: 100000
+  incremental_window_days: 30
+
+  # Video Maturity Model
+  new_video_min_age_days: 3
+  growing_video_max_age_days: 14
+  mature_video_max_age_days: 30
+  growing_recrawl_interval_days: 3
+  mature_recrawl_interval_days: 7
+  archived_recrawl_interval_days: 30
+
+  # Historical scan (Mode 0 - yt-dlp, 0 API quota)
+  historical_scan_channels_per_day: 20
+  historical_scan_max_results: 50
+
+  # RSS daily (Mode 1 - 0 API quota)
+  rss_max_entries: 15
+
+  # Keyword search (Mode 2 - search.list)
+  keyword_search_max_results: 50
+
+comment_downloader:
+  max_comments_per_video: 500
+  request_delay_seconds: 1.0
+  max_retries: 2
+
+quota:
+  daily_budget: 10000
+  safety_buffer: 500
+  videos_list_batch_size: 50
+  comments_per_page: 100
+  bucket_search: 9000
+  bucket_channel_seed: 500
+
+nlp:
+  confidence_threshold: 0.80
+  aspect_labels:
+    - Pin
+    - Camera
+    - "Màn hình"
+    - "Hiệu năng"
+    - "Thiết kế"
+    - "Giá"
+  sentiment_labels:
+    - positive
+    - negative
+    - neutral
+  gemini_batch_size: 50
+
+api:
+  redis_ttl_seconds: 300
+  host: "0.0.0.0"
+  port: 8000
