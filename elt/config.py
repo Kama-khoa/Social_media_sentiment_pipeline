@@ -21,16 +21,16 @@ class CrawlConfig:
     max_comments_per_video: int
     historical_scan_channels_per_day: int
     historical_scan_max_results: int
-    rss_max_entries: int
-    keyword_search_max_results: int
+    daily_scan_lookback_days: int
+    daily_scan_max_results: int
+    enrich_max_workers: int
+    video_batch_size: int
     new_video_min_age_days: int
     growing_video_max_age_days: int
     mature_video_max_age_days: int
     growing_recrawl_interval_days: int
     mature_recrawl_interval_days: int
     archived_recrawl_interval_days: int
-    enrich_max_workers: int       # default 8
-    video_batch_size: int          # default 50
 
 
 @dataclass
@@ -74,7 +74,7 @@ def load_config(config_path: str | None = None) -> PipelineConfig:
         if config_path is not None
         else Path(__file__).parent.parent / "config" / "pipeline_config.yaml"
     )
- 
+
     with open(resolved, "r", encoding="utf-8") as f:
         raw = yaml.safe_load(f)
 
@@ -93,16 +93,16 @@ def load_config(config_path: str | None = None) -> PipelineConfig:
             max_comments_per_video=crawl["max_comments_per_video"],
             historical_scan_channels_per_day=crawl["historical_scan_channels_per_day"],
             historical_scan_max_results=crawl["historical_scan_max_results"],
-            rss_max_entries=crawl["rss_max_entries"],
-            keyword_search_max_results=crawl["keyword_search_max_results"],
+            daily_scan_lookback_days=crawl["daily_scan_lookback_days"],
+            daily_scan_max_results=crawl["daily_scan_max_results"],
+            enrich_max_workers=crawl["enrich_max_workers"],
+            video_batch_size=crawl["video_batch_size"],
             new_video_min_age_days=crawl["new_video_min_age_days"],
             growing_video_max_age_days=crawl["growing_video_max_age_days"],
             mature_video_max_age_days=crawl["mature_video_max_age_days"],
             growing_recrawl_interval_days=crawl["growing_recrawl_interval_days"],
             mature_recrawl_interval_days=crawl["mature_recrawl_interval_days"],
             archived_recrawl_interval_days=crawl["archived_recrawl_interval_days"],
-            enrich_max_workers=crawl.get("enrich_max_workers", 8),
-            video_batch_size=crawl.get("video_batch_size", 50),
         ),
         comment_downloader=CommentDownloaderConfig(
             request_delay_seconds=downloader["request_delay_seconds"],

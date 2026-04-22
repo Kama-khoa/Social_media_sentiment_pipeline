@@ -108,12 +108,36 @@ class CrawlStateRepository:
         self._client.query(merge_sql).result()
         self._client.delete_table(tmp_table, not_found_ok=True)
 
+    def get_all_video_ids(self) -> set[str]:
+        query = f"""
+            SELECT video_id
+            FROM {self._table("video_crawl_state")}
+        """
+        rows = self._client.query(query).result()
+        return {row.video_id for row in rows}
+
+    def get_existing_video_ids(self, channel_id: str) -> set[str]:
+        query = f"""
+            SELECT video_id
+            FROM {self._table("video_crawl_state")}
+            WHERE channel_id = @channel_id
+        """
+        job_config = bigquery.QueryJobConfig(
+            query_parameters=[
+                bigquery.ScalarQueryParameter("channel_id", "STRING", channel_id)
+            ]
+        )
+        rows = self._client.query(query, job_config=job_config).result()
+        return {row.video_id for row in rows}
+
     def get_videos_to_crawl(self) -> list[dict]:
         query = f"""
             SELECT
                 video_id,
                 channel_id,
+                published_at,
                 comment_count,
+                last_comment_count,
                 total_comments_crawled,
                 maturity_stage
             FROM {self._table("video_crawl_state")}
@@ -140,18 +164,26 @@ class CrawlStateRepository:
                     )
                 )
             ORDER BY
-                CASE maturity_stage
-                    WHEN 'new'      THEN 1
-                    WHEN 'growing'  THEN 2
-                    WHEN 'mature'   THEN 3
-                    WHEN 'archived' THEN 4
-                END
+                CASE
+                    WHEN TIMESTAMP_DIFF(CURRENT_TIMESTAMP(), published_at, DAY) < 3
+                        THEN 100
+                    WHEN TIMESTAMP_DIFF(CURRENT_TIMESTAMP(), published_at, DAY) < 14
+                         AND comment_count > COALESCE(last_comment_count, 0) * 1.2
+                        THEN 80
+                    WHEN TIMESTAMP_DIFF(CURRENT_TIMESTAMP(), published_at, DAY) < 14
+                        THEN 50
+                    WHEN TIMESTAMP_DIFF(CURRENT_TIMESTAMP(), published_at, DAY) < 30
+                        THEN 30
+                    ELSE 10
+                END DESC,
+                published_at DESC
         """
         rows = self._client.query(query).result()
         return [
             {
                 "video_id": row.video_id,
                 "channel_id": row.channel_id,
+                "published_at": row.published_at,
                 "comment_count": row.comment_count,
                 "total_comments_crawled": row.total_comments_crawled,
                 "maturity_stage": row.maturity_stage,

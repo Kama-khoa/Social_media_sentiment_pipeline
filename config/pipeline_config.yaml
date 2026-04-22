@@ -1,11 +1,11 @@
 crawl:
-  max_videos_per_keyword: 50
   max_comments_per_video: 500
-  max_pages_per_crawl: 20
-  notable_channel_min_subscribers: 100000
-  incremental_window_days: 30
-
-  # Video Maturity Model
+  historical_scan_channels_per_day: 5
+  historical_scan_max_results: 10000
+  daily_scan_lookback_days: 3
+  daily_scan_max_results: 20
+  enrich_max_workers: 8
+  video_batch_size: 50
   new_video_min_age_days: 3
   growing_video_max_age_days: 14
   mature_video_max_age_days: 30
@@ -13,26 +13,13 @@ crawl:
   mature_recrawl_interval_days: 7
   archived_recrawl_interval_days: 30
 
-  # Historical scan (Mode 0 - yt-dlp, 0 API quota)
-  historical_scan_channels_per_day: 20
-  historical_scan_max_results: 50
-
-  # RSS daily (Mode 1 - 0 API quota)
-  rss_max_entries: 15
-
-  # Keyword search (Mode 2 - search.list)
-  keyword_search_max_results: 50
-
 comment_downloader:
-  max_comments_per_video: 500
   request_delay_seconds: 1.0
-  max_retries: 2
+  max_retries: 3
 
 quota:
   daily_budget: 10000
   safety_buffer: 500
-  videos_list_batch_size: 50
-  comments_per_page: 100
   bucket_search: 9000
   bucket_channel_seed: 500
 

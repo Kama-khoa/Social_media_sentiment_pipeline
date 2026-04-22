@@ -12,12 +12,13 @@
 ## Kiến trúc tổng thể: ELT
 
 ```
-YouTube / RSS
+YouTube Data API / yt-dlp
      │
      ▼ Extract (elt/extract/)
   GCS Bucket                  ← Data Lake, lưu JSON thô
   product-sentiment-raw-1806
-  raw/youtube/YYYY/MM/DD/
+  raw/videos/YYYY/MM/DD/
+  raw/comments/YYYY/MM/DD/
      │
      ▼ Load (schema/layer_1_raw/)
   BigQuery External Tables     ← đọc trực tiếp từ GCS
@@ -58,11 +59,11 @@ YouTube / RSS
 
 | Lớp | Công nghệ |
 |---|---|
-| Data Lake | Google Cloud Storage (`social-media-sentiment-raw`) |
+| Data Lake | Google Cloud Storage (`product-sentiment-raw-1806`) |
 | Data Warehouse | BigQuery (dataset: `sentiment_platform`) |
 | Orchestration | Apache Airflow 3.1.8 (Docker, Python 3.13) |
 | Data Transform | dbt-bigquery |
-| Video discovery | yt-dlp, feedparser (RSS), YouTube Data API v3 |
+| Video discovery | yt-dlp, YouTube Data API v3 (`search.list`) |
 | Comment collection | youtube-comment-downloader, BrightData Residential Proxy |
 | Vietnamese NLP | underthesea (word segmentation) |
 | Aspect extraction | vELECTRA (fine-tuned, Token Classification) |
@@ -104,23 +105,48 @@ Load bằng `python-dotenv`: `from dotenv import load_dotenv; load_dotenv()`
 ```
 TỔNG: 10,000 units/ngày
 ├── safety_buffer:   500  (không dùng)
-├── bucket_search: 9,000  → video discovery (Mode 0 + 1 + 2)
+├── bucket_search: 9,000  → video discovery (Phase A daily + Phase B historical)
 └── bucket_channel:  500  → channels.list khi seed kênh mới
 
 COMMENTS: 0 API units → youtube-comment-downloader
 ```
 
-**3 Mode Discovery:**
-- **Mode 0** — Historical Scan: `search.list(channelId, keyword)` × 4 keywords, 400 units/kênh, chạy 1 lần/kênh
-- **Mode 1** — RSS Daily: `feedparser` đọc RSS feed kênh, 0 units, 15 video/kênh
-- **Mode 2** — Keyword Sweep: `search.list(q=keyword)` global, 400 units/ngày
+**2-Mode Discovery:**
+- **Phase A — Daily Scan:** `search.list(channelId, order=date, publishedAfter=3 ngày trước)` per channel, 100 units/channel, 18 channels = 1,800 units/ngày. Filter keyword local. Enrich bằng yt-dlp (0 quota)
+- **Phase B — Historical Scan:** yt-dlp `extract_flat=True` lấy toàn bộ video cũ từ channel, 0 units, chạy 1 lần/kênh. Enrich bằng yt-dlp (0 quota)
+
+**Quota budget hằng ngày (sau khi tất cả channel đã historical scan):**
+```
+Phase A search.list:   1,800 units
+Phase B (skip):            0 units
+Tổng:                  1,800 units → còn 7,700 dự phòng
+```
+
+---
+
+## Pipeline Schedule
+
+Airflow DAG chạy lúc **2:00 AM UTC+7 hằng ngày**.
+
+```
+Phase A — DAILY: search.list 18 channels → filter keyword → dedupe → enrich yt-dlp → save → comment crawl
+Phase B — HISTORICAL: yt-dlp scan kênh chưa scan → batch 50 → enrich → save → comment crawl (interleaved)
+Phase C — BACKLOG: recrawl comments theo Video Maturity Model (priority scoring)
+```
+
+---
+
+## Data Integrity Principle
+
+**GCS-first, BQ-second:** Ghi dữ liệu lên GCS trước, chốt trạng thái vào BQ sau. Nếu BQ fail sau GCS success → retry sẽ tạo duplicate GCS file (dbt layer dedupe by video_id). Nếu BQ success trước GCS fail → mất dữ liệu vĩnh viễn.
 
 ---
 
 ## GCS Partition Convention
 
 ```
-gs://product-sentiment-raw-1806/raw/youtube/YYYY/MM/DD/keyword_HHMMSS.json
+gs://social-media-sentiment-raw/raw/videos/YYYY/MM/DD/videos_run_HHMMSS.json
+gs://social-media-sentiment-raw/raw/comments/YYYY/MM/DD/comments_{video_id}_HHMMSS.json
 ```
 
 Tuân thủ convention này để BigQuery External Table partition đúng.
@@ -149,6 +175,8 @@ Tuân thủ convention này để BigQuery External Table partition đúng.
 6. Thông tin nhạy cảm luôn đọc từ `.env`, không bao giờ hardcode
 7. `underthesea` word segmentation phải chạy **trước** khi đưa text vào PhoBERT
 8. Confidence routing threshold = **0.80** — dưới ngưỡng này gửi sang Gemini Flash
+9. **GCS-first, BQ-second** — ghi data lake trước, chốt trạng thái sau
+10. Không sử dụng icons quá nhiều trong code hoặc tài liệu
 
 ---
 
