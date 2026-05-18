@@ -19,7 +19,7 @@ products AS (
 )
 
 SELECT
-    GENERATE_UUID() AS mention_id,
+    TO_HEX(MD5(CONCAT(sr.sentence_id, '-', p.product_id))) AS mention_id,
     p.product_id,
     sr.result_id,
     s.video_id,

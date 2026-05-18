@@ -1,9 +1,13 @@
 {{ config(
-    materialized='table'
+    materialized='incremental',
+    unique_key='comment_id'
 ) }}
 
 WITH stg_comments AS (
     SELECT * FROM {{ ref('stg_youtube_comments') }}
+    {% if is_incremental() %}
+    WHERE _dbt_loaded_at > (SELECT MAX(_dbt_processed_at) FROM {{ this }})
+    {% endif %}
 )
 
 SELECT

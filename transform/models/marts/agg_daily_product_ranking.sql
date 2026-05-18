@@ -54,7 +54,7 @@ scored_stats AS (
 )
 
 SELECT
-    GENERATE_UUID() AS ranking_id,
+    TO_HEX(MD5(CONCAT(CAST(ranking_date AS STRING), '-', product_id))) AS ranking_id,
     *,
     -- Rank by bayesian score descending
     RANK() OVER(PARTITION BY ranking_date, category ORDER BY bayesian_score DESC) AS rank_position,

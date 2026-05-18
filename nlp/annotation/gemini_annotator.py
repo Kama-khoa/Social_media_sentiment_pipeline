@@ -4,37 +4,43 @@ import json
 import logging
 import os
 import re
+import time
 
-import requests
+from google import genai
 from dotenv import load_dotenv
 from underthesea import word_tokenize
 
 from nlp.annotation.prompt_builder import PromptBuilder
+from nlp.annotation.prompt_config import ASPECT_LABELS, SENTIMENT_LABELS
 
 load_dotenv()
 
-_GEMINI_API_KEY = os.environ["GEMINI_API_KEY"]
+_GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
 logger = logging.getLogger(__name__)
 
 
 class GeminiAnnotator:
-    _MODEL_FALLBACK_CHAIN = [
+    _MODELS_TO_TRY = [
+        "gemini-2.5-flash-lite",
         "gemini-2.5-flash",
         "gemini-2.0-flash",
-        "gemini-1.5-flash",
+        "gemini-1.5-flash", # Dự phòng cuối cùng (1500 RPD)
     ]
-    _BASE_URL = (
-        "https://generativelanguage.googleapis.com/v1beta/models"
-        "/{model}:generateContent"
-    )
-    _VALID_ASPECTS = {"Pin", "Camera", "Màn hình", "Hiệu năng", "Thiết kế", "Giá", "NONE"}
-    _VALID_SENTIMENTS = {"positive", "negative", "neutral"}
+
+    _VALID_ASPECTS = set(ASPECT_LABELS + ["NONE"])
+    _VALID_SENTIMENTS = set(SENTIMENT_LABELS)
     _REQUIRED_KEYS = {"sentence", "aspect_label", "segment_text", "sentiment_label"}
 
     def __init__(self, batch_size: int = 50) -> None:
         self._batch_size = batch_size
         self._prompt_builder = PromptBuilder()
+
+        if _GEMINI_API_KEY:
+            self._client = genai.Client(api_key=_GEMINI_API_KEY)
+        else:
+            logger.warning("GEMINI_API_KEY không được tìm thấy trong biến môi trường!")
+            self._client = None
 
     def annotate_all(self, sentences: list[str]) -> list[dict]:
         results: list[dict] = []
@@ -47,13 +53,16 @@ class GeminiAnnotator:
                     "Batch %d–%d: %d/%d items annotated",
                     i, i + len(batch), len(items), len(batch),
                 )
+                # Ngủ 15 giây để khống chế tốc độ ở mức ~4 Requests Per Minute (bảo vệ giới hạn 5 RPM)
+                logger.info("Nghỉ 15 giây để tránh lỗi Rate Limit...")
+                time.sleep(15)
             except Exception as exc:
                 logger.error("Batch %d–%d failed, skipping: %s", i, i + len(batch), exc)
         return results
 
     def _annotate_batch(self, sentences: list[str]) -> list[dict]:
         prompt = self._prompt_builder.build_annotation_prompt(sentences)
-        raw_text = self._post_with_fallback(prompt)
+        raw_text = self._call_llm_with_fallback(prompt)
         parsed = self._parse_json_response(raw_text)
         valid = [item for item in parsed if self._is_valid_item(item)]
         if len(valid) < len(parsed):
@@ -63,22 +72,29 @@ class GeminiAnnotator:
             )
         return [self._attach_bio_tags(item) for item in valid]
 
-    def _post_with_fallback(self, prompt: str) -> str:
-        payload = {"contents": [{"parts": [{"text": prompt}]}]}
+    def _call_llm_with_fallback(self, prompt: str) -> str:
+        if not self._client:
+            raise RuntimeError("GEMINI_API_KEY chưa được thiết lập, không thể gọi API")
+
         last_exc: Exception | None = None
-        for model in self._MODEL_FALLBACK_CHAIN:
-            url = self._BASE_URL.format(model=model) + f"?key={_GEMINI_API_KEY}"
+
+        for model_name in self._MODELS_TO_TRY:
             try:
-                resp = requests.post(url, json=payload, timeout=60)
-                if resp.status_code == 429:
-                    logger.warning("Quota exceeded for %s, switching to next model", model)
-                    last_exc = RuntimeError(f"Quota exceeded: {model}")
+                response = self._client.models.generate_content(
+                    model=model_name,
+                    contents=prompt,
+                )
+                return response.text
+            except Exception as exc:
+                msg = str(exc).lower()
+                # Bắt lỗi 429 (Rate limit), Quota, hoặc 503 (Server quá tải)
+                if any(err in msg for err in ["429", "quota", "exhausted", "resource_exhausted", "503", "unavailable"]):
+                    logger.warning("Model %s bị rate limit/hết quota/quá tải. Chuyển sang model tiếp theo...", model_name)
+                    last_exc = exc
+                    time.sleep(1)
                     continue
-                resp.raise_for_status()
-                return resp.json()["candidates"][0]["content"]["parts"][0]["text"]
-            except requests.RequestException as exc:
-                logger.warning("Request failed for model %s: %s", model, exc)
-                last_exc = exc
+                raise exc
+
         raise RuntimeError("All Gemini models in fallback chain exhausted") from last_exc
 
     def _parse_json_response(self, text: str) -> list[dict]:
