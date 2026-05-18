@@ -26,32 +26,38 @@ daily_stats AS (
     FROM fact_mentions f
     JOIN products p ON f.product_id = p.product_id
     GROUP BY 1, 2, 3
+),
+scored_stats AS (
+    SELECT
+        product_id,
+        ranking_date,
+        category,
+        -- Bayesian average: (C * global_mean + n * local_mean) / (C + n), C=50
+        SAFE_DIVIDE(
+            50.0 * AVG(SAFE_DIVIDE(positive_count - negative_count, total_mentions)) OVER ()
+                + total_mentions * SAFE_DIVIDE(positive_count - negative_count, total_mentions),
+            50.0 + total_mentions
+        ) AS bayesian_score,
+        
+        -- Controversy index placeholder: High if both pos and neg are high
+        -- formula: (pos * neg) / total^2
+        SAFE_DIVIDE((positive_count * negative_count), POW(total_mentions, 2)) AS controversy_index,
+        
+        'Unknown' AS controversy_label,
+        total_mentions,
+        positive_count,
+        negative_count,
+        neutral_count,
+        CAST(NULL AS STRING) AS top_aspect,
+        0.0 AS sentiment_trend
+    FROM daily_stats
 )
 
 SELECT
     GENERATE_UUID() AS ranking_id,
-    product_id,
-    ranking_date,
-    category,
-    -- Simple Bayesian average placeholder
-    -- formula: (C * m + sum(votes)) / (C + N)
-    -- Here we do a simple ratio for demonstration: (pos - neg) / total
-    SAFE_DIVIDE((positive_count - negative_count), total_mentions) AS bayesian_score,
-    
-    -- Controversy index placeholder: High if both pos and neg are high
-    -- formula: (pos * neg) / total^2
-    SAFE_DIVIDE((positive_count * negative_count), POW(total_mentions, 2)) AS controversy_index,
-    
-    'Unknown' AS controversy_label,
-    total_mentions,
-    positive_count,
-    negative_count,
-    neutral_count,
-    CAST(NULL AS STRING) AS top_aspect,
-    0.0 AS sentiment_trend,
-    
+    *,
     -- Rank by bayesian score descending
-    RANK() OVER(PARTITION BY ranking_date, category ORDER BY SAFE_DIVIDE((positive_count - negative_count), total_mentions) DESC) AS rank_position,
+    RANK() OVER(PARTITION BY ranking_date, category ORDER BY bayesian_score DESC) AS rank_position,
     
     CURRENT_TIMESTAMP() AS _dbt_processed_at
-FROM daily_stats
+FROM scored_stats

@@ -14,6 +14,7 @@ from elt.quota_budget import QuotaBucket, QuotaBudget
 from elt.repositories.channel_repository import ChannelRepository
 from elt.repositories.crawl_state_repository import CrawlStateRepository
 from elt.repositories.keyword_repository import KeywordRepository
+from elt.extract.base_extractor import BaseExtractor
 from elt.repositories.quota_repository import QuotaRepository
 
 if TYPE_CHECKING:
@@ -29,7 +30,7 @@ def _chunks(lst: list, size: int):
         yield lst[i : i + size]
 
 
-class VideoExtractor:
+class VideoExtractor(BaseExtractor):
 
     def __init__(
         self,

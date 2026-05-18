@@ -14,7 +14,7 @@ Hệ thống end-to-end phân tích cảm xúc (Sentiment Analysis) đa khía c�
 
 **Sentiment Intelligence Platform** không chỉ là một tool phân tích cảm xúc thông thường, mà là một **Data Platform** hoàn chỉnh bao gồm:
 
-- 🚀 **Zero-Quota Ingestion**: Tích hợp `yt-dlp` và `youtube-comment-downloader` đi qua BrightData Residential Proxy để thu thập dữ liệu khổng lồ mà không tốn YouTube API quota.
+- 🚀 **Tối ưu Quota Ingestion**: Sử dụng YouTube API v3 với định mức giới hạn cho Phase A (Daily Scan). Tích hợp `yt-dlp` (0 quota) cho Phase B (Historical Scan) và `youtube-comment-downloader` (0 quota) để thu thập dữ liệu khổng lồ, đảm bảo không bao giờ vượt giới hạn.
 - 🧠 **Hybrid NLP Pipeline**: Sử dụng `vELECTRA` để nhận diện khía cạnh (Aspect Extraction) và `PhoBERT` để phân loại cảm xúc (Sentiment Classification), kết hợp cơ chế **Confidence-Routing** tự động fallback sang `Gemini 1.5 Flash` nếu độ tin cậy < 80%.
 - 📊 **Advanced Analytics**: Áp dụng **Bayesian Ranking** (chống thiên kiến sản phẩm ít review), **Controversy Index** (chỉ số gây tranh cãi), và **Correlation Attribution Engine** sử dụng thuật toán PELT để giải thích nguyên nhân đột biến cảm xúc.
 
@@ -116,7 +116,7 @@ flowchart LR
 
     subgraph "Phase C: Comment Backlog"
         C1[Query Maturity Model] --> C2[Comment Downloader]
-        C2 --> C3[BrightData Proxy]
+        C2 --> C3[Extract Data]
     end
 
     A3 --> GCS[("GCS Bucket<br>(Raw JSON)")]
@@ -136,7 +136,6 @@ Dự án hiện tại được tối ưu để chạy cục bộ (Local) qua mô
 - GCS Bucket: Tạo bucket `product-sentiment-raw-1806` (Region `asia-southeast1`).
 - BigQuery Dataset: Tạo dataset `sentiment_platform` (Region `asia-southeast1`).
 - **Gemini API Key**: Đăng ký từ Google AI Studio (Miễn phí).
-- **BrightData Proxy**: Tài khoản Residential Proxy để bypass YouTube rate-limit khi crawl comments.
 
 ### 2. Cài đặt môi trường
 Clone repository và thiết lập môi trường Conda:
@@ -165,10 +164,11 @@ GOOGLE_APPLICATION_CREDENTIALS=/path/to/your/service_account.json
 YOUTUBE_API_KEY=your_youtube_api_key
 GEMINI_API_KEY=your_gemini_api_key
 
-BRIGHTDATA_PROXY_HOST=your_proxy_host
-BRIGHTDATA_PROXY_PORT=your_proxy_port
-BRIGHTDATA_USERNAME=your_username
-BRIGHTDATA_PASSWORD=your_password
+# (Tùy chọn) Cấu hình Proxy nếu cần thiết để bypass rate-limit
+# BRIGHTDATA_PROXY_HOST=your_proxy_host
+# BRIGHTDATA_PROXY_PORT=your_proxy_port
+# BRIGHTDATA_USERNAME=your_username
+# BRIGHTDATA_PASSWORD=your_password
 ```
 
 ---
@@ -233,8 +233,7 @@ streamlit run dashboard/app.py
 
 ### Giai đoạn 1: Data Ingestion (ELT)
 - **Lỗi không ghi được data lên BigQuery**: Kiểm tra xem file đẩy lên GCS đã đúng định dạng NDJSON chưa (`gcs_client.py` lo việc này). BigQuery External Tables sẽ báo lỗi Parsing nếu file là chuẩn JSON array.
-- **Bị block khi crawl comment**: Đảm bảo BrightData proxy đang hoạt động tốt. Kiểm tra số dư tài khoản BrightData hoặc test ping proxy bằng `curl`.
-- **Lỗi Quota YouTube**: Kiểm tra log trong bảng `quota_operation_log` trên BigQuery xem bucket `SEARCH` có vượt quá giới hạn 9000 units/ngày hay không.
+- **Lỗi Quota YouTube**: Kiểm tra log trong bảng `quota_operation_log` trên BigQuery xem bucket `SEARCH` có vượt quá giới hạn 9000 units/ngày hay không (Xảy ra nếu Phase A cấu hình quét quá nhiều kênh).
 
 ### Giai đoạn 2: dbt Transformation
 - **Lỗi Not Found Dataset/Table**: Đảm bảo trong `transform/profiles.yml` đã khai báo đúng biến `location: asia-southeast1`. Dbt sẽ tạo table ở region mặc định (US) nếu không cấu hình explicitly, gây lệch region với GCS data lake.

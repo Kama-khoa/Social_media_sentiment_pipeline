@@ -2,10 +2,17 @@
     materialized='table'
 ) }}
 
--- This is a placeholder table for compilation purposes.
--- The actual sentiment results will be populated by the NLP Python pipeline into `raw_sentiment_results`.
--- If the NLP pipeline directly writes to `int_sentiment_results`, then this dbt model can just be an empty table
--- initialization or select from the raw NLP output table.
+-- TODO: Khi nlp/inference/ đã ghi kết quả vào bảng `raw_sentiment_results`
+-- (dataset: sentiment_platform), thay thế model này bằng:
+--
+-- WITH raw AS (
+--     SELECT * FROM {{ source('raw', 'raw_sentiment_results') }}
+-- )
+-- SELECT result_id, sentence_id, comment_id, video_id,
+--        aspect_label, segment_text, sentiment_label
+-- FROM raw
+--
+-- Bảng raw_sentiment_results chưa tồn tại — giữ LIMIT 0 để dbt compile thành công.
 
 SELECT
     CAST(NULL AS STRING) AS result_id,
