@@ -15,6 +15,10 @@ yt-dlp==2026.3.17
 youtube-comment-downloader==0.1.78
 feedparser==6.0.12
 
+# ── Data Transformation ────────────────────────────────────────────────────────
+dbt-core==1.11.10
+dbt-bigquery==1.8.2
+
 # ── Vietnamese NLP ─────────────────────────────────────────────────────────────
 underthesea==8.3.0
 
