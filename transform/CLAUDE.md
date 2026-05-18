@@ -102,6 +102,28 @@ dbt docs serve
 
 ---
 
+## Debug
+
+Sử dụng file `run_dbt.bat` (Cách nhanh nhất): Vào thẳng terminal ở thư mục gốc, gõ lệnh: `run_dbt.bat`
+
+Manual debug qua Python script (`scripts/dbt/dbt_runner.py`)
+- Kiểm tra kết nối đến BigQuery có ổn không:
+`conda run -n etl-py313 python scripts/dbt/dbt_runner.py debug`
+
+- Chạy toàn bộ bước transform (giống hệt run_dbt.bat):
+`conda run -n etl-py313 python scripts/dbt/dbt_runner.py run`
+
+- Chỉ chạy lại một model cụ thể (VD: khi anh sửa file dim_products.sql và chỉ muốn chạy mình nó để test):
+`conda run -n etl-py313 python scripts/dbt/dbt_runner.py run --select dim_products`
+
+---
+
+## Lưu ý Kỹ thuật
+- **Location BigQuery**: Pipeline ETL tạo các bảng ngoại ở `asia-southeast1`. Do đó file `transform/profiles.yml` cũng phải trỏ đến `location: asia-southeast1`, nếu không dbt sẽ báo lỗi Not Found.
+- **NDJSON Format**: Bảng `raw_videos` và `raw_comments` là BigQuery External Tables trỏ tới GCS. Dữ liệu trên GCS bắt buộc phải được lưu ở chuẩn **NDJSON**.
+
+---
+
 ## Lưu ý
 
 - dbt chạy **độc lập** với ELT Python — không import code từ `elt/`

@@ -139,12 +139,13 @@ gs://social-media-sentiment-raw/raw/comments/YYYY/MM/DD/comments_{video_id}_HHMM
 ```
 
 Convention này là bắt buộc — BigQuery External Table (layer_1) dùng path này để partition.
+**Định dạng file:** Dữ liệu JSON lưu trên GCS bắt buộc phải được convert sang dạng **Newline Delimited JSON (NDJSON)** (`application/x-ndjson`). `GCSClient` đảm nhiệm chức năng này bằng cách tự động unroll list JSON trước khi upload.
 
 ---
 
 ## Lưu ý quan trọng
 
-- File trong folder này chạy với **Python 3.13.12** — không import bất cứ thứ gì từ `airflow/`
-- Mỗi script trong `extract/` có thể chạy thủ công để test: `python -m elt.main --mode full`
+- File trong folder này chạy với **Conda env: etl-py313** (Python 3.13) — không import bất cứ thứ gì từ `airflow/`
+- Mỗi script trong `extract/` có thể chạy thủ công để test: `conda run -n etl-py313 python -m elt.main --mode full`
 - `seed_loader.py` chỉ chạy 1 lần khi setup, hoặc khi cần thêm kênh/keyword mới
 - DAG trong `airflow/` sẽ gọi vào các script này — không ngược lại

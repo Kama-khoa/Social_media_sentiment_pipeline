@@ -48,6 +48,25 @@ class VideoExtractor:
         self._gcs_client = gcs_client
         self._api_client = YouTubeApiClient(config.youtube_api_key)
 
+    def _build_fetcher(self) -> YtdlpVideoFetcher:
+        keywords = self._keyword_repo.get_active_keywords()
+        
+        # BrightData proxy is disabled here because it returns 403 Forbidden for YouTube tabs
+        # and using a proxy with personal cookies causes immediate YouTube security blocks.
+        proxy_url = None
+        # if self._config.brightdata_proxy_host:
+        #     proxy_url = (
+        #         f"http://{self._config.brightdata_username}:{self._config.brightdata_password}"
+        #         f"@{self._config.brightdata_proxy_host}:{self._config.brightdata_proxy_port}"
+        #     )
+
+        return YtdlpVideoFetcher(
+            keywords,
+            max_workers=self._config.crawl.enrich_max_workers,
+            cookies_path=self._config.crawl.ytdlp_cookies_path,
+            proxy=proxy_url,
+        )
+
     def run_daily(
         self,
         execution_date: str,
@@ -57,8 +76,7 @@ class VideoExtractor:
     ) -> dict:
         t0 = time.monotonic()
         channels = self._channel_repo.get_active_channels()
-        keywords = self._keyword_repo.get_active_keywords()
-        fetcher = YtdlpVideoFetcher(keywords, self._config.crawl.enrich_max_workers)
+        fetcher = self._build_fetcher()
 
         lookback_days = self._config.crawl.daily_scan_lookback_days
         published_after = datetime.now(timezone.utc) - timedelta(days=lookback_days)
@@ -145,8 +163,7 @@ class VideoExtractor:
             logger.info("Phase B: all channels already scanned, skipping")
             return {"channels_scanned": 0, "total_saved": 0, "elapsed_seconds": 0}
 
-        keywords = self._keyword_repo.get_active_keywords()
-        fetcher = YtdlpVideoFetcher(keywords, self._config.crawl.enrich_max_workers)
+        fetcher = self._build_fetcher()
         batch_size = self._config.crawl.video_batch_size
 
         total_saved = 0

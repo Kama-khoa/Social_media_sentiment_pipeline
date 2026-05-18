@@ -18,6 +18,7 @@ from elt.repositories.channel_repository import ChannelRepository
 from elt.repositories.crawl_state_repository import CrawlStateRepository
 from elt.repositories.keyword_repository import KeywordRepository
 from elt.repositories.quota_repository import QuotaRepository
+from elt.seed_data.seed_loader import sync_channels, sync_keywords
 
 load_dotenv()
 
@@ -87,14 +88,31 @@ def _build_comment_extractor(config, repos: dict, gcs_client: GCSClient) -> Comm
     )
 
 
+def _sync_seed_data(bq_client: bigquery.Client) -> None:
+    logger.info("=== SEED SYNC ===")
+
+    ch_result = sync_channels(bq_client)
+    if ch_result["new"] > 0:
+        logger.info(
+            "Seed sync: %d new channels synced (CSV: %d, new: %d)",
+            ch_result["synced"], ch_result["csv_total"], ch_result["new"],
+        )
+    else:
+        logger.info("Seed sync: channels up to date (%d in CSV)", ch_result["csv_total"])
+
+    kw_result = sync_keywords(bq_client)
+    logger.info("Seed sync: %d keywords synced (CSV: %d)", kw_result["synced"], kw_result["csv_total"])
+
+
 def run_videos(config, repos: dict, gcs_client: GCSClient, dag_run_id: str, execution_date: str):
     budget = _build_quota_budget(config, repos["quota_repo"])
     extractor = _build_video_extractor(config, repos, gcs_client)
 
     logger.info("=== VIDEO EXTRACTION START ===")
 
-    daily_result = extractor.run_daily(execution_date, dag_run_id, budget)
-    logger.info("Phase A done: %s", daily_result)
+    daily_result = 0
+    # daily_result = extractor.run_daily(execution_date, dag_run_id, budget)
+    # logger.info("Phase A done: %s", daily_result)
 
     historical_result = extractor.run_historical(execution_date, dag_run_id, budget)
     logger.info("Phase B done: %s", historical_result)
@@ -118,11 +136,12 @@ def run_full(config, repos: dict, gcs_client: GCSClient, dag_run_id: str, execut
     comment_extractor = _build_comment_extractor(config, repos, gcs_client)
 
     logger.info("=== PHASE A: DAILY ===")
-    daily_result = video_extractor.run_daily(
-        execution_date, dag_run_id, budget,
-        comment_extractor=comment_extractor,
-    )
-    logger.info("Phase A done: %s", daily_result)
+    daily_result = 0
+    # daily_result = video_extractor.run_daily(
+    #     execution_date, dag_run_id, budget,
+    #     comment_extractor=comment_extractor,
+    # )
+    # logger.info("Phase A done: %s", daily_result)
 
     logger.info("=== PHASE B: HISTORICAL ===")
     historical_result = video_extractor.run_historical(
@@ -171,6 +190,7 @@ def main():
 
     config = load_config(args.config)
     bq_client = _build_bq_client(config)
+    _sync_seed_data(bq_client)
     repos = _build_repositories(bq_client, config)
     gcs_client = GCSClient(config.gcp.gcs_bucket, config.gcp.project_id)
 

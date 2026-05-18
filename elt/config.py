@@ -31,6 +31,7 @@ class CrawlConfig:
     growing_recrawl_interval_days: int
     mature_recrawl_interval_days: int
     archived_recrawl_interval_days: int
+    ytdlp_cookies_path: str | None
 
 
 @dataclass
@@ -103,6 +104,7 @@ def load_config(config_path: str | None = None) -> PipelineConfig:
             growing_recrawl_interval_days=crawl["growing_recrawl_interval_days"],
             mature_recrawl_interval_days=crawl["mature_recrawl_interval_days"],
             archived_recrawl_interval_days=crawl["archived_recrawl_interval_days"],
+            ytdlp_cookies_path=crawl.get("ytdlp_cookies_path"),
         ),
         comment_downloader=CommentDownloaderConfig(
             request_delay_seconds=downloader["request_delay_seconds"],

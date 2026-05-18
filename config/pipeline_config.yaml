@@ -4,14 +4,15 @@ crawl:
   historical_scan_max_results: 10000
   daily_scan_lookback_days: 3
   daily_scan_max_results: 20
-  enrich_max_workers: 8
-  video_batch_size: 50
+  enrich_max_workers: 1
+  video_batch_size: 30
   new_video_min_age_days: 3
   growing_video_max_age_days: 14
   mature_video_max_age_days: 30
   growing_recrawl_interval_days: 3
   mature_recrawl_interval_days: 7
   archived_recrawl_interval_days: 30
+  ytdlp_cookies_path: config/youtube_cookies.txt
 
 comment_downloader:
   request_delay_seconds: 1.0
