@@ -52,7 +52,19 @@ class CrawlStateRepository:
 
         merge_sql = f"""
             MERGE {self._table("video_crawl_state")} AS target
-            USING `{tmp_table}` AS source
+            USING (
+                SELECT
+                    s.video_id,
+                    s.channel_id,
+                    s.keyword_matched,
+                    s.search_mode,
+                    s.published_at,
+                    s.comment_count,
+                    kw.keyword_id
+                FROM `{tmp_table}` AS s
+                LEFT JOIN {self._table("keyword_config")} AS kw
+                    ON kw.keyword_text = s.keyword_matched
+            ) AS source
             ON target.video_id = source.video_id
             WHEN NOT MATCHED THEN INSERT (
                 video_id, channel_id, keyword_id, search_mode,
@@ -64,12 +76,7 @@ class CrawlStateRepository:
             ) VALUES (
                 source.video_id,
                 source.channel_id,
-                (
-                    SELECT keyword_id
-                    FROM {self._table("keyword_config")}
-                    WHERE keyword_text = source.keyword_matched
-                    LIMIT 1
-                ),
+                source.keyword_id,
                 source.search_mode,
                 source.published_at,
                 CASE

@@ -13,9 +13,9 @@ Tự động hóa toàn bộ pipeline hằng ngày bằng Apache Airflow. Folder
 | | ELT Scripts | Airflow DAGs |
 |---|---|---|
 | Folder | `elt/` | `airflow/dags/` |
-| Python | 3.13.12 |
-| Runtime | Trực tiếp | Docker container |
-| Dependencies | `requirements.txt` | Airflow Docker image |
+| Python | Conda: etl-py313 | Conda: etl-py313 (hoặc Docker tùy chọn) |
+| Runtime | Trực tiếp | Local (đang chuyển đổi từ Docker) |
+| Dependencies | `requirements.txt` | Airflow Local |
 
 DAG **không được** import trực tiếp từ `elt/` Python packages — phải gọi qua `BashOperator` hoặc `PythonOperator` với subprocess.
 
@@ -84,9 +84,12 @@ default_args = {
 
 ---
 
-## Docker Compose
+## Môi trường Chạy (Current State)
 
-Airflow chạy qua Docker Desktop trên Windows. Config nằm trong `docker-compose.yml` ở root (không commit nếu chứa credentials).
+Dự án đang **chuyển đổi từ Docker-based deployment sang local development** để tránh hiện tượng overload session. 
+Trong giai đoạn này:
+- Khuyến nghị chạy pipeline manual qua các script trong `elt/` (ví dụ `conda run -n etl-py313 python -m elt.main`) hoặc qua các script bảo trì để linh hoạt hơn.
+- Cấu hình Docker (`docker-compose.yml`) vẫn được giữ lại để dùng cho production sau này.
 
 ---
 

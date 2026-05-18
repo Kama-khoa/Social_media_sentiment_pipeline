@@ -1,0 +1,239 @@
+slang,standard_word,category
+k,không,general
+ko,không,general
+kh,không,general
+hok,không,general
+đc,được,general
+dc,được,general
+sp,sản phẩm,tech
+đt,điện thoại,tech
+đth,điện thoại,tech
+dt,điện thoại,tech
+ip,iphone,tech
+ss,samsung,tech
+lap,laptop,tech
+cam,camera,tech
+bh,bảo hành,tech
+vs,với,general
+cx,cũng,general
+r,rồi,general
+tks,cảm ơn,general
+thanks,cảm ơn,general
+c.ơn,cảm ơn,general
+ok,tốt,emotion
+oke,tốt,emotion
+oki,tốt,emotion
+ngon,tốt,emotion
+đỉnh,tuyệt vời,emotion
+chán,tệ,emotion
+lag,chậm,tech
+cùi,tệ,emotion
+mắc,đắt,general
+rẻ,rẻ,general
+kg,không,general
+khum,không,general
+hông,không,general
+hong,không,general
+hem,không,general
+được nha,được,general
+đc nha,được,general
+xài,sử dụng,general
+sài,sử dụng,general
+dùng oke,sử dụng tốt,emotion
+ổn áp,tốt,emotion
+xịn,tốt,emotion
+xịn sò,tốt,emotion
+mượt,tốt,tech
+mượt mà,tốt,tech
+êm,tốt,emotion
+phê,tuyệt vời,emotion
+ưng,hài lòng,emotion
+ưng bụng,hài lòng,emotion
+đáng tiền,đáng mua,emotion
+đáng đồng tiền,đáng mua,emotion
+quá ổn,tốt,emotion
+ổn phết,tốt,emotion
+ngon nghẻ,tốt,emotion
+ngon lành,tốt,emotion
+đỉnh cao,tuyệt vời,emotion
+best,tốt,emotion
+best tầm giá,tốt trong tầm giá,emotion
+ổn trong tầm giá,tốt trong tầm giá,emotion
+hời,giá tốt,general
+giá mềm,rẻ,general
+giá thơm,rẻ,general
+giá ngon,rẻ,general
+chát,đắt,general
+giá chát,đắt,general
+hơi căng,đắt,general
+quá giá,đắt,general
+lởm,tệ,emotion
+phèn,tệ,emotion
+tã,tệ,emotion
+toang,tệ,emotion
+fail,tệ,emotion
+hụt hẫng,thất vọng,emotion
+khó chịu,không hài lòng,emotion
+bực,không hài lòng,emotion
+bực mình,không hài lòng,emotion
+khét lẹt,quá tốt,emotion
+cháy,tuyệt vời,emotion
+hết nước chấm,tuyệt vời,emotion
+đáng mua,nên mua,emotion
+nên múc,nên mua,emotion
+múc,mua,general
+lụm,mua,general
+chốt đơn,mua,general
+quất,mua,general
+né,không nên mua,emotion
+né gấp,không nên mua,emotion
+không nên xuống tiền,không nên mua,emotion
+xuống tiền,mua,general
+máy,thiết bị,tech
+con máy,thiết bị,tech
+em máy,thiết bị,tech
+body,thân máy,tech
+build,độ hoàn thiện,tech
+build ngon,độ hoàn thiện tốt,tech
+build lởm,độ hoàn thiện kém,tech
+vỏ ọp ẹp,vỏ máy kém,tech
+ọp ẹp,không chắc chắn,tech
+cầm đầm,chắc chắn,tech
+cầm nhẹ,trọng lượng nhẹ,tech
+nặng tay,trọng lượng nặng,tech
+mỏng nhẹ,mỏng và nhẹ,tech
+hầm hố,thiết kế mạnh mẽ,tech
+đẹp mã,thiết kế đẹp,tech
+xước dăm,trầy xước nhẹ,tech
+trầy,trầy xước,tech
+móp,móp méo,tech
+zin,chính hãng,tech
+fullbox,đầy đủ hộp,tech
+like new,như mới,tech
+new seal,mới nguyên seal,tech
+seal,niêm phong,tech
+bh hãng,bảo hành chính hãng,tech
+bh shop,bảo hành cửa hàng,tech
+hết bh,hết bảo hành,tech
+máy lock,điện thoại khóa mạng,tech
+quốc tế,phiên bản quốc tế,tech
+chính hãng,sản phẩm chính hãng,tech
+xách tay,sản phẩm xách tay,tech
+màn,màn hình,tech
+mh,màn hình,tech
+màn đẹp,màn hình đẹp,tech
+màn xấu,màn hình kém,tech
+màn ám,màn hình bị ám màu,tech
+ám vàng,màn hình ám vàng,tech
+ám xanh,màn hình ám xanh,tech
+sọc màn,màn hình bị sọc,tech
+chảy mực,màn hình lỗi chảy mực,tech
+hở sáng,màn hình bị hở sáng,tech
+đốm sáng,màn hình có đốm sáng,tech
+cảm ứng đơ,cảm ứng không nhạy,tech
+đơ cảm ứng,cảm ứng không nhạy,tech
+vuốt mượt,cảm ứng mượt,tech
+vuốt lag,cảm ứng chậm,tech
+tần số quét,tần số làm mới màn hình,tech
+hz,tần số quét,tech
+loa,loa ngoài,tech
+loa bé,âm lượng nhỏ,tech
+loa rè,loa bị rè,tech
+loa to,âm lượng lớn,tech
+mic,micro,tech
+mic rè,micro bị rè,tech
+mic nhỏ,micro âm lượng nhỏ,tech
+pin,pin,tech
+pin trâu,pin tốt,tech
+trâu pin,pin tốt,tech
+pin hẻo,pin yếu,tech
+pin yếu,pin kém,tech
+tụt pin nhanh,pin hao nhanh,tech
+hao pin,pin hao nhanh,tech
+ngốn pin,tiêu hao pin nhiều,tech
+chai pin,pin bị chai,tech
+pin ảo,pin hiển thị không chính xác,tech
+sạc nhanh,sạc tốc độ nhanh,tech
+sạc chậm,sạc tốc độ chậm,tech
+sạc như rùa,sạc rất chậm,tech
+nóng máy,máy nóng,tech
+ấm máy,máy hơi nóng,tech
+quá nhiệt,máy quá nóng,tech
+sập nguồn,máy tự tắt nguồn,tech
+treo máy,máy bị treo,tech
+đơ máy,máy bị đơ,tech
+khựng,máy bị giật nhẹ,tech
+giật lag,hoạt động chậm,tech
+mượt game,chơi game mượt,tech
+gánh game,chạy game tốt,tech
+chiến game,chơi game,tech
+fps,tốc độ khung hình,tech
+fps thấp,tốc độ khung hình thấp,tech
+drop fps,tụt tốc độ khung hình,tech
+chip,bộ xử lý,tech
+cpu,bộ xử lý,tech
+gpu,bộ xử lý đồ họa,tech
+ram,bộ nhớ ram,tech
+rom,bộ nhớ trong,tech
+ssd,ổ cứng ssd,tech
+hdd,ổ cứng hdd,tech
+ổ cứng,bộ nhớ lưu trữ,tech
+card,card đồ họa,tech
+card rời,card đồ họa rời,tech
+vga,card đồ họa,tech
+tản,tản nhiệt,tech
+tản nhiệt,làm mát,tech
+quạt hú,quạt tản nhiệt ồn,tech
+quạt ồn,quạt tản nhiệt ồn,tech
+bàn phím,keyboard,tech
+phím,bàn phím,tech
+phím nảy,bàn phím phản hồi tốt,tech
+phím ọp ẹp,bàn phím kém,tech
+touchpad,bàn di chuột,tech
+trackpad,bàn di chuột,tech
+touchpad mượt,bàn di chuột tốt,tech
+touchpad rít,bàn di chuột kém,tech
+cổng kết nối,cổng giao tiếp,tech
+type c,cổng usb type c,tech
+usb c,cổng usb type c,tech
+hdmi,cổng hdmi,tech
+wifi,wifi,tech
+wifi yếu,kết nối wifi yếu,tech
+bluetooth,kết nối bluetooth,tech
+bt,kết nối bluetooth,tech
+bắt sóng,kết nối mạng,tech
+sóng yếu,kết nối mạng yếu,tech
+mất sóng,mất kết nối mạng,tech
+tai,tai nghe,tech
+tai nghe,tai nghe,tech
+earbud,tai nghe nhét tai,tech
+earbuds,tai nghe nhét tai,tech
+in ear,tai nghe nhét tai,tech
+over ear,tai nghe chụp tai,tech
+chụp tai,tai nghe chụp tai,tech
+true wireless,tai nghe không dây,tech
+tw,tai nghe không dây,tech
+tws,tai nghe không dây,tech
+anc,chống ồn chủ động,tech
+chống ồn,chống ồn,tech
+xuyên âm,chế độ xuyên âm,tech
+bass,âm trầm,tech
+bass lực,âm trầm mạnh,tech
+bass yếu,âm trầm yếu,tech
+treble,âm cao,tech
+treble gắt,âm cao bị gắt,tech
+mid,âm trung,tech
+âm trường,không gian âm thanh,tech
+âm chi tiết,âm thanh chi tiết,tech
+âm đục,âm thanh không rõ,tech
+rè âm,âm thanh bị rè,tech
+delay,độ trễ,tech
+độ trễ cao,độ trễ lớn,tech
+delay thấp,độ trễ thấp,tech
+đeo êm,đeo thoải mái,tech
+đeo đau tai,đeo không thoải mái,tech
+fit tai,vừa tai,tech
+rơi tai,dễ rơi khỏi tai,tech
+case,hộp sạc,tech
+case sạc,hộp sạc,tech
+kén tai,không phù hợp nhiều dáng tai,tech

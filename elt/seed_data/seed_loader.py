@@ -136,10 +136,9 @@ def _merge_channels_to_bq(client: bigquery.Client, records: list[dict]) -> int:
         bigquery.SchemaField("created_at", "TIMESTAMP"),
         bigquery.SchemaField("last_updated_at", "TIMESTAMP"),
     ]
-    tmp = bigquery.Table(tmp_table, schema=schema)
-    client.create_table(tmp, exists_ok=True)
-    client.insert_rows_json(tmp_table, rows)
-    time.sleep(2)
+    job_config = bigquery.LoadJobConfig(schema=schema, write_disposition="WRITE_TRUNCATE")
+    load_job = client.load_table_from_json(rows, tmp_table, job_config=job_config)
+    load_job.result()
 
     merge_sql = f"""
         MERGE `{_PROJECT_ID}.{_DATASET}.channel_config` AS target
@@ -177,10 +176,9 @@ def _merge_keywords_to_bq(client: bigquery.Client, rows: list[dict]) -> int:
         bigquery.SchemaField("is_active", "BOOL"),
         bigquery.SchemaField("created_at", "TIMESTAMP"),
     ]
-    tmp = bigquery.Table(tmp_table, schema=schema)
-    client.create_table(tmp, exists_ok=True)
-    client.insert_rows_json(tmp_table, rows)
-    time.sleep(2)
+    job_config = bigquery.LoadJobConfig(schema=schema, write_disposition="WRITE_TRUNCATE")
+    load_job = client.load_table_from_json(rows, tmp_table, job_config=job_config)
+    load_job.result()
 
     merge_sql = f"""
         MERGE `{_PROJECT_ID}.{_DATASET}.keyword_config` AS target
@@ -249,18 +247,77 @@ def seed_keywords(client: bigquery.Client) -> int:
     return merged
 
 
+def _get_existing_handles(client: bigquery.Client) -> set[str]:
+    query = f"""
+        SELECT channel_handle
+        FROM `{_PROJECT_ID}.{_DATASET}.channel_config`
+        WHERE is_active = TRUE
+    """
+    rows = client.query(query).result()
+    return {row.channel_handle for row in rows}
+
+
+def sync_channels(client: bigquery.Client) -> dict:
+    df = pd.read_csv(_SEED_CHANNELS_CSV, dtype=str)
+    df.columns = df.columns.str.strip()
+
+    if "channel_handle" not in df.columns:
+        return {"csv_total": 0, "new": 0, "synced": 0}
+
+    raw_handles = df["channel_handle"].dropna().str.strip().tolist()
+    csv_handles = [_parse_handle(h) for h in raw_handles]
+
+    existing_handles = _get_existing_handles(client)
+    new_handles = [h for h in csv_handles if h not in existing_handles]
+
+    if not new_handles:
+        return {"csv_total": len(csv_handles), "new": 0, "synced": 0}
+
+    api_records = _fetch_channels_from_api(new_handles)
+    synced = _merge_channels_to_bq(client, api_records)
+
+    return {"csv_total": len(csv_handles), "new": len(new_handles), "synced": synced}
+
+
+def sync_keywords(client: bigquery.Client) -> dict:
+    df = pd.read_csv(_SEED_KEYWORDS_CSV, dtype=str)
+    df.columns = df.columns.str.strip()
+
+    if "keyword_text" not in df.columns or "keyword_id" not in df.columns:
+        return {"csv_total": 0, "synced": 0}
+
+    df = df[["keyword_id", "keyword_text", "search_cluster"]].dropna(subset=["keyword_text"])
+    df = df[df["keyword_text"].str.strip() != ""]
+    df = df[df["keyword_id"].str.strip() != ""]
+
+    now = _now_iso()
+    rows = [
+        {
+            "keyword_id": row["keyword_id"].strip(),
+            "keyword_text": row["keyword_text"].strip(),
+            "search_cluster": row["search_cluster"].strip() if pd.notna(row["search_cluster"]) else None,
+            "is_active": True,
+            "created_at": now,
+        }
+        for _, row in df.iterrows()
+    ]
+
+    synced = _merge_keywords_to_bq(client, rows)
+    return {"csv_total": len(rows), "synced": synced}
+
+
 def run() -> None:
     client = _get_bq_client()
 
-    # print("=== Seeding channels ===")
-    # channel_count = seed_channels(client)
-    # print(f"  Done: {channel_count} channels upserted.\n")
+    print("=== Seeding channels ===")
+    channel_count = seed_channels(client)
+    print(f"  Done: {channel_count} channels upserted.\n")
 
     print("=== Seeding keywords ===")
     keyword_count = seed_keywords(client)
     print(f"  Done: {keyword_count} keywords upserted.\n")
 
-    # print(f"Seed complete: {channel_count} channels, {keyword_count} keywords.")
+    print(f"Seed complete: {channel_count} channels, {keyword_count} keywords.")
 
 
 if __name__ == "__main__":

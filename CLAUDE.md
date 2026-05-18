@@ -61,7 +61,7 @@ YouTube Data API / yt-dlp
 |---|---|
 | Data Lake | Google Cloud Storage (`product-sentiment-raw-1806`) |
 | Data Warehouse | BigQuery (dataset: `sentiment_platform`) |
-| Orchestration | Apache Airflow 3.1.8 (Docker, Python 3.13) |
+| Orchestration | Manual execution via Conda etl-py313 (Airflow chuyển đổi sang Local) |
 | Data Transform | dbt-bigquery |
 | Video discovery | yt-dlp, YouTube Data API v3 (`search.list`) |
 | Comment collection | youtube-comment-downloader, BrightData Residential Proxy |
@@ -73,7 +73,7 @@ YouTube Data API / yt-dlp
 | API | FastAPI + Redis cache (TTL=300s) |
 | Dashboard | Streamlit |
 | Training | Google Colab (GPU T4 16GB) |
-| ETL runtime | Python 3.13.12 |
+| ETL runtime | Conda environment: etl-py313 (Python 3.13) |
 
 ---
 
@@ -167,8 +167,8 @@ Tuân thủ convention này để BigQuery External Table partition đúng.
 
 ## Quy tắc bắt buộc khi code
 
-1. **ETL Python** (`elt/`) chạy Python 3.13.12 — KHÔNG dùng Airflow imports trong đây
-2. **Airflow DAGs** (`airflow/`) chạy Docker Python 3.13 — chỉ import và gọi ETL scripts
+1. **ETL Python** (`elt/`) chạy trên Conda environment `etl-py313` — KHÔNG dùng Airflow imports trong đây
+2. **Airflow DAGs** (`airflow/`) đang chuyển sang môi trường Local (trước đây là Docker) để tránh overload, ưu tiên chạy manual qua script trong giai đoạn dev.
 3. ETL và Airflow phải **hoàn toàn tách biệt**
 4. Không comment trong code — code phải tự nói lên ý nghĩa
 5. Mỗi class nằm trong file riêng
@@ -182,21 +182,33 @@ Tuân thủ convention này để BigQuery External Table partition đúng.
 
 ## Cấu trúc thư mục
 
-```
+```text
 Social_media_sentiment_pipeline/
 ├── .env                    ← credentials (không commit)
 ├── .env.example            ← template public
 ├── .gitignore
 ├── requirements.txt        ← ETL environment (Python 3.13.12)
+├── run_dbt.bat             ← Lệnh chạy thủ công dbt trên Windows (gọi scripts/dbt/dbt_runner.py)
 ├── config/
 │   └── pipeline_config.yaml
 ├── schema/                 ← khởi tạo BQ schema theo layer
-├── elt/                    ← Extract + Load → GCS
+├── elt/                    ← Extract + Load → GCS (Lưu ý: ghi NDJSON cho BigQuery External Tables)
 ├── transform/              ← dbt: GCS → BigQuery
 ├── nlp/                    ← NLP pipeline
 ├── analytics/              ← ranking + attribution engine
 ├── api/                    ← FastAPI
 ├── dashboard/              ← Streamlit
 ├── airflow/                ← DAGs (tạo sau phase 1)
+├── scripts/                ← Script tiện ích / bảo trì
+│   ├── dbt/                ← Script chạy dbt thủ công (dbt_runner.py)
+│   └── maintenance/        ← Các script fix data GCS, xử lý lỗi BigQuery
 └── tests/
 ```
+
+---
+
+## Lưu ý Kỹ Thuật Quan Trọng Mới Cập Nhật
+
+1. **Định dạng NDJSON cho GCS**: BigQuery External Tables (`raw_videos`, `raw_comments`) yêu cầu dữ liệu JSON lưu trên GCS phải là chuẩn **Newline Delimited JSON (NDJSON)**. Code trong `elt/datacontext/gcs_client.py` đã được thiết kế để tự động convert sang NDJSON khi upload.
+2. **Location BigQuery**: Tất cả dataset của project phải được đặt ở **`asia-southeast1`** (kể cả staging/marts của dbt) để đồng bộ với dataset gốc do pipeline sinh ra.
+3. **Chạy thủ công dbt**: Để chạy dbt ngoài môi trường Airflow (debug/dev), hãy sử dụng file `run_dbt.bat` ở thư mục gốc, file này sẽ nạp `.env` và gọi script `scripts/dbt/dbt_runner.py` để chạy dbt an toàn.

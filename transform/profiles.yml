@@ -3,11 +3,10 @@ social_media_sentiment:
   outputs:
     dev:
       type: bigquery
-      method: service-account
+      method: oauth
       project: "{{ env_var('GCP_PROJECT_ID') }}"
       dataset: "{{ env_var('BQ_DATASET') }}"
-      keyfile: "{{ env_var('GOOGLE_APPLICATION_CREDENTIALS') }}"
-      location: US
+      location: asia-southeast1
       priority: interactive
       timeout_seconds: 300
       threads: 4
