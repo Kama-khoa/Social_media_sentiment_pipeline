@@ -1,8 +1,8 @@
 crawl:
   max_comments_per_video: 500
-  historical_scan_channels_per_day: 5
+  historical_scan_channels_per_day: 20
   historical_scan_max_results: 10000
-  historical_scan_lookback_days: 730
+  historical_scan_lookback_days: 365
   daily_scan_lookback_days: 3
   daily_scan_max_results: 20
   enrich_max_workers: 1

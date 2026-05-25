@@ -6,35 +6,98 @@ from underthesea import word_tokenize
 
 logger = logging.getLogger(__name__)
 
-def prepare_data_for_colab(input_json_path: Path, output_dir: Path):
+def prepare_data_for_colab(input_json_paths: list[Path], output_dir: Path):
     """
     Đọc dữ liệu gán nhãn từ Gemini, chia Train/Val 
     và lưu thành định dạng chuẩn để dễ đưa lên Colab.
+    Hỗ trợ gộp nhiều file JSON đầu vào.
     """
-    if not input_json_path.exists():
-        print(f"Không tìm thấy file: {input_json_path}")
+    data = []
+    for path in input_json_paths:
+        if not path.exists():
+            print(f"Không tìm thấy file: {path}, bỏ qua.")
+            continue
+        with open(path, 'r', encoding='utf-8') as f:
+            file_data = json.load(f)
+            data.extend(file_data)
+            print(f"Loaded {len(file_data)} records from {path}")
+
+    if not data:
+        print("Không có dữ liệu hợp lệ từ bất kỳ file nào.")
         return
 
-    with open(input_json_path, 'r', encoding='utf-8') as f:
-        data = json.load(f)
-
+    import random
+    random.seed(42)
     # Lọc các record hợp lệ
     valid_data = []
     for item in data:
-        # Tùy thuộc vào cấu trúc trả về từ GeminiAnnotator,
-        # Nếu dùng hàm _attach_bio_tags thì item sẽ có "bio_tags"
-        if "sentence" in item and "sentiment_label" in item and "bio_tags" in item:
-            tokens = word_tokenize(item["sentence"])
-            bio_tags = item["bio_tags"]
-            if len(tokens) != len(bio_tags):
-                logger.warning("Token/BIO mismatch (%d vs %d), skipping: %s", len(tokens), len(bio_tags), item["sentence"][:60])
+        if "sentence" in item and "sentiment_label" in item and "ner_tags" in item:
+            # Lọc bỏ 100% câu NONE theo yêu cầu để tăng mật độ B/I tags
+            if item.get("aspect_label") == "NONE":
                 continue
+                
+            orig_tokens = item["tokens"]
+            orig_tags = item["ner_tags"]
+            
+            new_tokens = []
+            new_tags = []
+            
+            # Split tokens with spaces to prevent alignment bugs in HF Tokenizer
+            for t, tag in zip(orig_tokens, orig_tags):
+                parts = str(t).split()
+                if not parts:
+                    continue
+                new_tokens.extend(parts)
+                # If it's a B- tag, the first part is B-, subsequent parts are I-
+                if tag.startswith("B-"):
+                    new_tags.append(tag)
+                    i_tag = "I-" + tag[2:]
+                    new_tags.extend([i_tag] * (len(parts) - 1))
+                else:
+                    new_tags.extend([tag] * len(parts))
+            
             valid_data.append({
-                "tokens": tokens,
-                "ner_tags": bio_tags,
+                "tokens": new_tokens,
+                "ner_tags": new_tags,
                 "sentence": item["sentence"],
                 "sentiment_label": item["sentiment_label"],
-                "aspect_label": item["aspect_label"],
+                "aspect_label": item.get("aspect_label", "NONE"),
+            })
+        elif "sentence" in item and "sentiment_label" in item and "bio_tags" in item:
+            # Fallback for old key format
+            # Lọc bỏ 100% câu NONE theo yêu cầu để tăng mật độ B/I tags
+            if item.get("aspect_label") == "NONE":
+                continue
+                
+            orig_tokens = item.get("tokens", [])
+            orig_tags = item["bio_tags"]
+            if not orig_tokens:
+                from underthesea import word_tokenize
+                orig_tokens = word_tokenize(item["sentence"])
+                
+            if len(orig_tokens) != len(orig_tags):
+                continue
+                
+            new_tokens = []
+            new_tags = []
+            for t, tag in zip(orig_tokens, orig_tags):
+                parts = str(t).split()
+                if not parts:
+                    continue
+                new_tokens.extend(parts)
+                if tag.startswith("B-"):
+                    new_tags.append(tag)
+                    i_tag = "I-" + tag[2:]
+                    new_tags.extend([i_tag] * (len(parts) - 1))
+                else:
+                    new_tags.extend([tag] * len(parts))
+
+            valid_data.append({
+                "tokens": new_tokens,
+                "ner_tags": new_tags,
+                "sentence": item["sentence"],
+                "sentiment_label": item["sentiment_label"],
+                "aspect_label": item.get("aspect_label", "NONE"),
             })
 
     if not valid_data:
@@ -42,6 +105,7 @@ def prepare_data_for_colab(input_json_path: Path, output_dir: Path):
         return
 
     # Chia tập train / val (80% / 20%)
+    from sklearn.model_selection import train_test_split
     train_data, val_data = train_test_split(valid_data, test_size=0.2, random_state=42)
 
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -65,9 +129,17 @@ def prepare_data_for_colab(input_json_path: Path, output_dir: Path):
 
 if __name__ == "__main__":
     root = Path(__file__).parent.parent.parent / "data" / "export_for_colab"
-    input_file = root / "gemini_annotated_full.json"
-    if not input_file.exists():
-        input_file = root / "gemini_annotated_sample.json"
-        print(f"[Info] Chưa có file full, dùng sample: {input_file}")
-    out_dir = root / "dataset_hf"
-    prepare_data_for_colab(input_file, out_dir)
+    
+    input_files = [
+        root / "gemini_annotated_full.json",
+        root / "gemini_annotated_pos_neg.json"
+    ]
+    
+    # Nếu chưa có full, dùng sample fallback
+    if not (root / "gemini_annotated_full.json").exists() and (root / "gemini_annotated_sample.json").exists():
+        input_files[0] = root / "gemini_annotated_sample.json"
+        print(f"[Info] Chưa có file full, dùng sample fallback cho file chính.")
+        
+    # Lưu thẳng vào Google Drive
+    out_dir = Path("G:/My Drive/dataset_hf")
+    prepare_data_for_colab(input_files, out_dir)
