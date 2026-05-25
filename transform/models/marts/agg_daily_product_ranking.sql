@@ -9,7 +9,14 @@
 ) }}
 
 WITH fact_mentions AS (
-    SELECT * FROM {{ ref('fact_product_mentions') }}
+    SELECT 
+        *,
+        CASE 
+            WHEN sentiment_label = 'POSITIVE' THEN 1.0
+            WHEN sentiment_label = 'NEGATIVE' THEN -1.0
+            ELSE 0.0
+        END AS sentiment_score
+    FROM {{ ref('fact_product_mentions') }}
 ),
 products AS (
     SELECT * FROM {{ ref('dim_products') }}
@@ -22,7 +29,9 @@ daily_stats AS (
         COUNT(f.mention_id) AS total_mentions,
         COUNTIF(f.sentiment_label = 'POSITIVE') AS positive_count,
         COUNTIF(f.sentiment_label = 'NEGATIVE') AS negative_count,
-        COUNTIF(f.sentiment_label = 'NEUTRAL') AS neutral_count
+        COUNTIF(f.sentiment_label = 'NEUTRAL') AS neutral_count,
+        AVG(f.sentiment_score) AS mean_score,
+        STDDEV_SAMP(f.sentiment_score) AS std_score
     FROM fact_mentions f
     JOIN products p ON f.product_id = p.product_id
     GROUP BY 1, 2, 3
@@ -34,16 +43,19 @@ scored_stats AS (
         category,
         -- Bayesian average: (C * global_mean + n * local_mean) / (C + n), C=50
         SAFE_DIVIDE(
-            50.0 * AVG(SAFE_DIVIDE(positive_count - negative_count, total_mentions)) OVER ()
-                + total_mentions * SAFE_DIVIDE(positive_count - negative_count, total_mentions),
+            50.0 * AVG(mean_score) OVER () + total_mentions * mean_score,
             50.0 + total_mentions
         ) AS bayesian_score,
         
-        -- Controversy index placeholder: High if both pos and neg are high
-        -- formula: (pos * neg) / total^2
-        SAFE_DIVIDE((positive_count * negative_count), POW(total_mentions, 2)) AS controversy_index,
+        -- Controversy index: Std(score) / (|Mean(score)| + 0.1)
+        SAFE_DIVIDE(COALESCE(std_score, 0), ABS(mean_score) + 0.1) AS controversy_index,
         
-        'Unknown' AS controversy_label,
+        CASE
+            WHEN SAFE_DIVIDE(COALESCE(std_score, 0), ABS(mean_score) + 0.1) > 0.8 THEN 'Controversial'
+            WHEN SAFE_DIVIDE(COALESCE(std_score, 0), ABS(mean_score) + 0.1) < 0.4 THEN 'Unanimous'
+            ELSE 'Normal'
+        END AS controversy_label,
+        
         total_mentions,
         positive_count,
         negative_count,

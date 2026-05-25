@@ -21,6 +21,7 @@ class CrawlConfig:
     max_comments_per_video: int
     historical_scan_channels_per_day: int
     historical_scan_max_results: int
+    historical_scan_lookback_days: int
     daily_scan_lookback_days: int
     daily_scan_max_results: int
     enrich_max_workers: int
@@ -94,6 +95,7 @@ def load_config(config_path: str | None = None) -> PipelineConfig:
             max_comments_per_video=crawl["max_comments_per_video"],
             historical_scan_channels_per_day=crawl["historical_scan_channels_per_day"],
             historical_scan_max_results=crawl["historical_scan_max_results"],
+            historical_scan_lookback_days=crawl.get("historical_scan_lookback_days", 730),
             daily_scan_lookback_days=crawl["daily_scan_lookback_days"],
             daily_scan_max_results=crawl["daily_scan_max_results"],
             enrich_max_workers=crawl["enrich_max_workers"],

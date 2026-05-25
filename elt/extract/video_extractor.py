@@ -167,6 +167,9 @@ class VideoExtractor(BaseExtractor):
         fetcher = self._build_fetcher()
         batch_size = self._config.crawl.video_batch_size
 
+        lookback_days = getattr(self._config.crawl, "historical_scan_lookback_days", 730)
+        cutoff_date = datetime.now(timezone.utc) - timedelta(days=lookback_days)
+
         total_saved = 0
         channels_done = 0
 
@@ -175,10 +178,20 @@ class VideoExtractor(BaseExtractor):
             logger.info("Phase B: scanning channel %s (%s)", ch.channel_name, url)
 
             raw = fetcher.fetch_channel_videos(url)
-            matched = fetcher.filter_by_keywords(raw)
+            
+            # Filter videos within the lookback window
+            filtered_raw = []
+            for item in raw:
+                pub_at = fetcher._parse_published_at(item)
+                if pub_at and pub_at >= cutoff_date:
+                    filtered_raw.append(item)
+                elif not pub_at:
+                    filtered_raw.append(item)
+
+            matched = fetcher.filter_by_keywords(filtered_raw)
             logger.info(
-                "Phase B: channel %s — %d total, %d matched",
-                ch.channel_name, len(raw), len(matched),
+                "Phase B: channel %s — %d total, %d within lookback, %d matched",
+                ch.channel_name, len(raw), len(filtered_raw), len(matched),
             )
 
             existing_ids = self._crawl_state_repo.get_existing_video_ids(ch.channel_id)

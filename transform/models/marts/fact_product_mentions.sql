@@ -14,6 +14,9 @@ WITH sentiment_results AS (
 sentences AS (
     SELECT * FROM {{ ref('int_comment_sentences') }}
 ),
+video_state AS (
+    SELECT * FROM {{ source('raw', 'video_crawl_state') }}
+),
 products AS (
     SELECT * FROM {{ ref('dim_products') }}
 )
@@ -33,11 +36,7 @@ SELECT
     CURRENT_TIMESTAMP() AS _dbt_processed_at
 FROM sentiment_results sr
 JOIN sentences s ON sr.sentence_id = s.sentence_id
--- We need to join with products. Since int_sentiment_results doesn't have product_id natively in the schema,
--- the aspect_label or another field from NLP needs to map to product_id.
--- Assuming NLP tags aspect_label or segment_text with the keyword_id (product_id), 
--- OR assuming we do a text match.
--- For the sake of the structural pipeline, we'll assume NLP outputs `aspect_label` as product_name or we do a text match.
--- We will use a basic CROSS JOIN with LIKE for baseline if NLP doesn't output product_id directly, 
--- but normally NLP gives aspect_label as the entity. We'll join where aspect_label = product_name for now.
-JOIN products p ON LOWER(sr.aspect_label) = LOWER(p.product_name)
+-- Kết nối qua bảng video_crawl_state để lấy keyword_id (tương ứng product_id) của video
+JOIN video_state vcs ON s.video_id = vcs.video_id
+-- Kết nối để lấy các trường chi tiết của product
+JOIN products p ON vcs.keyword_id = p.product_id

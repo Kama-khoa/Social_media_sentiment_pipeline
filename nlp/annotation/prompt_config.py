@@ -58,6 +58,250 @@ FEW_SHOT_EXAMPLES: List[Dict[str, str]] = [
     },
 ]
 
+# Few-shot đơn điểm bổ sung cho 6 khía cạnh:
+# Pin, Camera, Màn hình, Hiệu năng, Thiết kế, Giá
+FEW_SHOT_EXAMPLES.extend([
+    # =========================
+    # 1. Pin
+    # =========================
+    {
+        "sentence": "Pin dùng rất lâu, sáng sạc đầy tối vẫn còn nhiều",
+        "aspect_label": "Pin",
+        "segment_text": "Pin dùng rất lâu",
+        "sentiment_label": "positive",
+    },
+    {
+        "sentence": "Thời lượng pin ổn, đủ dùng cho một ngày học tập",
+        "aspect_label": "Pin",
+        "segment_text": "Thời lượng pin ổn",
+        "sentiment_label": "positive",
+    },
+    {
+        "sentence": "Pin tụt nhanh quá, mới dùng vài tiếng đã phải sạc",
+        "aspect_label": "Pin",
+        "segment_text": "Pin tụt nhanh quá",
+        "sentiment_label": "negative",
+    },
+    {
+        "sentence": "Máy hao pin khi xem video liên tục",
+        "aspect_label": "Pin",
+        "segment_text": "hao pin",
+        "sentiment_label": "negative",
+    },
+    {
+        "sentence": "Dung lượng pin là 5000mAh theo đúng thông tin công bố",
+        "aspect_label": "Pin",
+        "segment_text": "Dung lượng pin là 5000mAh",
+        "sentiment_label": "neutral",
+    },
+    {
+        "sentence": "Pin ở mức bình thường, không quá nổi bật",
+        "aspect_label": "Pin",
+        "segment_text": "Pin ở mức bình thường",
+        "sentiment_label": "neutral",
+    },
+
+    # =========================
+    # 2. Camera
+    # =========================
+    {
+        "sentence": "Camera chụp ban ngày rất nét và màu đẹp",
+        "aspect_label": "Camera",
+        "segment_text": "Camera chụp ban ngày rất nét và màu đẹp",
+        "sentiment_label": "positive",
+    },
+    {
+        "sentence": "Ảnh selfie rõ mặt, màu da nhìn tự nhiên",
+        "aspect_label": "Camera",
+        "segment_text": "Ảnh selfie rõ mặt",
+        "sentiment_label": "positive",
+    },
+    {
+        "sentence": "Camera thiếu sáng chụp rất bệt màu",
+        "aspect_label": "Camera",
+        "segment_text": "Camera thiếu sáng chụp rất bệt màu",
+        "sentiment_label": "negative",
+    },
+    {
+        "sentence": "Ảnh chụp bị nhiễu nhiều khi dùng trong phòng tối",
+        "aspect_label": "Camera",
+        "segment_text": "Ảnh chụp bị nhiễu nhiều",
+        "sentiment_label": "negative",
+    },
+    {
+        "sentence": "Camera sau có độ phân giải 50MP",
+        "aspect_label": "Camera",
+        "segment_text": "Camera sau có độ phân giải 50MP",
+        "sentiment_label": "neutral",
+    },
+    {
+        "sentence": "Camera trước chỉ ở mức dùng được",
+        "aspect_label": "Camera",
+        "segment_text": "Camera trước chỉ ở mức dùng được",
+        "sentiment_label": "neutral",
+    },
+
+    # =========================
+    # 3. Màn hình
+    # =========================
+    {
+        "sentence": "Màn hình hiển thị sắc nét, màu sắc rất rực rỡ",
+        "aspect_label": "Màn hình",
+        "segment_text": "Màn hình hiển thị sắc nét",
+        "sentiment_label": "positive",
+    },
+    {
+        "sentence": "Tần số quét màn hình cao nên vuốt rất mượt",
+        "aspect_label": "Màn hình",
+        "segment_text": "màn hình cao nên vuốt rất mượt",
+        "sentiment_label": "positive",
+    },
+    {
+        "sentence": "Màn hình bị ám vàng khá khó chịu",
+        "aspect_label": "Màn hình",
+        "segment_text": "Màn hình bị ám vàng",
+        "sentiment_label": "negative",
+    },
+    {
+        "sentence": "Ra ngoài trời thì màn hình hơi tối",
+        "aspect_label": "Màn hình",
+        "segment_text": "màn hình hơi tối",
+        "sentiment_label": "negative",
+    },
+    {
+        "sentence": "Màn hình có kích thước 6.7 inch",
+        "aspect_label": "Màn hình",
+        "segment_text": "Màn hình có kích thước 6.7 inch",
+        "sentiment_label": "neutral",
+    },
+    {
+        "sentence": "Màn hình nhìn ở mức bình thường",
+        "aspect_label": "Màn hình",
+        "segment_text": "Màn hình nhìn ở mức bình thường",
+        "sentiment_label": "neutral",
+    },
+
+    # =========================
+    # 4. Hiệu năng
+    # =========================
+    {
+        "sentence": "Hiệu năng rất mạnh, mở nhiều ứng dụng vẫn mượt",
+        "aspect_label": "Hiệu năng",
+        "segment_text": "Hiệu năng rất mạnh",
+        "sentiment_label": "positive",
+    },
+    {
+        "sentence": "Chơi game ổn định, không bị tụt fps",
+        "aspect_label": "Hiệu năng",
+        "segment_text": "Chơi game ổn định",
+        "sentiment_label": "positive",
+    },
+    {
+        "sentence": "Máy chạy chậm và hay bị đơ khi mở app nặng",
+        "aspect_label": "Hiệu năng",
+        "segment_text": "Máy chạy chậm và hay bị đơ",
+        "sentiment_label": "negative",
+    },
+    {
+        "sentence": "Hiệu năng xử lý tác vụ nặng khá kém",
+        "aspect_label": "Hiệu năng",
+        "segment_text": "Hiệu năng xử lý tác vụ nặng khá kém",
+        "sentiment_label": "negative",
+    },
+    {
+        "sentence": "Máy dùng chip Snapdragon 8 Gen 2",
+        "aspect_label": "Hiệu năng",
+        "segment_text": "Máy dùng chip Snapdragon 8 Gen 2",
+        "sentiment_label": "neutral",
+    },
+    {
+        "sentence": "Hiệu năng ở mức đủ dùng cho nhu cầu cơ bản",
+        "aspect_label": "Hiệu năng",
+        "segment_text": "Hiệu năng ở mức đủ dùng",
+        "sentiment_label": "neutral",
+    },
+
+    # =========================
+    # 5. Thiết kế
+    # =========================
+    {
+        "sentence": "Thiết kế máy đẹp, cầm rất sang tay",
+        "aspect_label": "Thiết kế",
+        "segment_text": "Thiết kế máy đẹp",
+        "sentiment_label": "positive",
+    },
+    {
+        "sentence": "Kiểu dáng gọn nhẹ, mang đi học rất tiện",
+        "aspect_label": "Thiết kế",
+        "segment_text": "Kiểu dáng gọn nhẹ",
+        "sentiment_label": "positive",
+    },
+    {
+        "sentence": "Thiết kế quá dày, cầm lâu bị mỏi tay",
+        "aspect_label": "Thiết kế",
+        "segment_text": "Thiết kế quá dày",
+        "sentiment_label": "negative",
+    },
+    {
+        "sentence": "Mặt lưng dễ bám vân tay nên nhìn nhanh bẩn",
+        "aspect_label": "Thiết kế",
+        "segment_text": "Mặt lưng dễ bám vân tay",
+        "sentiment_label": "negative",
+    },
+    {
+        "sentence": "Thiết kế không có gì đặc biệt so với bản trước",
+        "aspect_label": "Thiết kế",
+        "segment_text": "Thiết kế không có gì đặc biệt",
+        "sentiment_label": "neutral",
+    },
+    {
+        "sentence": "Máy có thiết kế dạng thanh truyền thống",
+        "aspect_label": "Thiết kế",
+        "segment_text": "thiết kế dạng thanh truyền thống",
+        "sentiment_label": "neutral",
+    },
+
+    # =========================
+    # 6. Giá
+    # =========================
+    {
+        "sentence": "Giá quá tốt so với cấu hình nhận được",
+        "aspect_label": "Giá",
+        "segment_text": "Giá quá tốt",
+        "sentiment_label": "positive",
+    },
+    {
+        "sentence": "Mức giá này rất đáng mua",
+        "aspect_label": "Giá",
+        "segment_text": "Mức giá này rất đáng mua",
+        "sentiment_label": "positive",
+    },
+    {
+        "sentence": "Giá hơi cao so với chất lượng thực tế",
+        "aspect_label": "Giá",
+        "segment_text": "Giá hơi cao",
+        "sentiment_label": "negative",
+    },
+    {
+        "sentence": "Bán đắt quá, cùng tầm tiền có nhiều lựa chọn ngon hơn",
+        "aspect_label": "Giá",
+        "segment_text": "Bán đắt quá",
+        "sentiment_label": "negative",
+    },
+    {
+        "sentence": "Giá niêm yết là 12 triệu",
+        "aspect_label": "Giá",
+        "segment_text": "Giá niêm yết là 12 triệu",
+        "sentiment_label": "neutral",
+    },
+    {
+        "sentence": "Mức giá ngang với các sản phẩm cùng phân khúc",
+        "aspect_label": "Giá",
+        "segment_text": "Mức giá ngang với các sản phẩm cùng phân khúc",
+        "sentiment_label": "neutral",
+    },
+])
+
 def get_system_prompt() -> str:
     """Trả về phần hướng dẫn chính của System Prompt."""
     aspect_list = ", ".join(ASPECT_LABELS)

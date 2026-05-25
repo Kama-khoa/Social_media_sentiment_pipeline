@@ -110,9 +110,9 @@ def run_videos(config, repos: dict, gcs_client: GCSClient, dag_run_id: str, exec
 
     logger.info("=== VIDEO EXTRACTION START ===")
 
-    daily_result = 0
-    # daily_result = extractor.run_daily(execution_date, dag_run_id, budget)
-    # logger.info("Phase A done: %s", daily_result)
+    # daily_result = 0
+    daily_result = extractor.run_daily(execution_date, dag_run_id, budget)
+    logger.info("Phase A done: %s", daily_result)
 
     historical_result = extractor.run_historical(execution_date, dag_run_id, budget)
     logger.info("Phase B done: %s", historical_result)

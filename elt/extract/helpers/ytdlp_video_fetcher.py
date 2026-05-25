@@ -77,7 +77,7 @@ class YtdlpVideoFetcher:
             with _make_ydl(
                 cookies_path=temp_cookie_path or self._cookies_path,
                 proxy=self._proxy,
-                # quiet=True,
+                quiet=True,
                 # no_warnings=True,
                 extract_flat=True,
                 skip_download=True,
