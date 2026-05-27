@@ -65,7 +65,7 @@ YouTube Data API / yt-dlp
 | Data Transform | dbt-bigquery |
 | Video discovery | yt-dlp, YouTube Data API v3 (`search.list`) |
 | Comment collection | youtube-comment-downloader, BrightData Residential Proxy |
-| Vietnamese NLP | underthesea (word segmentation) |
+| Vietnamese NLP | underthesea (cho vELECTRA), pyvi (cho PhoBERT) |
 | Aspect extraction | vELECTRA (fine-tuned, Token Classification) |
 | Sentiment | PhoBERT (fine-tuned, Sequence Classification) |
 | LLM fallback | Gemini 2.5 Flash (confidence routing < 0.80) |
@@ -173,7 +173,7 @@ Tuân thủ convention này để BigQuery External Table partition đúng.
 4. Không comment trong code — code phải tự nói lên ý nghĩa
 5. Mỗi class nằm trong file riêng
 6. Thông tin nhạy cảm luôn đọc từ `.env`, không bao giờ hardcode
-7. `underthesea` word segmentation phải chạy **trước** khi đưa text vào PhoBERT
+7. PhoBERT yêu cầu tách từ bằng `pyvi` (`ViTokenizer`) và format input `aspect </s> sentence`. vELECTRA dùng `underthesea` để tách âm tiết và căn chỉnh nhãn BIO.
 8. Confidence routing threshold = **0.80** — dưới ngưỡng này gửi sang Gemini Flash
 9. **GCS-first, BQ-second** — ghi data lake trước, chốt trạng thái sau
 10. Không sử dụng icons quá nhiều trong code hoặc tài liệu

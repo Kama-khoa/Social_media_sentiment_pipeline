@@ -10,9 +10,9 @@
 | Phase 0 | Schema BigQuery | Hoàn thành | Tất cả 12 bảng đã tạo |
 | Phase 1 | ELT (`elt/`) | Hoàn thành | Phase A/B/C chạy ổn định |
 | Phase 2 | Transform (`transform/dbt`) | Hoàn thành | Staging → Intermediate → Marts |
-| Phase 3 | NLP Annotation | Hoàn thành (fix) | Bug rate limit đã sửa |
-| Phase 3 | NLP Training (Colab) | Chưa chạy | Chờ annotation xong |
-| Phase 3 | NLP Inference | Chưa có weights | Cấu trúc code có sẵn |
+| Phase 3 | NLP Annotation | Hoàn thành | Bug rate limit đã sửa, đã thu thập đầy đủ câu |
+| Phase 3 | NLP Training (Colab) | Hoàn thành | Dataset sạch và không leakage (prepare_dataset_v2.py). Đã vá Colab_Finetuning_Template.ipynb, sẵn sàng train lại với hyperparams tối ưu. |
+| Phase 3 | NLP Inference | Đang thực hiện | Cấu trúc code có sẵn, sẵn sàng tích hợp khi có model weights mới |
 | Phase 4 | Analytics Engine | Chưa bắt đầu | |
 | Phase 5 | API + Dashboard | Chưa bắt đầu | |
 | Airflow | DAGs | Chưa cấu hình | |
@@ -97,17 +97,21 @@ Khi Admin thêm channel hoặc keyword mới qua UI:
 ```
 Bước 3.1 — Auto-Annotation (chạy thủ công 1 lần)
   conda run -n etl-py313 python scratch/fetch_and_annotate_from_bq.py
-  Output: data/export_for_colab/gemini_annotated_full.json
+  Output: data/export_for_colab/gemini_annotated_full.json và gemini_annotated_pos_neg.json
 
-Bước 3.2 — Chuẩn bị data cho Colab
-  conda run -n etl-py313 python nlp/training/prepare_colab_data.py
-  Output: data/export_for_colab/dataset_hf/train.jsonl + val.jsonl
+Bước 3.2 — Chuẩn bị và làm sạch data cho Colab (Chống Data Leakage)
+  conda run -n etl-py313 python nlp/training/prepare_dataset_v2.py
+  - Gộp các file JSON, xử lý trùng lặp, giải quyết conflict nhãn cảm xúc/NER.
+  - Mix 20-30% nhãn NONE thật (bảo vệ vELECTRA khỏi False Positive).
+  - Tách câu và split Train/Val đảm bảo no overlap (ngăn chặn rò rỉ dữ liệu).
+  Output: data/sentiment/phobert/ và data/ner/velectra/ (train.jsonl, val.jsonl)
 
-Bước 3.3 — Training trên Google Colab (GPU T4)
-  Upload dataset_hf/ lên Google Drive
-  Chạy nlp/training/finetune_velectra.py  → models/velectra_aspect/
-  Chạy nlp/training/finetune_phobert.py   → models/phobert_sentiment/
-  Target: vELECTRA F1 >= 0.70, PhoBERT accuracy >= 78%
+Bước 3.3 — Huấn luyện trên Google Colab (GPU T4)
+  - Đồng bộ dataset_hf/ lên Google Drive
+  - Chạy vá và thực thi nlp/training/Colab_Finetuning_Template.ipynb
+  - PhoBERT: pyvi word tokenize, input format `aspect </s> sentence`, lr=1e-5.
+  - vELECTRA: underthesea word tokenize, default Trainer (không dùng WeightedTokenTrainer), lr=1e-5, early stopping.
+  Target: vELECTRA F1 >= 0.70, PhoBERT F1 >= 0.80
 
 Bước 3.4 — Tải weights về local và test inference
   python -c "from nlp.inference.confidence_router import ConfidenceRouter; ..."

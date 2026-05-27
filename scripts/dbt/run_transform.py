@@ -1,6 +1,7 @@
 import os
 import subprocess
 from dotenv import load_dotenv
+from pathlib import Path
 
 def main():
     # Load environment variables from .env file
@@ -12,9 +13,9 @@ def main():
         return
 
     # Change to transform directory
-    current_dir = os.getcwd()
-    if os.path.basename(current_dir) != "transform":
-        os.chdir("transform")
+    root_dir = Path(__file__).resolve().parent.parent.parent
+    transform_dir = root_dir / "transform"
+    os.chdir(transform_dir)
 
     print("=== Running dbt seed ===")
     subprocess.run(

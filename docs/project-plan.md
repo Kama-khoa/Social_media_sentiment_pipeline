@@ -387,11 +387,9 @@ nhãn tự động thay vì gán tay 4 tuần.
 
 32. Parse và validate response JSON, loại bỏ câu có output không hợp lệ.
 
-33. Chạy underthesea word_tokenize cho toàn bộ 2,000 câu đã gán nhãn,
-    lưu thành file dataset_bio_tagged.json.
+33. Chạy script `nlp/training/prepare_dataset_v2.py` để làm sạch dữ liệu: gộp các JSON thô thành `labeled_master.jsonl`, gom nhóm theo câu (để tránh rò rỉ dữ liệu khi chia train/val), gộp nhãn trùng, validate định dạng BIO, bắt lỗi spans > 12 tokens và ghi file conflicts để review.
 
-34. Kiểm tra chất lượng: spot-check 50 câu ngẫu nhiên, xác nhận accuracy
-    gán nhãn \>75%.
+34. Trộn thêm 20-30% câu `NONE` thật (không chứa aspect) và chia Train/Val theo tỉ lệ 80/20 không overlap. Export thành định dạng HuggingFace (`sentiment/phobert` và `ner/velectra`).
 
 **Công cụ sử dụng**
 
@@ -420,105 +418,36 @@ nhãn tự động thay vì gán tay 4 tuần.
 
 ### Tuần 7 — Fine-tune vELECTRA và PhoBERT trên Google Colab (Tuần ML quan trọng nhất)
 
-**Phần A — Fine-tune vELECTRA cho Aspect Extraction (dùng dataset từ
-Tuần 6)**
+**Phần A — Fine-tune vELECTRA cho Aspect Extraction**
 
-Đây là bước sử dụng trực tiếp bộ dataset_bio_tagged.json đã được Gemini
-gán nhãn tự động ở Tuần 6. Mục tiêu là fine-tune vELECTRA để nhận diện
-đúng 6 khía cạnh sản phẩm ở cấp độ token trong bình luận tiếng Việt thực
-tế của dự án — thay vì dùng model pretrained chưa được chuẩn hóa cho
-domain consumer electronics Việt Nam.
+Đây là bước sử dụng trực tiếp bộ dataset NER đã được làm sạch và xuất ra từ `prepare_dataset_v2.py`. Mục tiêu là fine-tune vELECTRA để nhận diện đúng 6 khía cạnh sản phẩm ở cấp độ token.
 
-35. Tải file dataset_bio_tagged.json từ Google Drive lên Colab. Kiểm tra
-    phân phối nhãn BIO: đảm bảo mỗi trong 6 khía cạnh (B-Pin, I-Pin,
-    B-Camera, B-ManHinh, B-HieuNang, B-ThietKe, B-Gia và các nhãn I-
-    tương ứng, O) có ít nhất 100 mẫu để tránh class imbalance nghiêm
-    trọng.
-
-36. Chuyển đổi dataset sang format HuggingFace Dataset: mỗi sample gồm
-    trường 'tokens' (list các từ sau word_tokenize của underthesea) và
-    trường 'ner_tags' (list id nhãn BIO tương ứng). Dùng ClassLabel để
-    mapping tên nhãn sang số nguyên.
-
-37. Load model vELECTRA từ HuggingFace Hub bằng
-    AutoModelForTokenClassification.from_pretrained(), truyền vào
-    num_labels bằng tổng số nhãn BIO. Kiểm tra tokenizer dùng đúng vocab
-    của vELECTRA — không dùng lẫn tokenizer của PhoBERT.
-
-38. Cấu hình DataCollatorForTokenClassification để tự động padding và
-    căn chỉnh nhãn với subword tokens. Đây là bước hay bị bỏ qua nhưng
-    ảnh hưởng trực tiếp đến accuracy: khi tokenizer chia 1 từ thành
-    nhiều subword, chỉ giữ nhãn cho subword đầu tiên, các subword còn
-    lại gán nhãn -100 để loss function bỏ qua.
-
-39. Thiết lập TrainingArguments: learning_rate=3e-5 (cao hơn PhoBERT vì
-    task NER cần học feature mới nhiều hơn), batch_size=16, epochs=5
-    (NER cần nhiều epoch hơn classification), fp16=True,
-    save_strategy='steps', save_steps=200, load_best_model_at_end=True.
-
-40. Chạy training lần đầu 1 epoch, kiểm tra loss curve có giảm đều
-    không. Nếu loss không giảm hoặc dao động mạnh, giảm learning_rate
-    xuống 1e-5.
-
-41. Chạy đủ 5 epochs, evaluate trên tập validation (chia 80/20 từ
-    dataset_bio_tagged.json). Tính F1-score theo từng nhãn bằng seqeval
-    — mục tiêu F1 \>= 0.70 trên tập validation của dự án.
-
-42. Spot-check kết quả: chạy inference trên 10 câu bình luận thực tế từ
-    BigQuery, xem model có nhận diện đúng 'pin', 'camera', 'màn hình'
-    trong ngữ cảnh tiếng Việt không. Nếu model nhầm lẫn nhiều giữa các
-    khía cạnh có từ gần nghĩa, cần xem lại chất lượng nhãn từ tuần 6.
-
-43. Export model weights và tokenizer vào thư mục
-    velecra_aspect_extractor/, lưu lên Google Drive.
+35. Đồng bộ thư mục `dataset_hf/` lên Google Drive.
+36. Load bộ dataset bằng thư viện `datasets` của HuggingFace, map các nhãn BIO sang ID.
+37. Load model vELECTRA từ HuggingFace Hub bằng `AutoModelForTokenClassification.from_pretrained()`, truyền vào num_labels bằng tổng số nhãn BIO.
+38. Cấu hình `DataCollatorForTokenClassification` để tự động padding và căn chỉnh nhãn với subword tokens (gán nhãn -100 cho subwords để bỏ qua khi tính loss).
+39. Thiết lập `TrainingArguments`: `learning_rate=1e-5`, `batch_size=16`, `epochs=10`, `metric_for_best_model="f1"`, `early_stopping_patience=2`. Sử dụng `Trainer` mặc định (không dùng WeightedTokenTrainer để tránh False Positive trầm trọng).
+40. Chạy training và quan sát loss curve. Đảm bảo model học một cách ổn định nhờ tập dataset cân bằng nhãn O.
+41. Evaluate trên tập validation. Tính F1-score theo từng nhãn bằng `seqeval` — mục tiêu F1 >= 0.70 trên tập validation.
+42. Spot-check kết quả và lưu model checkpoints vào Google Drive.
 
 **Phần B — Fine-tune PhoBERT cho Sentiment Classification**
 
-Fine-tune PhoBERT trên bộ UIT-VSFC (bộ dữ liệu chung) để phân loại cảm
-xúc. Thực hiện song song với Phần A trên Colab bằng cách mở session
-Colab thứ hai.
+Fine-tune PhoBERT trên bộ dữ liệu Aspect-Sentiment (đã gom nhóm theo aspect-sentiment từ `prepare_dataset_v2.py`).
 
-- Ngày 1–2: PyTorch basics — import torch, tensor operations, cuda
-  check. Load PhoBERT và chạy inference thử trên 1 câu tiếng Việt.
-
-- Ngày 3: Hiểu tại sao phải word_tokenize bằng underthesea trước khi đưa
-  vào PhoBERT tokenizer — PhoBERT dựa trên từ ghép tiếng Việt, không
-  phải ký tự đơn.
-
-- Ngày 4: Load UIT-VSFC từ HuggingFace, xem format (sentence,
-  sentiment), phân tích phân phối 3 class Tích cực / Tiêu cực / Trung
-  lập.
-
-- Ngày 5: Đọc TrainingArguments và Trainer API, hiểu các hyperparameter:
-  learning_rate=2e-5, warmup_steps, weight_decay.
-
-- Ngày 6–7: Fine-tune 1 epoch, đọc loss curve, xác nhận loss giảm đều.
-
-- Ngày 8–9: Fine-tune đầy đủ 3 epochs, evaluate accuracy và weighted F1
-  trên validation set (mục tiêu \>= 78% accuracy).
-
-- Ngày 10: Export model, viết hàm predict(text) trả về {label,
-  confidence_score}, test trên 20 câu thực tế.
+43. Tiền xử lý văn bản: Sử dụng `pyvi` (`ViTokenizer.tokenize`) để thực hiện tách từ tiếng Việt chuẩn trước khi tokenize bằng PhoBERT.
+44. Định dạng input: Truyền `aspect` vào text_pair và `sentence` đã segmented vào text chính của tokenizer, định dạng kết quả ghép thành `aspect </s> sentence`.
+45. Thiết lập `TrainingArguments`: `learning_rate=1e-5`, `batch_size=16`, `epochs=5`, `lr_scheduler_type="cosine"`, `metric_for_best_model="f1"`.
+46. Sử dụng `Trainer` mặc định với `DataCollatorWithPadding` và hàm tính macro F1 cho 3 nhãn cảm xúc (tích cực, tiêu cực, trung lập).
+47. Thực thi huấn luyện trên Colab GPU T4. Đọc loss curve và đảm bảo F1 score cải thiện và đạt mục tiêu >= 0.80.
+48. Export model weights và tokenizer vào thư mục `phobert_sentiment/`, lưu lên Google Drive.
 
 **Config fine-tune chi tiết**
 
-- vELECTRA: model nguyenvulebinh/vi-mrc-base hoặc
-  NlpHUST/vielectra-base-discriminator, task
-  AutoModelForTokenClassification, dataset dataset_bio_tagged.json
-  (~2,000 câu, chia 80/20), learning_rate=3e-5, batch_size=16, epochs=5,
-  thời gian training ~30–45 phút trên T4.
-
-- PhoBERT: model vinai/phobert-base-v2, task
-  AutoModelForSequenceClassification, dataset
-  uitnlp/vietnamese_students_feedback (~16,000 câu), learning_rate=2e-5,
-  batch_size=16, epochs=3, fp16=True, max_length=128, thời gian training
-  ~45–60 phút trên T4.
-
-- Lưu checkpoint vào Google Drive mỗi 200 steps (vELECTRA) và 500 steps
-  (PhoBERT) để tránh mất kết quả khi Colab disconnect.
-
-- Dùng seqeval để tính F1 cho vELECTRA (NER metric chuẩn), dùng
-  scikit-learn classification_report cho PhoBERT.
+- vELECTRA: model `FPTAI/velectra-base-discriminator-cased` hoặc `NlpHUST/vielectra-base-discriminator`, task Token Classification, dataset `ner/velectra/` (~5,000+ câu, chia 80/20), lr=1e-5, epochs=10, batch_size=16, early stopping.
+- PhoBERT: model `vinai/phobert-large` hoặc `vinai/phobert-base-v2`, task Sequence Classification, dataset `sentiment/phobert/`, lr=1e-5, epochs=5, batch_size=16, early stopping.
+- Dùng `seqeval` để tính F1 cho vELECTRA (NER metric chuẩn), dùng `scikit-learn` macro F1 cho PhoBERT.
+- Lưu checkpoint vào Google Drive mỗi 200 steps (vELECTRA) và 500 steps (PhoBERT) để tránh mất kết quả khi Colab disconnect.
 
 **Công cụ sử dụng**
 
@@ -535,7 +464,9 @@ Colab thứ hai.
 
 - scikit-learn: confusion matrix và classification report cho PhoBERT.
 
-- underthesea 6.8.4: word tokenization trước khi đưa vào cả 2 model.
+- underthesea 6.8.4: word tokenization cho vELECTRA.
+
+- pyvi 0.1.11: tiếng Việt word segmentation cho PhoBERT.
 
 **Tài liệu tham khảo**
 

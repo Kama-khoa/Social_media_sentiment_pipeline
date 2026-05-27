@@ -243,7 +243,7 @@ streamlit run dashboard/app.py
   `conda run -n etl-py313 python scripts/dbt/dbt_runner.py run --select stg_youtube_videos`
 
 ### Giai đoạn 3: NLP Pipeline
-- **Lỗi Tokenizer Mismatch**: Luôn đảm bảo bạn đã dùng `underthesea.word_tokenize()` **TRƯỚC KHI** đưa text vào tokenizer của PhoBERT hoặc vELECTRA.
+- **Lỗi Tokenizer Mismatch**: Đảm bảo phân tách tiền xử lý đúng cho từng model: PhoBERT sử dụng `pyvi` (`ViTokenizer`) và format input `aspect </s> sentence`, còn vELECTRA sử dụng `underthesea.word_tokenize` để tách âm tiết và align nhãn BIO.
 - **Lỗi Gemini Fallback**: Nếu tỷ lệ route sang Gemini quá cao (>30%), chứng tỏ PhoBERT đang phân loại kém (confidence < 0.8). Bạn cần kiểm tra lại tập dữ liệu fine-tune của mô hình. Bật log debug trong `confidence_router.py` để xem API responses.
 
 ### Giai đoạn 4 & 5: API & Dashboard
