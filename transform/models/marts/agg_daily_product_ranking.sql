@@ -43,7 +43,7 @@ scored_stats AS (
         category,
         -- Bayesian average: (C * global_mean + n * local_mean) / (C + n), C=50
         SAFE_DIVIDE(
-            50.0 * AVG(mean_score) OVER () + total_mentions * mean_score,
+            50.0 * COALESCE(AVG(mean_score) OVER (), 0.0) + total_mentions * mean_score,
             50.0 + total_mentions
         ) AS bayesian_score,
         
@@ -51,9 +51,9 @@ scored_stats AS (
         SAFE_DIVIDE(COALESCE(std_score, 0), ABS(mean_score) + 0.1) AS controversy_index,
         
         CASE
-            WHEN SAFE_DIVIDE(COALESCE(std_score, 0), ABS(mean_score) + 0.1) > 0.8 THEN 'Controversial'
-            WHEN SAFE_DIVIDE(COALESCE(std_score, 0), ABS(mean_score) + 0.1) < 0.4 THEN 'Unanimous'
-            ELSE 'Normal'
+            WHEN SAFE_DIVIDE(COALESCE(std_score, 0), ABS(mean_score) + 0.1) > 0.6 THEN 'cao'
+            WHEN SAFE_DIVIDE(COALESCE(std_score, 0), ABS(mean_score) + 0.1) < 0.3 THEN 'thấp'
+            ELSE 'trung bình'
         END AS controversy_label,
         
         total_mentions,

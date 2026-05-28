@@ -26,7 +26,7 @@ class ConfidenceRouter:
                 return self._gemini_fallback(sentence)
 
             sentiment_label, sentiment_conf = self._classifier.classify(
-                sentence, aspect["segment_text"]
+                sentence, aspect["aspect_label"]
             )
 
             if sentiment_conf < _THRESHOLD:

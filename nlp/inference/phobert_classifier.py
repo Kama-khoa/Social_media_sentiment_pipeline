@@ -5,7 +5,7 @@ from pathlib import Path
 import torch
 import torch.nn.functional as F
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
-from underthesea import word_tokenize
+from pyvi import ViTokenizer
 
 _DEFAULT_MODEL_DIR = Path(__file__).parent.parent.parent / "models" / "phobert_sentiment"
 
@@ -19,12 +19,12 @@ class PhoBERTClassifier:
         self._device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self._model.to(self._device)
 
-    def classify(self, sentence: str, segment_text: str) -> tuple[str, float]:
-        seg_segmented = word_tokenize(segment_text, format="text") if segment_text.strip() else ""
-        sent_segmented = word_tokenize(sentence, format="text")
+    def classify(self, comment_text: str, aspect_label: str) -> tuple[str, float]:
+        aspect_segmented = ViTokenizer.tokenize(aspect_label) if aspect_label.strip() else ""
+        sent_segmented = ViTokenizer.tokenize(comment_text)
 
         inputs = self._tokenizer(
-            seg_segmented,
+            aspect_segmented,
             sent_segmented,
             return_tensors="pt",
             truncation=True,

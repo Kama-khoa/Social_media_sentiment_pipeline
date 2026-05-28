@@ -1,6 +1,10 @@
 import argparse
 import shutil
+import sys
 from pathlib import Path
+
+# Set console output encoding to utf-8
+sys.stdout.reconfigure(encoding='utf-8')
 
 def main():
     parser = argparse.ArgumentParser(description="Copy dataset files to Google Drive")
@@ -25,33 +29,37 @@ def main():
         return
 
     # Đường dẫn nguồn
-    src_phobert = local_data_dir / "sentiment" / "phobert"
-    src_velectra = local_data_dir / "ner" / "velectra"
+    src_sentiment = local_data_dir / "sentiment"
+    src_ner = local_data_dir / "ner"
     
     # Đường dẫn đích
-    dst_phobert = drive_base_dir / "sentiment" / "phobert"
-    dst_velectra = drive_base_dir / "ner" / "velectra"
+    dst_sentiment = drive_base_dir / "sentiment"
+    dst_ner = drive_base_dir / "ner"
     
     print("Bắt đầu xuất dữ liệu lên Google Drive...")
     
-    # Hàm copy và ghi đè
-    def copy_dir(src, dst):
+    # Hàm copy đệ quy giữ nguyên cấu trúc thư mục
+    def copy_dir_recursive(src, dst):
         if not src.exists():
             print(f"[CẢNH BÁO] Thư mục nguồn không tồn tại: {src}")
             return
             
-        dst.mkdir(parents=True, exist_ok=True)
-        for item in src.glob("*"):
+        copied_count = 0
+        for item in src.rglob("*"):
             if item.is_file():
-                dest_file = dst / item.name
+                rel_path = item.relative_to(src)
+                dest_file = dst / rel_path
+                dest_file.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(item, dest_file)
-                print(f"  -> Copied: {item.name}")
+                print(f"  -> Copied: {rel_path}")
+                copied_count += 1
+        print(f"  Tổng cộng đã copy: {copied_count} files")
 
-    print(f"\n1. Exporting PhoBERT data to:\n   {dst_phobert}...")
-    copy_dir(src_phobert, dst_phobert)
+    print(f"\n1. Exporting Sentiment data to:\n   {dst_sentiment}...")
+    copy_dir_recursive(src_sentiment, dst_sentiment)
     
-    print(f"\n2. Exporting vELECTRA data to:\n   {dst_velectra}...")
-    copy_dir(src_velectra, dst_velectra)
+    print(f"\n2. Exporting NER data to:\n   {dst_ner}...")
+    copy_dir_recursive(src_ner, dst_ner)
     
     print("\n[HOÀN TẤT] Quá trình copy lên Drive đã xong!")
 

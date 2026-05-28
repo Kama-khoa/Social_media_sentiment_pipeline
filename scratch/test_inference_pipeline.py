@@ -1,6 +1,9 @@
 import sys
 from pathlib import Path
 
+# Set console output encoding to utf-8
+sys.stdout.reconfigure(encoding='utf-8')
+
 # Thêm thư mục gốc vào sys.path để import được module nlp
 sys.path.append(str(Path(__file__).parent.parent))
 
@@ -12,8 +15,8 @@ def test_pipeline_with_base_model():
     
     try:
         # Ép dùng base model. Cảnh báo: Kết quả sẽ là ngẫu nhiên vì chưa được học!
-        extractor = VELECTRAExtractor(model_dir="FPTAI/vELECTRA-base")
-        classifier = PhoBERTClassifier(model_dir="vinai/phobert-base")
+        extractor = VELECTRAExtractor(model_dir="FPTAI/velectra-base-discriminator-cased")
+        classifier = PhoBERTClassifier(model_dir="vinai/phobert-base-v2")
     except Exception as e:
         print(f"Lỗi khi khởi tạo model (có thể do thiếu thư viện hoặc mạng): {e}")
         return
@@ -32,7 +35,7 @@ def test_pipeline_with_base_model():
     # 2. Test Sentiment Classification
     try:
         # Giả sử VELECTRA tách được chữ 'Màn hình'
-        sentiment_label, conf = classifier.classify(sentence, segment_text="Màn hình")
+        sentiment_label, conf = classifier.classify(sentence, aspect_label="Màn hình")
         print(f"Kết quả PhoBERT (Base - Rác) cho 'Màn hình': {sentiment_label} (Confidence: {conf:.2f})")
     except Exception as e:
         print(f"Lỗi PhoBERT inference: {e}")

@@ -20,7 +20,15 @@ class VELECTRAExtractor:
         self._model.to(self._device)
 
     def extract(self, sentence: str) -> list[dict]:
-        tokens = word_tokenize(sentence)
+        sentence = sentence.strip()
+        if not sentence:
+            return [{"aspect_label": "NONE", "segment_text": "", "confidence": 1.0}]
+
+        raw_tokens = word_tokenize(sentence)
+        tokens = []
+        for t in raw_tokens:
+            tokens.extend(str(t).split())
+
         if not tokens:
             return [{"aspect_label": "NONE", "segment_text": "", "confidence": 1.0}]
 
