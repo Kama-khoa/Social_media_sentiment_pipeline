@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import logging
+import os
 import shutil
 import tempfile
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
@@ -15,21 +16,28 @@ if TYPE_CHECKING:
 
 from elt.datacontext.models.keyword_dto import KeywordDTO
 from elt.datacontext.models.video_dto import VideoDTO
+from elt.extract.helpers.ytdlp_session_pool import (
+    YtdlpFetchError,
+    YtdlpRateLimitError,
+    YtdlpSessionPool,
+)
 
 logger = logging.getLogger(__name__)
 
 _BOT_DETECTION_PHRASES = [
-    "Sign in to confirm",
+    "sign in to confirm",
     "confirm you're not a bot",
+    "http error 429",
+    "too many requests",
+    "rate limit",
+    "rate-limit",
+    "temporarily blocked",
 ]
 
 _MAX_BACKOFF_RETRIES = 3
 _BACKOFF_BASE_SECONDS = 30
 _FAILURE_RATE_THRESHOLD = 0.5
-
-
-class BotDetectedError(Exception):
-    pass
+_PROGRESS_LOG_INTERVAL = 10
 
 
 def _make_ydl(cookies_path: str | None = None, proxy: str | None = None, **kwargs: Any) -> YoutubeDL:
@@ -49,6 +57,8 @@ class YtdlpVideoFetcher:
         keywords: list[KeywordDTO],
         max_workers: int = 8,
         cookies_path: str | None = None,
+        cookies_paths: list[str] | None = None,
+        session_cooldown_seconds: int = 3600,
         proxy: str | None = None,
     ) -> None:
         self._filter_keywords = [
@@ -57,47 +67,25 @@ class YtdlpVideoFetcher:
         ]
         self._filter_texts = [kw.keyword_text.lower() for kw in self._filter_keywords]
         self._max_workers = max_workers
-        self._cookies_path = cookies_path
         self._proxy = proxy
+        resolved_paths = cookies_paths or ([cookies_path] if cookies_path else [])
+        self._session_pool = YtdlpSessionPool(
+            cookies_paths=resolved_paths,
+            cooldown_seconds=session_cooldown_seconds,
+        )
 
-    def fetch_channel_videos(self, channel_url: str) -> list[dict]:
+    def fetch_channel_videos(
+        self,
+        channel_url: str,
+        max_results: int | None = None,
+    ) -> list[dict]:
         url = f"{channel_url}/videos"
-        # Create a temporary copy of the cookie file to prevent yt-dlp from overwriting it
-        temp_cookie_path = None
-        if self._cookies_path:
-            try:
-                import os
-                fd, temp_cookie_path = tempfile.mkstemp(suffix=".txt")
-                os.close(fd)
-                shutil.copy2(self._cookies_path, temp_cookie_path)
-            except Exception:
-                pass
-
-        try:
-            with _make_ydl(
-                cookies_path=temp_cookie_path or self._cookies_path,
-                proxy=self._proxy,
-                # quiet=True,
-                # no_warnings=True,
-                extract_flat=True,
-                skip_download=True,
-                ignoreerrors=True,
-                extractor_args={'youtubetab': ['skip=authcheck']},
-            ) as ydl:
-                result = ydl.extract_info(url, download=False)
-        except Exception:
-            logger.exception("yt-dlp failed for %s", channel_url)
-            return []
-        finally:
-            if temp_cookie_path:
-                try:
-                    import os
-                    os.remove(temp_cookie_path)
-                except Exception:
-                    pass
+        result = self._session_pool.execute(
+            lambda cookies_path: self._fetch_channel(url, cookies_path, max_results)
+        )
 
         if result is None:
-            return []
+            raise YtdlpFetchError(f"yt-dlp returned no result for {channel_url}")
 
         entries = result.get("entries") or []
         videos = []
@@ -188,52 +176,84 @@ class YtdlpVideoFetcher:
         return merged
 
     def _enrich_parallel(self, entries: list[dict], workers: int) -> dict[str, dict]:
-        # Process sequentially with a single yt-dlp instance and randomized sleeps
-        # to avoid triggering YouTube's aggressive anti-bot rate limits.
+        return self._session_pool.execute(
+            lambda cookies_path: self._enrich_with_session(entries, cookies_path)
+        )
+
+    def _fetch_channel(
+        self,
+        url: str,
+        cookies_path: str | None,
+        max_results: int | None,
+    ) -> dict:
+        try:
+            with self._temporary_cookies(cookies_path) as temp_cookies_path:
+                with _make_ydl(
+                    cookies_path=temp_cookies_path,
+                    proxy=self._proxy,
+                    quiet=True,
+                    extract_flat=True,
+                    skip_download=True,
+                    ignoreerrors=False,
+                    extractor_args={"youtubetab": ["skip=authcheck"]},
+                    playlistend=max_results,
+                ) as ydl:
+                    result = ydl.extract_info(url, download=False)
+        except Exception as exc:
+            self._raise_fetch_error(exc, url)
+        if result is None:
+            raise YtdlpFetchError(f"yt-dlp returned no result for {url}")
+        return dict(result)
+
+    def _enrich_with_session(
+        self,
+        entries: list[dict],
+        cookies_path: str | None,
+    ) -> dict[str, dict]:
         results: dict[str, dict] = {}
-        
-        temp_cookie_path = None
-        if self._cookies_path:
-            try:
-                import os
-                fd, temp_cookie_path = tempfile.mkstemp(suffix=".txt")
-                os.close(fd)
-                shutil.copy2(self._cookies_path, temp_cookie_path)
-            except Exception:
-                pass
+        succeeded = 0
+        failed = 0
 
         try:
-            with _make_ydl(
-                cookies_path=temp_cookie_path or self._cookies_path,
-                proxy=self._proxy,
-                quiet=True,
-                no_warnings=True,
-                extract_flat=False,
-                skip_download=True,
-                ignoreerrors=True,
-                sleep_interval_requests=3,
-                max_sleep_interval_requests=7,
-            ) as ydl:
-                for entry in entries:
-                    video_id = entry["id"]
-                    url = f"https://www.youtube.com/watch?v={video_id}"
-                    try:
-                        info = ydl.extract_info(url, download=False)
-                        results[video_id] = dict(info) if info else {}
-                    except Exception as exc:
-                        msg = str(exc)
-                        if any(phrase in msg for phrase in _BOT_DETECTION_PHRASES):
-                            logger.warning("Bot detected for %s", video_id)
-                        else:
-                            logger.warning("enrich failed for %s", video_id)
-                        results[video_id] = {}
-        finally:
-            if temp_cookie_path:
-                try:
-                    import os
-                    os.remove(temp_cookie_path)
-                except Exception:
-                    pass
+            with self._temporary_cookies(cookies_path) as temp_cookies_path:
+                with _make_ydl(
+                    cookies_path=temp_cookies_path,
+                    proxy=self._proxy,
+                    quiet=True,
+                    no_warnings=True,
+                    extract_flat=False,
+                    skip_download=True,
+                    ignoreerrors=False,
+                    ignore_no_formats_error=True,
+                    sleep_interval_requests=3,
+                    max_sleep_interval_requests=7,
+                ) as ydl:
+                    for index, entry in enumerate(entries, start=1):
+                        video_id = entry["id"]
+                        url = f"https://www.youtube.com/watch?v={video_id}"
+                        try:
+                            info = ydl.extract_info(url, download=False)
+                            results[video_id] = dict(info) if info else {}
+                            if info:
+                                succeeded += 1
+                            else:
+                                failed += 1
+                        except Exception as exc:
+                            if self._is_rate_limited(exc):
+                                raise YtdlpRateLimitError(video_id) from exc
+                            logger.warning("enrich failed for %s: %s", video_id, exc)
+                            results[video_id] = {}
+                            failed += 1
+
+                        if index % _PROGRESS_LOG_INTERVAL == 0 or index == len(entries):
+                            logger.info(
+                                "enrich progress: %d/%d processed, %d succeeded, %d failed",
+                                index, len(entries), succeeded, failed,
+                            )
+        except YtdlpRateLimitError:
+            raise
+        except Exception as exc:
+            raise YtdlpFetchError(f"yt-dlp enrich batch failed: {exc}") from exc
 
         return results
 
@@ -276,42 +296,59 @@ class YtdlpVideoFetcher:
 
     def _enrich_video(self, video_id: str) -> dict[str, Any]:
         url = f"https://www.youtube.com/watch?v={video_id}"
-        temp_cookie_path = None
-        if self._cookies_path:
-            try:
-                import os
-                fd, temp_cookie_path = tempfile.mkstemp(suffix=".txt")
-                os.close(fd)
-                shutil.copy2(self._cookies_path, temp_cookie_path)
-            except Exception:
-                pass
+        return self._session_pool.execute(
+            lambda cookies_path: self._enrich_one(url, cookies_path)
+        )
 
+    def _enrich_one(self, url: str, cookies_path: str | None) -> dict[str, Any]:
         try:
-            with _make_ydl(
-                cookies_path=temp_cookie_path or self._cookies_path,
-                proxy=self._proxy,
-                quiet=True,
-                no_warnings=True,
-                extract_flat=False,
-                skip_download=True,
-                ignoreerrors=False,
-                format="worst",
-            ) as ydl:
-                info = ydl.extract_info(url, download=False)
+            with self._temporary_cookies(cookies_path) as temp_cookies_path:
+                with _make_ydl(
+                    cookies_path=temp_cookies_path,
+                    proxy=self._proxy,
+                    quiet=True,
+                    no_warnings=True,
+                    extract_flat=False,
+                    skip_download=True,
+                    ignoreerrors=False,
+                    ignore_no_formats_error=True,
+                    format="worst",
+                ) as ydl:
+                    info = ydl.extract_info(url, download=False)
         except Exception as exc:
-            msg = str(exc)
-            if any(phrase in msg for phrase in _BOT_DETECTION_PHRASES):
-                raise BotDetectedError(video_id) from exc
-            logger.warning("yt-dlp enrich failed for %s", video_id)
+            if self._is_rate_limited(exc):
+                raise YtdlpRateLimitError(url) from exc
+            logger.warning("yt-dlp enrich failed for %s: %s", url, exc)
             return {}
-        finally:
-            if temp_cookie_path:
-                try:
-                    import os
-                    os.remove(temp_cookie_path)
-                except Exception:
-                    pass
         return dict(info) if info else {}
+
+    @staticmethod
+    def _is_rate_limited(exc: Exception) -> bool:
+        message = str(exc).lower()
+        return any(phrase in message for phrase in _BOT_DETECTION_PHRASES)
+
+    def _raise_fetch_error(self, exc: Exception, url: str) -> None:
+        if self._is_rate_limited(exc):
+            raise YtdlpRateLimitError(url) from exc
+        raise YtdlpFetchError(f"yt-dlp failed for {url}: {exc}") from exc
+
+    @staticmethod
+    @contextmanager
+    def _temporary_cookies(cookies_path: str | None):
+        if not cookies_path:
+            yield None
+            return
+
+        fd, temp_cookie_path = tempfile.mkstemp(suffix=".txt")
+        os.close(fd)
+        try:
+            shutil.copy2(cookies_path, temp_cookie_path)
+            yield temp_cookie_path
+        finally:
+            try:
+                os.remove(temp_cookie_path)
+            except OSError:
+                pass
 
     @staticmethod
     def _parse_published_at(entry: dict) -> datetime | None:

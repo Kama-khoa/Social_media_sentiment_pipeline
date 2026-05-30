@@ -15,4 +15,24 @@ venv/
 target/
 dbt_packages/
 logs/
-youtube_cookies.txt
+youtube_cookies*.txt
+# Models
+models/
+
+# Airflow local files
+airflow.db
+airflow-webserver.pid
+airflow-webserver-monitor.pid
+airflow.cfg
+standalone_admin_password.txt
+
+# Pytest & Jupyter Notebook
+.pytest_cache/
+.ipynb_checkpoints/
+
+# OS specific files
+desktop.ini
+Thumbs.db
+
+# Temp files
+allfileshas.txt
