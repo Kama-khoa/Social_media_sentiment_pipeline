@@ -9,6 +9,7 @@ SELECT
     channel_id,
     title,
     description,
+    keyword_matched,
     CAST(view_count AS INT64) AS view_count,
     CAST(like_count AS INT64) AS like_count,
     CAST(comment_count AS INT64) AS comment_count,

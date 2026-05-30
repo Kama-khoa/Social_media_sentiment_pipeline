@@ -7,4 +7,6 @@ sources:
     tables:
       - name: raw_videos
       - name: raw_comments
+      - name: raw_sentiment_results
       - name: keyword_config
+      - name: video_crawl_state

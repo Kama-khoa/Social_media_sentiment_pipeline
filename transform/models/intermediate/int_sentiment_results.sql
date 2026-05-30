@@ -1,18 +1,26 @@
 {{ config(
-    materialized='table'
+    materialized='incremental',
+    unique_key='result_id',
+    on_schema_change='sync_all_columns'
 ) }}
 
--- This is a placeholder table for compilation purposes.
--- The actual sentiment results will be populated by the NLP Python pipeline into `raw_sentiment_results`.
--- If the NLP pipeline directly writes to `int_sentiment_results`, then this dbt model can just be an empty table
--- initialization or select from the raw NLP output table.
+WITH raw AS (
+    SELECT * FROM {{ source('raw', 'raw_sentiment_results') }}
+    {% if is_incremental() %}
+    WHERE processed_at > (SELECT COALESCE(MAX(processed_at), TIMESTAMP('1970-01-01')) FROM {{ this }})
+    {% endif %}
+)
 
 SELECT
-    CAST(NULL AS STRING) AS result_id,
-    CAST(NULL AS STRING) AS sentence_id,
-    CAST(NULL AS STRING) AS comment_id,
-    CAST(NULL AS STRING) AS video_id,
-    CAST(NULL AS STRING) AS aspect_label,
-    CAST(NULL AS STRING) AS segment_text,
-    CAST(NULL AS STRING) AS sentiment_label
-LIMIT 0
+    result_id,
+    sentence_id,
+    comment_id,
+    video_id,
+    aspect_label,
+    segment_text,
+    sentiment_label,
+    confidence_score,
+    inference_model,
+    dag_run_id,
+    processed_at
+FROM raw
