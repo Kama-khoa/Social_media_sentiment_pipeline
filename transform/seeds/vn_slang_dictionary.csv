@@ -200,7 +200,7 @@ hdmi,cổng hdmi,tech
 wifi,wifi,tech
 wifi yếu,kết nối wifi yếu,tech
 bluetooth,kết nối bluetooth,tech
-bt,kết nối bluetooth,tech
+bt,bình thường,general
 bắt sóng,kết nối mạng,tech
 sóng yếu,kết nối mạng yếu,tech
 mất sóng,mất kết nối mạng,tech
@@ -237,3 +237,14 @@ rơi tai,dễ rơi khỏi tai,tech
 case,hộp sạc,tech
 case sạc,hộp sạc,tech
 kén tai,không phù hợp nhiều dáng tai,tech
+ng,người,general
+vn,việt nam,general
+thks,cảm ơn,general
+ms,mới,general
+z,vậy,general
+v,vậy,general
+r,rồi,general
+thik,thích,emotion
+chủ tịt,chủ tịch,general
+vd,ví dụ,general
+thks,cảm ơn,general

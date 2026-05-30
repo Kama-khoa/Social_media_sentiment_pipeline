@@ -9,7 +9,14 @@
 ) }}
 
 WITH fact_mentions AS (
-    SELECT * FROM {{ ref('fact_product_mentions') }}
+    SELECT 
+        *,
+        CASE 
+            WHEN sentiment_label = 'POSITIVE' THEN 1.0
+            WHEN sentiment_label = 'NEGATIVE' THEN -1.0
+            ELSE 0.0
+        END AS sentiment_score
+    FROM {{ ref('fact_product_mentions') }}
 ),
 products AS (
     SELECT * FROM {{ ref('dim_products') }}
@@ -22,36 +29,47 @@ daily_stats AS (
         COUNT(f.mention_id) AS total_mentions,
         COUNTIF(f.sentiment_label = 'POSITIVE') AS positive_count,
         COUNTIF(f.sentiment_label = 'NEGATIVE') AS negative_count,
-        COUNTIF(f.sentiment_label = 'NEUTRAL') AS neutral_count
+        COUNTIF(f.sentiment_label = 'NEUTRAL') AS neutral_count,
+        AVG(f.sentiment_score) AS mean_score,
+        STDDEV_SAMP(f.sentiment_score) AS std_score
     FROM fact_mentions f
     JOIN products p ON f.product_id = p.product_id
     GROUP BY 1, 2, 3
+),
+scored_stats AS (
+    SELECT
+        product_id,
+        ranking_date,
+        category,
+        -- Bayesian average: (C * global_mean + n * local_mean) / (C + n), C=50
+        SAFE_DIVIDE(
+            50.0 * COALESCE(AVG(mean_score) OVER (), 0.0) + total_mentions * mean_score,
+            50.0 + total_mentions
+        ) AS bayesian_score,
+        
+        -- Controversy index: Std(score) / (|Mean(score)| + 0.1)
+        SAFE_DIVIDE(COALESCE(std_score, 0), ABS(mean_score) + 0.1) AS controversy_index,
+        
+        CASE
+            WHEN SAFE_DIVIDE(COALESCE(std_score, 0), ABS(mean_score) + 0.1) > 0.6 THEN 'cao'
+            WHEN SAFE_DIVIDE(COALESCE(std_score, 0), ABS(mean_score) + 0.1) < 0.3 THEN 'thấp'
+            ELSE 'trung bình'
+        END AS controversy_label,
+        
+        total_mentions,
+        positive_count,
+        negative_count,
+        neutral_count,
+        CAST(NULL AS STRING) AS top_aspect,
+        0.0 AS sentiment_trend
+    FROM daily_stats
 )
 
 SELECT
-    GENERATE_UUID() AS ranking_id,
-    product_id,
-    ranking_date,
-    category,
-    -- Simple Bayesian average placeholder
-    -- formula: (C * m + sum(votes)) / (C + N)
-    -- Here we do a simple ratio for demonstration: (pos - neg) / total
-    SAFE_DIVIDE((positive_count - negative_count), total_mentions) AS bayesian_score,
-    
-    -- Controversy index placeholder: High if both pos and neg are high
-    -- formula: (pos * neg) / total^2
-    SAFE_DIVIDE((positive_count * negative_count), POW(total_mentions, 2)) AS controversy_index,
-    
-    'Unknown' AS controversy_label,
-    total_mentions,
-    positive_count,
-    negative_count,
-    neutral_count,
-    CAST(NULL AS STRING) AS top_aspect,
-    0.0 AS sentiment_trend,
-    
+    TO_HEX(MD5(CONCAT(CAST(ranking_date AS STRING), '-', product_id))) AS ranking_id,
+    *,
     -- Rank by bayesian score descending
-    RANK() OVER(PARTITION BY ranking_date, category ORDER BY SAFE_DIVIDE((positive_count - negative_count), total_mentions) DESC) AS rank_position,
+    RANK() OVER(PARTITION BY ranking_date, category ORDER BY bayesian_score DESC) AS rank_position,
     
     CURRENT_TIMESTAMP() AS _dbt_processed_at
-FROM daily_stats
+FROM scored_stats

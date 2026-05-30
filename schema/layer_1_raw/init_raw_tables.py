@@ -106,10 +106,34 @@ def create_raw_comments_external(client: bigquery.Client) -> None:
     print("raw_comments: OK")
 
 
+def create_raw_sentiment_results(client: bigquery.Client) -> None:
+    schema = [
+        bigquery.SchemaField("result_id", "STRING", mode="REQUIRED"),
+        bigquery.SchemaField("sentence_id", "STRING", mode="REQUIRED"),
+        bigquery.SchemaField("comment_id", "STRING", mode="REQUIRED"),
+        bigquery.SchemaField("video_id", "STRING", mode="REQUIRED"),
+        bigquery.SchemaField("aspect_label", "STRING", mode="REQUIRED"),
+        bigquery.SchemaField("segment_text", "STRING", mode="REQUIRED"),
+        bigquery.SchemaField("sentiment_label", "STRING", mode="REQUIRED"),
+        bigquery.SchemaField("confidence_score", "FLOAT64", mode="REQUIRED"),
+        bigquery.SchemaField("inference_model", "STRING", mode="REQUIRED"),
+        bigquery.SchemaField("dag_run_id", "STRING", mode="REQUIRED"),
+        bigquery.SchemaField("processed_at", "TIMESTAMP", mode="REQUIRED"),
+    ]
+    table = bigquery.Table(f"{PROJECT_ID}.{DATASET}.raw_sentiment_results", schema=schema)
+    table.description = (
+        "T08 - Raw NLP inference results written by nlp.runner. "
+        "dbt promotes this table to intermediate.int_sentiment_results."
+    )
+    client.create_table(table, exists_ok=True)
+    print("raw_sentiment_results: OK")
+
+
 def run() -> None:
     client = get_client()
     create_raw_videos_external(client)
     create_raw_comments_external(client)
+    create_raw_sentiment_results(client)
     print("\nLayer 1 — 2/2 external tables created.")
 
 

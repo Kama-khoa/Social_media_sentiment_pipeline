@@ -2,6 +2,7 @@ import os
 import subprocess
 import sys
 from dotenv import load_dotenv
+from pathlib import Path
 
 if __name__ == "__main__":
     # Load environment variables from .env file
@@ -13,7 +14,9 @@ if __name__ == "__main__":
         print(f"Warning: GOOGLE_APPLICATION_CREDENTIALS path does not exist: {cred_path}")
     
     # Change to transform directory
-    os.chdir('transform')
+    root_dir = Path(__file__).resolve().parent.parent.parent
+    transform_dir = root_dir / "transform"
+    os.chdir(transform_dir)
     
     # Run dbt with arguments passed to this script
     args = sys.argv[1:]
