@@ -180,104 +180,121 @@ class VideoExtractor(BaseExtractor):
             logger.info("Phase B: scanning channel %s (%s)", ch.channel_name, url)
 
             try:
-                raw = fetcher.fetch_channel_videos(
-                    url,
-                    max_results=self._config.crawl.historical_scan_max_results,
-                )
-            except YtdlpFetchError as exc:
-                logger.error(
-                    "Phase B: channel %s scan failed, leaving it pending: %s",
-                    ch.channel_name,
-                    exc,
-                )
-                continue
-            
-            # Filter videos within the lookback window
-            filtered_raw = []
-            unknown_date_count = 0
-            for item in raw:
-                pub_at = fetcher._parse_published_at(item)
-                if pub_at and pub_at >= cutoff_date:
-                    filtered_raw.append(item)
-                elif not pub_at:
-                    filtered_raw.append(item)
-                    unknown_date_count += 1
-
-            matched = fetcher.filter_by_keywords(filtered_raw)
-            logger.info(
-                "Phase B: channel %s — %d total, %d within lookback, %d matched",
-                ch.channel_name, len(raw), len(filtered_raw), len(matched),
-            )
-            if unknown_date_count:
-                logger.info(
-                    "Phase B: channel %s has %d videos without dates in flat scan; "
-                    "lookback cutoff will be applied after enrich",
-                    ch.channel_name, unknown_date_count,
-                )
-
-            existing_ids = self._crawl_state_repo.get_existing_video_ids(ch.channel_id)
-            remaining = [v for v in matched if v["id"] not in existing_ids]
-            logger.info(
-                "Phase B: channel %s — %d remaining after resume skip",
-                ch.channel_name, len(remaining),
-            )
-
-            channel_comment_fails: list[VideoDTO] = []
-            batch_num = 0
-            total_batches = (len(remaining) + batch_size - 1) // batch_size if remaining else 0
-
-            for batch_entries in _chunks(remaining, batch_size):
-                batch_num += 1
-                logger.info(
-                    "Phase B: channel %s enriching batch %d/%d (%d videos)",
-                    ch.channel_name, batch_num, total_batches, len(batch_entries),
-                )
-                enriched = fetcher.enrich_batch(batch_entries)
-                dtos = fetcher.build_video_dtos(enriched, ch.channel_id, search_mode="MODE0")
-                recent_dtos = [dto for dto in dtos if dto.published_at >= cutoff_date]
-
-                if dtos and not recent_dtos:
-                    logger.info(
-                        "Phase B: channel %s reached historical lookback cutoff at batch %d/%d",
-                        ch.channel_name, batch_num, total_batches,
+                try:
+                    raw = fetcher.fetch_channel_videos(
+                        url,
+                        max_results=self._config.crawl.historical_scan_max_results,
                     )
-                    break
-
-                dtos = recent_dtos
-
-                if not dtos:
+                except YtdlpFetchError as exc:
+                    logger.error(
+                        "Phase B: channel %s scan failed, leaving it pending: %s",
+                        ch.channel_name,
+                        exc,
+                    )
                     continue
 
-                try:
-                    self._upload_to_gcs(dtos, execution_date)
-                    self._save_to_crawl_state(dtos)
-                except Exception as e:
-                    logger.error(
-                        "Phase B: save failed for channel %s batch %d/%d: %s",
-                        ch.channel_name, batch_num, total_batches, e,
+                if not raw:
+                    logger.warning(
+                        "Phase B: channel %s returned 0 videos. Leaving it pending in case of temporary conflict or block.",
+                        ch.channel_name,
                     )
-                    raise
+                    continue
 
-                total_saved += len(dtos)
+                # Filter videos within the lookback window
+                filtered_raw = []
+                unknown_date_count = 0
+                for item in raw:
+                    pub_at = fetcher._parse_published_at(item)
+                    if pub_at and pub_at >= cutoff_date:
+                        filtered_raw.append(item)
+                    elif not pub_at:
+                        filtered_raw.append(item)
+                        unknown_date_count += 1
+
+                matched = fetcher.filter_by_keywords(filtered_raw)
                 logger.info(
-                    "Phase B: channel %s — batch %d/%d saved (%d videos, %d total)",
-                    ch.channel_name, batch_num, total_batches, len(dtos), total_saved,
+                    "Phase B: channel %s — %d total, %d within lookback, %d matched",
+                    ch.channel_name, len(raw), len(filtered_raw), len(matched),
+                )
+                if unknown_date_count:
+                    logger.info(
+                        "Phase B: channel %s has %d videos without dates in flat scan; "
+                        "lookback cutoff will be applied after enrich",
+                        ch.channel_name, unknown_date_count,
+                    )
+
+                existing_ids = self._crawl_state_repo.get_existing_video_ids(ch.channel_id)
+                remaining = [v for v in matched if v["id"] not in existing_ids]
+                logger.info(
+                    "Phase B: channel %s — %d remaining after resume skip",
+                    ch.channel_name, len(remaining),
                 )
 
-                if comment_extractor:
-                    _, fails = comment_extractor.crawl_batch(dtos)
-                    channel_comment_fails.extend(fails)
+                channel_comment_fails: list[VideoDTO] = []
+                batch_num = 0
+                total_batches = (len(remaining) + batch_size - 1) // batch_size if remaining else 0
 
-            if comment_extractor and channel_comment_fails:
-                logger.info(
-                    "Phase B: retrying %d failed comments for channel %s",
-                    len(channel_comment_fails), ch.channel_name,
+                for batch_entries in _chunks(remaining, batch_size):
+                    batch_num += 1
+                    logger.info(
+                        "Phase B: channel %s enriching batch %d/%d (%d videos)",
+                        ch.channel_name, batch_num, total_batches, len(batch_entries),
+                    )
+                    enriched = fetcher.enrich_batch(batch_entries)
+                    dtos = fetcher.build_video_dtos(enriched, ch.channel_id, search_mode="MODE0")
+                    recent_dtos = [dto for dto in dtos if dto.published_at >= cutoff_date]
+
+                    if dtos and not recent_dtos:
+                        logger.info(
+                            "Phase B: channel %s reached historical lookback cutoff at batch %d/%d",
+                            ch.channel_name, batch_num, total_batches,
+                        )
+                        break
+
+                    dtos = recent_dtos
+
+                    if not dtos:
+                        continue
+
+                    try:
+                        self._upload_to_gcs(dtos, execution_date)
+                        self._save_to_crawl_state(dtos)
+                    except Exception as e:
+                        logger.error(
+                            "Phase B: save failed for channel %s batch %d/%d: %s",
+                            ch.channel_name, batch_num, total_batches, e,
+                        )
+                        raise
+
+                    total_saved += len(dtos)
+                    logger.info(
+                        "Phase B: channel %s — batch %d/%d saved (%d videos, %d total)",
+                        ch.channel_name, batch_num, total_batches, len(dtos), total_saved,
+                    )
+
+                    if comment_extractor:
+                        _, fails = comment_extractor.crawl_batch(dtos)
+                        channel_comment_fails.extend(fails)
+
+                if comment_extractor and channel_comment_fails:
+                    logger.info(
+                        "Phase B: retrying %d failed comments for channel %s",
+                        len(channel_comment_fails), ch.channel_name,
+                    )
+                    comment_extractor.crawl_batch_with_retry(channel_comment_fails, max_retries=2)
+
+                self._channel_repo.mark_historically_scanned(ch.channel_id)
+                channels_done += 1
+                logger.info("Phase B: channel %s marked as scanned", ch.channel_name)
+
+            except Exception as exc:
+                logger.error(
+                    "Phase B: Unexpected error processing channel %s, leaving it pending: %s",
+                    ch.channel_name,
+                    exc,
+                    exc_info=True,
                 )
-                comment_extractor.crawl_batch_with_retry(channel_comment_fails, max_retries=2)
-
-            self._channel_repo.mark_historically_scanned(ch.channel_id)
-            channels_done += 1
-            logger.info("Phase B: channel %s marked as scanned", ch.channel_name)
+                continue
 
         elapsed = time.monotonic() - t0
         self._quota_repo.log_operation(

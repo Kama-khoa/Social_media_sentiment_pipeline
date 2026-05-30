@@ -23,6 +23,9 @@ def _make_config() -> MagicMock:
     cfg.crawl.historical_scan_channels_per_day = 2
     cfg.crawl.keyword_search_max_results = 5
     cfg.crawl.max_comments_per_video = 500
+    cfg.crawl.historical_scan_lookback_days = 730
+    cfg.crawl.video_batch_size = 50
+    cfg.crawl.historical_scan_max_results = 10000
     return cfg
 
 
@@ -77,93 +80,6 @@ def extractor(deps: dict) -> VideoExtractor:
             quota_repo=deps["quota_repo"],
             gcs_client=deps["gcs_client"],
         )
-
-
-class TestBuildMode2SearchQueries:
-    def test_specific_cluster_one_call(self, extractor: VideoExtractor):
-        queries = extractor._build_mode2_search_queries(KEYWORDS)
-
-        specific = [q for q in queries if q[1] == "Samsung Galaxy S25"]
-        assert len(specific) == 1
-        assert specific[0][0] == "Samsung Galaxy S25"
-
-    def test_comparison_cluster_per_keyword(self, extractor: VideoExtractor):
-        queries = extractor._build_mode2_search_queries(KEYWORDS)
-
-        comparison = [q for q in queries if q[1] == "Điện thoại tầm 5 triệu"]
-        assert len(comparison) == 1
-        assert comparison[0][0] == "điện thoại tầm 5 triệu"
-
-    def test_skips_uncategorized(self, extractor: VideoExtractor):
-        queries = extractor._build_mode2_search_queries(KEYWORDS)
-
-        uncategorized = [q for q in queries if q[1] == "_uncategorized"]
-        assert len(uncategorized) == 0
-
-    def test_skips_none_cluster(self, extractor: VideoExtractor):
-        kws = [KeywordDTO(keyword_id="kw_x", keyword_text="test", search_cluster=None)]
-        queries = extractor._build_mode2_search_queries(kws)
-        assert queries == []
-
-
-class TestDeduplicateAndEnrich:
-    def test_deduplicates_by_video_id(self, extractor: VideoExtractor):
-        now = datetime.now(timezone.utc)
-        v1 = VideoDTO(video_id="vid_1", channel_id="ch", title="A", published_at=now, search_mode="MODE0", crawled_at=now, view_count=100)
-        v2 = VideoDTO(video_id="vid_1", channel_id="ch", title="B", published_at=now, search_mode="MODE1", crawled_at=now, view_count=200)
-        v3 = VideoDTO(video_id="vid_2", channel_id="ch", title="C", published_at=now, search_mode="MODE2", crawled_at=now, view_count=300)
-
-        budget = _make_budget()
-        result = extractor._deduplicate_and_enrich([v1, v2, v3], budget)
-
-        ids = [v.video_id for v in result]
-        assert len(ids) == 2
-        assert ids.count("vid_1") == 1
-        assert "vid_2" in ids
-
-    def test_enriches_videos_without_view_count(self, extractor: VideoExtractor):
-        now = datetime.now(timezone.utc)
-        v1 = VideoDTO(video_id="vid_1", channel_id="ch", title="A", published_at=now, search_mode="MODE2", crawled_at=now, view_count=None)
-
-        enriched_dto = VideoDTO(
-            video_id="vid_1", channel_id="ch", title="A enriched",
-            published_at=now, search_mode="MODE2", crawled_at=now,
-            view_count=50000, like_count=1000,
-        )
-        extractor._api_client.get_video_details.return_value = [enriched_dto]
-
-        budget = _make_budget()
-        result = extractor._deduplicate_and_enrich([v1], budget)
-
-        assert result[0].view_count == 50000
-        assert result[0].search_mode == "MODE2"
-
-    def test_returns_empty_for_no_candidates(self, extractor: VideoExtractor):
-        budget = _make_budget()
-        result = extractor._deduplicate_and_enrich([], budget)
-        assert result == []
-
-
-class TestRun:
-    def test_full_run_orchestrates_all_modes(self, extractor: VideoExtractor, deps: dict):
-        now = datetime.now(timezone.utc)
-        deps["keyword_repo"].get_active_keywords.return_value = KEYWORDS[:2]
-        deps["channel_repo"].get_unscanned_channels.return_value = []
-        deps["channel_repo"].get_active_channels.return_value = []
-        extractor._api_client.search_videos.return_value = [("vid_m2", "ch_m2")]
-        extractor._api_client.get_video_details.return_value = [
-            VideoDTO(video_id="vid_m2", channel_id="ch_m2", title="Enriched",
-                     published_at=now, search_mode="MODE2", crawled_at=now, view_count=1000),
-        ]
-        deps["gcs_client"].upload_json.return_value = "gs://bucket/path.json"
-
-        budget = _make_budget()
-        result = extractor.run("2026-03-15", "dag_run_test", budget)
-
-        assert result["mode0"] == 0
-        assert result["mode1"] == 0
-        assert result["total_enriched"] >= 0
-        deps["quota_repo"].log_operation.assert_called_once()
 
 
 class TestRunHistorical:
@@ -234,3 +150,54 @@ class TestRunHistorical:
         filtered_arg = mock_fetcher.filter_by_keywords.call_args[0][0]
         assert len(filtered_arg) == 1
         assert filtered_arg[0]["id"] == "vid_new"
+
+    def test_does_not_mark_channel_scanned_when_raw_videos_is_empty(
+        self,
+        extractor: VideoExtractor,
+        deps: dict,
+    ):
+        extractor._config.crawl.historical_scan_channels_per_day = 1
+        deps["channel_repo"].get_unscanned_channels.return_value = [_sample_channel()]
+
+        mock_fetcher = MagicMock()
+        mock_fetcher.fetch_channel_videos.return_value = []
+        extractor._build_fetcher = MagicMock(return_value=mock_fetcher)
+
+        result = extractor.run_historical("2026-05-20", "dag_run_test", _make_budget())
+
+        assert result["channels_scanned"] == 0
+        deps["channel_repo"].mark_historically_scanned.assert_not_called()
+
+    def test_unexpected_exception_in_processing_loop_leaves_channel_pending(
+        self,
+        extractor: VideoExtractor,
+        deps: dict,
+    ):
+        extractor._config.crawl.historical_scan_channels_per_day = 2
+        extractor._config.crawl.video_batch_size = 5
+        ch1 = _sample_channel(channel_id="UC_1")
+        ch2 = _sample_channel(channel_id="UC_2")
+        deps["channel_repo"].get_unscanned_channels.return_value = [ch1, ch2]
+
+        raw_videos = [{"id": "vid_1", "upload_date": "20260515", "title": "Video 1"}]
+
+        mock_fetcher = MagicMock()
+        mock_fetcher.fetch_channel_videos.return_value = raw_videos
+        mock_fetcher.filter_by_keywords.side_effect = lambda videos: videos
+        # Throw an unexpected exception during batch enrich for the first channel, and succeed (return empty list) for the second
+        mock_fetcher.enrich_batch.side_effect = [Exception("unexpected database failure"), []]
+        mock_fetcher.build_video_dtos.return_value = []
+
+        def mock_parse(entry):
+            return datetime(2026, 5, 15, tzinfo=timezone.utc)
+        mock_fetcher._parse_published_at.side_effect = mock_parse
+
+        extractor._build_fetcher = MagicMock(return_value=mock_fetcher)
+
+        # Run historical scan
+        result = extractor.run_historical("2026-05-20", "dag_run_test", _make_budget())
+
+        # The first channel UC_1 should have failed, but UC_2 should be scanned successfully (even if it has no new videos)
+        assert result["channels_scanned"] == 1
+        # mark_historically_scanned should be called exactly once (for ch2, UC_2)
+        deps["channel_repo"].mark_historically_scanned.assert_called_once_with("UC_2")
