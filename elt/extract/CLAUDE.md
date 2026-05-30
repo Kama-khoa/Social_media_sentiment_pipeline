@@ -94,6 +94,19 @@ main.py run_full() — 2:00 AM UTC+7
 
 Enrich (tất cả modes): yt-dlp `extract_flat=False` per video, 0 quota.
 
+### yt-dlp Session Pool
+
+Phase B chỉ sử dụng yt-dlp, không fallback sang YouTube Data API.
+
+- Mỗi file trong `crawl.ytdlp_cookies_paths` là một session cookie độc lập.
+- Khi session gặp bot detection hoặc HTTP 429, session đó bị cooldown theo
+  `crawl.ytdlp_session_cooldown_seconds` (mặc định 3600 giây).
+- Nếu còn session khả dụng, crawler tự xoay sang session kế tiếp.
+- Nếu tất cả session đang cooldown, crawler chờ session hồi phục sớm nhất rồi
+  tiếp tục chạy.
+- Lỗi fetch channel không phải rate-limit không được chuyển thành danh sách
+  rỗng và không được đánh dấu channel là đã historical scan.
+
 ---
 
 ## Phase A — search.list per channel

@@ -14,6 +14,11 @@ crawl:
   mature_recrawl_interval_days: 7
   archived_recrawl_interval_days: 30
   ytdlp_cookies_path: config/youtube_cookies.txt
+  ytdlp_cookies_paths:
+    - config/youtube_cookies.txt
+    - config/youtube_cookies_2.txt
+    - config/youtube_cookies_3.txt
+  ytdlp_session_cooldown_seconds: 3600
 
 comment_downloader:
   request_delay_seconds: 1.0

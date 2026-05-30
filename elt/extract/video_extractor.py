@@ -9,7 +9,7 @@ from elt.config import PipelineConfig
 from elt.datacontext.gcs_client import GCSClient
 from elt.datacontext.models.video_dto import VideoDTO
 from elt.extract.helpers.youtube_api_client import YouTubeApiClient
-from elt.extract.helpers.ytdlp_video_fetcher import YtdlpVideoFetcher
+from elt.extract.helpers.ytdlp_video_fetcher import YtdlpFetchError, YtdlpVideoFetcher
 from elt.quota_budget import QuotaBucket, QuotaBudget
 from elt.repositories.channel_repository import ChannelRepository
 from elt.repositories.crawl_state_repository import CrawlStateRepository
@@ -64,7 +64,8 @@ class VideoExtractor(BaseExtractor):
         return YtdlpVideoFetcher(
             keywords,
             max_workers=self._config.crawl.enrich_max_workers,
-            cookies_path=self._config.crawl.ytdlp_cookies_path,
+            cookies_paths=self._config.crawl.ytdlp_cookies_paths,
+            session_cooldown_seconds=self._config.crawl.ytdlp_session_cooldown_seconds,
             proxy=proxy_url,
         )
 
@@ -114,6 +115,7 @@ class VideoExtractor(BaseExtractor):
         comment_stats: dict = {}
 
         if new_videos:
+            logger.info("Phase A: enriching %d new videos", len(new_videos))
             enriched = fetcher.enrich_batch(new_videos)
             dtos = fetcher.build_video_dtos(enriched, channel_id="", search_mode="DAILY")
 
@@ -177,22 +179,41 @@ class VideoExtractor(BaseExtractor):
             url = ch.channel_url or f"https://www.youtube.com/{ch.channel_handle}"
             logger.info("Phase B: scanning channel %s (%s)", ch.channel_name, url)
 
-            raw = fetcher.fetch_channel_videos(url)
+            try:
+                raw = fetcher.fetch_channel_videos(
+                    url,
+                    max_results=self._config.crawl.historical_scan_max_results,
+                )
+            except YtdlpFetchError as exc:
+                logger.error(
+                    "Phase B: channel %s scan failed, leaving it pending: %s",
+                    ch.channel_name,
+                    exc,
+                )
+                continue
             
             # Filter videos within the lookback window
             filtered_raw = []
+            unknown_date_count = 0
             for item in raw:
                 pub_at = fetcher._parse_published_at(item)
                 if pub_at and pub_at >= cutoff_date:
                     filtered_raw.append(item)
                 elif not pub_at:
                     filtered_raw.append(item)
+                    unknown_date_count += 1
 
             matched = fetcher.filter_by_keywords(filtered_raw)
             logger.info(
                 "Phase B: channel %s — %d total, %d within lookback, %d matched",
                 ch.channel_name, len(raw), len(filtered_raw), len(matched),
             )
+            if unknown_date_count:
+                logger.info(
+                    "Phase B: channel %s has %d videos without dates in flat scan; "
+                    "lookback cutoff will be applied after enrich",
+                    ch.channel_name, unknown_date_count,
+                )
 
             existing_ids = self._crawl_state_repo.get_existing_video_ids(ch.channel_id)
             remaining = [v for v in matched if v["id"] not in existing_ids]
@@ -207,8 +228,22 @@ class VideoExtractor(BaseExtractor):
 
             for batch_entries in _chunks(remaining, batch_size):
                 batch_num += 1
+                logger.info(
+                    "Phase B: channel %s enriching batch %d/%d (%d videos)",
+                    ch.channel_name, batch_num, total_batches, len(batch_entries),
+                )
                 enriched = fetcher.enrich_batch(batch_entries)
                 dtos = fetcher.build_video_dtos(enriched, ch.channel_id, search_mode="MODE0")
+                recent_dtos = [dto for dto in dtos if dto.published_at >= cutoff_date]
+
+                if dtos and not recent_dtos:
+                    logger.info(
+                        "Phase B: channel %s reached historical lookback cutoff at batch %d/%d",
+                        ch.channel_name, batch_num, total_batches,
+                    )
+                    break
+
+                dtos = recent_dtos
 
                 if not dtos:
                     continue

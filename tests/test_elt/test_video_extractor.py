@@ -8,6 +8,7 @@ import pytest
 from elt.datacontext.models.channel_dto import ChannelDTO
 from elt.datacontext.models.keyword_dto import KeywordDTO
 from elt.datacontext.models.video_dto import VideoDTO
+from elt.extract.helpers.ytdlp_video_fetcher import YtdlpFetchError
 from elt.extract.video_extractor import VideoExtractor
 from elt.quota_budget import QuotaBucket, QuotaBudget
 
@@ -166,6 +167,25 @@ class TestRun:
 
 
 class TestRunHistorical:
+    def test_does_not_mark_channel_scanned_when_ytdlp_fetch_fails(
+        self,
+        extractor: VideoExtractor,
+        deps: dict,
+    ):
+        extractor._config.crawl.historical_scan_channels_per_day = 1
+        extractor._config.crawl.historical_scan_lookback_days = 180
+        extractor._config.crawl.video_batch_size = 5
+        deps["channel_repo"].get_unscanned_channels.return_value = [_sample_channel()]
+
+        mock_fetcher = MagicMock()
+        mock_fetcher.fetch_channel_videos.side_effect = YtdlpFetchError("network")
+        extractor._build_fetcher = MagicMock(return_value=mock_fetcher)
+
+        result = extractor.run_historical("2026-05-20", "dag_run_test", _make_budget())
+
+        assert result["channels_scanned"] == 0
+        deps["channel_repo"].mark_historically_scanned.assert_not_called()
+
     @patch("elt.extract.video_extractor.datetime")
     def test_run_historical_filters_by_lookback_days(self, mock_datetime: MagicMock, extractor: VideoExtractor, deps: dict):
         mock_now = datetime(2026, 5, 20, tzinfo=timezone.utc)
@@ -214,4 +234,3 @@ class TestRunHistorical:
         filtered_arg = mock_fetcher.filter_by_keywords.call_args[0][0]
         assert len(filtered_arg) == 1
         assert filtered_arg[0]["id"] == "vid_new"
-

@@ -16,7 +16,6 @@ target/
 dbt_packages/
 logs/
 youtube_cookies*.txt
-
 # Models
 models/
 
