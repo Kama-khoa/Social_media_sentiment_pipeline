@@ -15,7 +15,7 @@ Hệ thống end-to-end phân tích cảm xúc (Sentiment Analysis) đa khía c�
 **Sentiment Intelligence Platform** không chỉ là một tool phân tích cảm xúc thông thường, mà là một **Data Platform** hoàn chỉnh bao gồm:
 
 - 🚀 **Tối ưu Quota Ingestion**: Sử dụng YouTube API v3 với định mức giới hạn cho Phase A (Daily Scan). Tích hợp `yt-dlp` (0 quota) cho Phase B (Historical Scan) và `youtube-comment-downloader` (0 quota) để thu thập dữ liệu khổng lồ, đảm bảo không bao giờ vượt giới hạn.
-- 🧠 **Hybrid NLP Pipeline**: Sử dụng `vELECTRA` để nhận diện khía cạnh (Aspect Extraction) và `PhoBERT` để phân loại cảm xúc (Sentiment Classification), kết hợp cơ chế **Confidence-Routing** tự động fallback sang `Gemini 1.5 Flash` nếu độ tin cậy < 80%.
+- 🧠 **Hybrid NLP Pipeline**: Sử dụng `vELECTRA` để nhận diện khía cạnh (Aspect Extraction) và `PhoBERT` để phân loại cảm xúc (Sentiment Classification), kết hợp cơ chế **Confidence-Routing** tự động fallback sang Gemini nếu độ tin cậy < 70%.
 - 📊 **Advanced Analytics**: Áp dụng **Bayesian Ranking** (chống thiên kiến sản phẩm ít review), **Controversy Index** (chỉ số gây tranh cãi), và **Correlation Attribution Engine** sử dụng thuật toán PELT để giải thích nguyên nhân đột biến cảm xúc.
 
 ### 1. Kiến trúc hệ thống (System Architecture)
@@ -94,7 +94,8 @@ sequenceDiagram
     DBT->>BQ: Save flat structured tables
     BQ-->>NLP: Fetch un-processed text
     NLP->>NLP: Aspect & Sentiment Inference
-    NLP->>BQ: Save int_sentiment_results
+    NLP->>BQ: Upsert raw_sentiment_results
+    DBT->>BQ: Promote int_sentiment_results
     DBT->>BQ: Run Marts (Ranking & Analytics)
     API->>BQ: Query Analytics Data
     API->>API: Cache in Redis
@@ -202,10 +203,12 @@ conda run -n etl-py313 python scripts/dbt/dbt_runner.py run
 ```
 
 ### Bước 3: Phân tích Cảm xúc (NLP Pipeline)
-Chạy pipeline AI hybrid. *Lưu ý: Mô hình PhoBERT và vELECTRA cần được train và tải weights về máy trước (thư mục models/).*
+Chạy pipeline AI hybrid. Mô hình PhoBERT và vELECTRA đã được train và tải weights về local trong `models/`.
 ```bash
 conda activate etl-py313
-# Tham khảo tài liệu trong nlp/CLAUDE.md để chạy các module tương ứng
+python -m nlp.runner --limit 500 --dag-run-id manual-nlp-500-t070
+cd transform
+python -m dotenv -f ..\.env run -- dbt run --profiles-dir . --select int_sentiment_results fact_product_mentions
 ```
 
 ### Bước 4: Analytics Engine (Ranking & Causality)
@@ -244,7 +247,7 @@ streamlit run dashboard/app.py
 
 ### Giai đoạn 3: NLP Pipeline
 - **Lỗi Tokenizer Mismatch**: Đảm bảo phân tách tiền xử lý đúng cho từng model: PhoBERT sử dụng `pyvi` (`ViTokenizer`) và format input `aspect </s> sentence`, còn vELECTRA sử dụng `underthesea.word_tokenize` để tách âm tiết và align nhãn BIO.
-- **Lỗi Gemini Fallback**: Nếu tỷ lệ route sang Gemini quá cao (>30%), chứng tỏ PhoBERT đang phân loại kém (confidence < 0.8). Bạn cần kiểm tra lại tập dữ liệu fine-tune của mô hình. Bật log debug trong `confidence_router.py` để xem API responses.
+- **Lỗi Gemini Fallback**: Threshold hiện tại là `0.70`. Nếu tỷ lệ route sang Gemini quá cao (>20% trên aspect thật), chạy `python -m nlp.runner --limit 500 --debug-local-confidence --output-jsonl scratch\local_confidence_debug_check.jsonl` để phân tách nguyên nhân NER thấp hay sentiment thấp.
 
 ### Giai đoạn 4 & 5: API & Dashboard
 - **Dashboard load chậm (> 2 giây)**: Đảm bảo Redis caching (TTL=300s) đang hoạt động. Test bằng cách tắt Redis, nếu API báo lỗi connection refused, hãy khởi động lại Redis server.

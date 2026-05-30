@@ -22,7 +22,7 @@ products AS (
 )
 
 SELECT
-    TO_HEX(MD5(CONCAT(sr.sentence_id, '-', p.product_id))) AS mention_id,
+    TO_HEX(MD5(CONCAT(sr.result_id, '-', p.product_id))) AS mention_id,
     p.product_id,
     sr.result_id,
     s.video_id,
@@ -31,7 +31,7 @@ SELECT
     sr.sentence_id,
     sr.aspect_label,
     sr.sentiment_label,
-    1.0 AS confidence_score, -- Placeholder for NLP confidence score
+    sr.confidence_score,
     CAST(s.published_at AS DATE) AS mention_date,
     CURRENT_TIMESTAMP() AS _dbt_processed_at
 FROM sentiment_results sr

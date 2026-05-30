@@ -4,7 +4,7 @@ from pathlib import Path
 
 import torch
 import torch.nn.functional as F
-from transformers import AutoModelForTokenClassification, AutoTokenizer
+from transformers import AutoModelForTokenClassification, AutoTokenizer, PreTrainedTokenizerFast
 from underthesea import word_tokenize
 
 _DEFAULT_MODEL_DIR = Path(__file__).parent.parent.parent / "models" / "velectra_aspect"
@@ -12,12 +12,29 @@ _DEFAULT_MODEL_DIR = Path(__file__).parent.parent.parent / "models" / "velectra_
 
 class VELECTRAExtractor:
     def __init__(self, model_dir: str | Path = _DEFAULT_MODEL_DIR) -> None:
-        self._tokenizer = AutoTokenizer.from_pretrained(str(model_dir))
+        model_dir = Path(model_dir)
+        self._tokenizer = self._load_tokenizer(model_dir)
         self._model = AutoModelForTokenClassification.from_pretrained(str(model_dir))
         self._model.eval()
         self._id2label = self._model.config.id2label
         self._device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self._model.to(self._device)
+
+    def _load_tokenizer(self, model_dir: Path):
+        try:
+            return AutoTokenizer.from_pretrained(str(model_dir))
+        except ValueError as exc:
+            if "TokenizersBackend" not in str(exc):
+                raise
+            return PreTrainedTokenizerFast(
+                tokenizer_file=str(model_dir / "tokenizer.json"),
+                unk_token="[UNK]",
+                sep_token="[SEP]",
+                pad_token="[PAD]",
+                cls_token="[CLS]",
+                mask_token="[MASK]",
+                model_max_length=256,
+            )
 
     def extract(self, sentence: str) -> list[dict]:
         sentence = sentence.strip()

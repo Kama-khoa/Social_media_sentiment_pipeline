@@ -1,5 +1,24 @@
 **SENTIMENT INTELLIGENCE PLATFORM**
 
+## Cập Nhật Thực Thi 2026-05-30
+
+Giai đoạn NLP đã hoàn chỉnh ở mức vận hành:
+
+- PhoBERT sentiment đã được fine-tune và đưa về local tại `models/phobert_sentiment`, macro F1 validation khoảng `0.804`.
+- vELECTRA aspect extraction đã được fine-tune trên boundary dataset và đưa về local tại `models/velectra_aspect`, entity F1 khoảng `0.90`.
+- `ConfidenceRouter` dùng threshold `0.70`; debug 500 sentences cho fallback tổng `6.0%`.
+- `nlp.runner` chạy batch inference từ `int_comment_sentences`, hỗ trợ debug/dry-run/reprocess, và upsert vào `raw_sentiment_results` bằng BigQuery MERGE.
+- dbt đã nối kết quả NLP vào `int_sentiment_results` và `fact_product_mentions`.
+
+Kế hoạch còn lại của dự án chuyển trọng tâm sang Phase 4 Analytics:
+
+1. Populate thêm dữ liệu NLP đủ lớn.
+2. Hoàn thiện Bayesian ranking và controversy index trên `fact_product_mentions`.
+3. Hoàn thiện PELT attribution và bảng causal events.
+4. Sau analytics mới chuyển sang API và dashboard.
+
+---
+
 Nền tảng Phân tích Cảm xúc Sản phẩm Công nghệ từ YouTube
 
 *Kế hoạch Triển khai Chi tiết — Đồ án Tốt nghiệp 2026*
@@ -35,7 +54,7 @@ cùng trình bày kết quả phân tích qua dashboard Streamlit 3 tab.
 
 - NLP Pipeline: vELECTRA trích xuất khía cạnh (Token Classification) +
   PhoBERT phân loại cảm xúc (Sequence Classification) +
-  Confidence-Routing chuyển sang Gemini Flash khi confidence \<= 0.80.
+  Confidence-Routing chuyển sang Gemini khi confidence \<= 0.70.
 
 - Analytics: Bayesian Ranking, Controversy Index, Correlation
   Attribution Engine dùng thuật toán PELT (ruptures).
@@ -49,7 +68,7 @@ cùng trình bày kết quả phân tích qua dashboard Streamlit 3 tab.
 | **1** | **Zero-Quota Ingestion** | Thay toàn bộ comment API bằng youtube-comment-downloader (0 quota). Đây là điều kiện tiên quyết để pipeline có thể chạy bền vững hàng ngày với 26+ kênh và 100+ keywords mà không bị chặn. |
 | **2** | **Colab Training thay Local GPU** | GTX 1650 chỉ có 4GB VRAM — không đủ để fine-tune PhoBERT + vELECTRA song song. Bắt buộc phải dùng Google Colab (T4 16GB) để hoàn thành đúng tiến độ tuần 7. |
 | **3** | **Knowledge Distillation — Auto-Annotation** | Dùng Gemini API gán nhãn tự động 2,000 câu thay vì gán tay. Quyết định này tiết kiệm 4 tuần nhân công và là nền tảng của toàn bộ pipeline NLP. |
-| **4** | **Confidence-Routing Threshold 0.80** | Ngưỡng 0.80 là điểm cân bằng giữa chi phí API và độ chính xác. Quá cao sẽ tốn Gemini API calls, quá thấp giảm accuracy. Cần đo lường thực tế và có thể cần điều chỉnh. |
+| **4** | **Confidence-Routing Threshold 0.70** | Ngưỡng 0.70 được chọn sau debug local 500 sentences, giúp giữ fallback tổng khoảng 6% và giảm chi phí Gemini nhưng vẫn route các case mơ hồ. |
 | **5** | **Historical Data — Tuần 1 bắt buộc** | Toàn bộ Phase 4 Correlation Attribution Engine phụ thuộc vào chuỗi thời gian đủ dài. Nếu không crawl historical data ngay tuần 1, Phase 4 sẽ không có dữ liệu để phân tích. |
 | **6** | **BrightData Proxy cho Comment Downloader** | youtube-comment-downloader có thể bị YouTube rate-limit. BrightData Residential Proxy là giải pháp đã được xác nhận trong ngân sách dự án để đảm bảo thu thập ổn định. |
 
@@ -517,8 +536,8 @@ Fine-tune PhoBERT trên bộ dữ liệu Aspect-Sentiment (đã gom nhóm theo a
     chạy inference → trả về {label: POS/NEG/NEU, confidence_score:
     float}.
 
-48. Implement logic Confidence-Routing: nếu confidence_score \> 0.80 thì
-    ghi kết quả PhoBERT, nếu confidence_score \<= 0.80 thì đóng gói câu
+48. Implement logic Confidence-Routing: nếu confidence_score \> 0.70 thì
+    ghi kết quả PhoBERT, nếu confidence_score \<= 0.70 thì đóng gói câu
     gốc + aspect_label gửi lên Gemini Flash với prompt có context để xử
     lý lại, nhận về {label, explanation}.
 

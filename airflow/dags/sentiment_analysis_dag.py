@@ -31,10 +31,22 @@ with DAG(
         failed_states=['failed', 'skipped'],
     )
 
-    # Placeholder for the actual NLP pipeline execution
     run_nlp_inference = BashOperator(
         task_id='run_nlp_inference',
-        bash_command='echo "Running NLP inference pipeline..." && sleep 5',
+        bash_command=(
+            'cd /opt/airflow && '
+            'python -m nlp.runner '
+            '--limit 500 '
+            '--dag-run-id "{{ dag_run.run_id }}"'
+        ),
     )
 
-    wait_for_extraction >> run_nlp_inference
+    promote_nlp_results = BashOperator(
+        task_id='promote_nlp_results',
+        bash_command=(
+            'cd /opt/airflow/transform && '
+            'dbt run --profiles-dir . --select int_sentiment_results fact_product_mentions'
+        ),
+    )
+
+    wait_for_extraction >> run_nlp_inference >> promote_nlp_results

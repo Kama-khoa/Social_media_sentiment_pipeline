@@ -1,4 +1,38 @@
 # Progress Report & Updated Plan
+
+## Cập Nhật 2026-05-30
+
+### Trạng Thái Phase
+
+| Phase | Module | Trạng thái | Ghi chú |
+|---|---|---|---|
+| Phase 0 | Schema BigQuery | Hoàn thành | Có thêm `raw_sentiment_results` cho NLP output |
+| Phase 1 | ELT (`elt/`) | Hoàn thành | Thu thập dữ liệu và GCS/BQ raw ổn định |
+| Phase 2 | Transform (`transform/dbt`) | Hoàn thành nền tảng | `int_sentiment_results` và `fact_product_mentions` đã nối với NLP output |
+| Phase 3 | NLP Annotation | Hoàn thành | Gemini annotation + dataset preparation đã dùng cho training |
+| Phase 3 | NLP Training | Hoàn thành | PhoBERT macro F1 khoảng `0.804`; vELECTRA NER F1 khoảng `0.90` |
+| Phase 3 | NLP Inference | Hoàn thành vận hành | Local models load ổn, runner batch, debug mode, BigQuery MERGE/upsert, dbt promote |
+| Phase 4 | Analytics Engine | Tiếp theo | Bayesian ranking, controversy index, PELT attribution |
+| Phase 5 | API + Dashboard | Sau Analytics | FastAPI endpoints và dashboard đọc marts |
+
+### NLP Acceptance Summary
+
+- Model paths: `models/phobert_sentiment`, `models/velectra_aspect`.
+- Confidence threshold: `0.70`.
+- Debug file: `scratch/local_confidence_debug_500_t070.jsonl`.
+- Debug 500 sentences: fallback tổng `6.0%`, fallback trên aspect thật `15.8%`.
+- BigQuery flow: `raw_sentiment_results` -> `int_sentiment_results` -> `fact_product_mentions`.
+- Reprocess support: `python -m nlp.runner --limit 500 --dag-run-id reprocess-t070 --reprocess`.
+
+### Kế Hoạch Tiếp Theo
+
+1. Chạy batch NLP đủ lớn để populate `fact_product_mentions`.
+2. Hoàn thiện `agg_daily_product_ranking` bằng Bayesian score và controversy index.
+3. Kiểm thử analytics trên dữ liệu thật, rà soát top products/aspects có hợp lý không.
+4. Hoàn thiện PELT attribution trên chuỗi sentiment theo ngày.
+5. Sau khi analytics ổn, chuyển sang API response schemas và FastAPI endpoints.
+
+---
 **Sentiment Intelligence Platform — Cập nhật 2026-05-19**
 
 ---

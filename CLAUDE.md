@@ -68,7 +68,7 @@ YouTube Data API / yt-dlp
 | Vietnamese NLP | underthesea (cho vELECTRA), pyvi (cho PhoBERT) |
 | Aspect extraction | vELECTRA (fine-tuned, Token Classification) |
 | Sentiment | PhoBERT (fine-tuned, Sequence Classification) |
-| LLM fallback | Gemini 2.5 Flash (confidence routing < 0.80) |
+| LLM fallback | Gemini Flash (confidence routing < 0.70) |
 | Change point | ruptures (PELT algorithm) |
 | API | FastAPI + Redis cache (TTL=300s) |
 | Dashboard | Streamlit |
@@ -158,7 +158,7 @@ Tuân thủ convention này để BigQuery External Table partition đúng.
 | Layer | Bảng |
 |---|---|
 | Layer 0 Config | `keyword_config`, `channel_config`, `video_crawl_state`, `quota_daily_summary`, `quota_operation_log` |
-| Layer 1 Raw | `raw_videos`, `raw_comments` (External Tables → GCS) |
+| Layer 1 Raw | `raw_videos`, `raw_comments` (External Tables → GCS), `raw_sentiment_results` |
 | Layer 2 Staging | `stg_youtube_videos`, `stg_youtube_comments` |
 | Layer 3 Intermediate | `int_comment_sentences`, `int_sentiment_results` |
 | Layer 4 Marts | `dim_products`, `fact_product_mentions`, `agg_daily_product_ranking` |
@@ -174,7 +174,7 @@ Tuân thủ convention này để BigQuery External Table partition đúng.
 5. Mỗi class nằm trong file riêng
 6. Thông tin nhạy cảm luôn đọc từ `.env`, không bao giờ hardcode
 7. PhoBERT yêu cầu tách từ bằng `pyvi` (`ViTokenizer`) và format input `aspect </s> sentence`. vELECTRA dùng `underthesea` để tách âm tiết và căn chỉnh nhãn BIO.
-8. Confidence routing threshold = **0.80** — dưới ngưỡng này gửi sang Gemini Flash
+8. Confidence routing threshold = **0.70** — dưới ngưỡng này gửi sang Gemini Flash. Ngưỡng này đã được debug trên 500 sentences local, fallback tổng khoảng 6%.
 9. **GCS-first, BQ-second** — ghi data lake trước, chốt trạng thái sau
 10. Không sử dụng icons quá nhiều trong code hoặc tài liệu
 
@@ -212,3 +212,34 @@ Social_media_sentiment_pipeline/
 1. **Định dạng NDJSON cho GCS**: BigQuery External Tables (`raw_videos`, `raw_comments`) yêu cầu dữ liệu JSON lưu trên GCS phải là chuẩn **Newline Delimited JSON (NDJSON)**. Code trong `elt/datacontext/gcs_client.py` đã được thiết kế để tự động convert sang NDJSON khi upload.
 2. **Location BigQuery**: Tất cả dataset của project phải được đặt ở **`asia-southeast1`** (kể cả staging/marts của dbt) để đồng bộ với dataset gốc do pipeline sinh ra.
 3. **Chạy thủ công dbt**: Để chạy dbt ngoài môi trường Airflow (debug/dev), hãy sử dụng file `run_dbt.bat` ở thư mục gốc, file này sẽ nạp `.env` và gọi script `scripts/dbt/dbt_runner.py` để chạy dbt an toàn.
+
+---
+
+## Cập Nhật 2026-05-30 — NLP Phase
+
+Phase 3 NLP đã đủ điều kiện vận hành end-to-end:
+
+- `models/phobert_sentiment` và `models/velectra_aspect` đã được đồng bộ local và load ổn định.
+- `VELECTRAExtractor` dùng `underthesea`, có fallback tokenizer cho checkpoint vELECTRA Colab.
+- `PhoBERTClassifier` dùng `pyvi` và model local `models/phobert_sentiment`.
+- `ConfidenceRouter` dùng threshold `0.70`, lazy-load Gemini fallback, xử lý `NONE` aspect thành `neutral` mà không gọi PhoBERT.
+- Debug local confidence trên 500 sentences: fallback tổng khoảng `6%`, fallback trên aspect thật khoảng `15.8%`; nguyên nhân chính là sentiment confidence thấp, NER nhìn chung ổn.
+- `nlp.runner` đã có batch inference, debug mode, `--reprocess`, và ghi `raw_sentiment_results` bằng BigQuery `MERGE` theo `result_id`.
+- dbt flow đã nối: `raw_sentiment_results` -> `int_sentiment_results` -> `fact_product_mentions`.
+- Airflow `sentiment_analysis_dag` đã gọi `nlp.runner`, sau đó promote kết quả bằng dbt.
+
+Lệnh vận hành thủ công khuyến nghị:
+
+```powershell
+python -m nlp.runner --limit 500 --dag-run-id manual-nlp-500-t070
+cd transform
+python -m dotenv -f ..\.env run -- dbt run --profiles-dir . --select int_sentiment_results fact_product_mentions
+```
+
+Khi cần chạy lại bằng model/threshold mới:
+
+```powershell
+python -m nlp.runner --limit 500 --dag-run-id reprocess-t070 --reprocess
+```
+
+Phase tiếp theo: hoàn thiện Analytics Engine trên dữ liệu `fact_product_mentions`, ưu tiên Bayesian ranking, controversy index, sau đó PELT attribution.
