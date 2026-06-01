@@ -5,6 +5,8 @@ from pathlib import Path
 
 import pytest
 
+import nlp.inference.confidence_router as confidence_router_module
+from nlp.config import NLPConfig
 from nlp.inference.confidence_router import ConfidenceRouter
 
 
@@ -75,6 +77,113 @@ def test_confidence_router_none_aspect_does_not_call_classifier() -> None:
             "routing_decision": "model_accept",
         }
     ]
+
+
+def test_confidence_router_batches_unique_fallback_sentences() -> None:
+    class MixedExtractor:
+        def extract(self, sentence: str) -> list[dict]:
+            if sentence == "none":
+                return [{"aspect_label": "NONE", "segment_text": "", "confidence": 0.99}]
+            confidence = 0.60 if sentence == "low ner" else 0.95
+            return [{"aspect_label": "Pin", "segment_text": "pin", "confidence": confidence}]
+
+    class MixedClassifier:
+        def classify(self, comment_text: str, aspect_label: str) -> tuple[str, float]:
+            if comment_text == "low sentiment":
+                return "negative", 0.60
+            return "positive", 0.95
+
+    class FakeGemini:
+        def __init__(self) -> None:
+            self.calls: list[list[str]] = []
+
+        def annotate_all(self, sentences: list[str]) -> list[dict]:
+            self.calls.append(sentences)
+            return [
+                {
+                    "sentence": sentence,
+                    "aspect_label": "Pin",
+                    "segment_text": "pin",
+                    "sentiment_label": "negative",
+                }
+                for sentence in sentences
+            ]
+
+    gemini = FakeGemini()
+    router = ConfidenceRouter(
+        extractor=MixedExtractor(),
+        classifier=MixedClassifier(),
+        gemini_factory=lambda: gemini,
+    )
+
+    results = router.annotate_many([
+        "accepted",
+        "none",
+        "low ner",
+        "low sentiment",
+        "low ner",
+    ])
+
+    assert gemini.calls == [["low ner", "low sentiment"]]
+    assert [items[0]["source"] for items in results] == [
+        "model",
+        "model",
+        "gemini",
+        "gemini",
+        "gemini",
+    ]
+
+
+def test_confidence_router_uses_configured_gemini_batch_size(monkeypatch) -> None:
+    created_batch_sizes: list[int] = []
+
+    class LowConfidenceExtractor:
+        def extract(self, sentence: str) -> list[dict]:
+            return [{"aspect_label": "Pin", "segment_text": "pin", "confidence": 0.60}]
+
+    class FakeGemini:
+        def __init__(self, batch_size: int) -> None:
+            created_batch_sizes.append(batch_size)
+
+        def annotate_all(self, sentences: list[str]) -> list[dict]:
+            return [{
+                "sentence": sentences[0],
+                "aspect_label": "Pin",
+                "segment_text": "pin",
+                "sentiment_label": "positive",
+            }]
+
+    monkeypatch.setattr(confidence_router_module, "GeminiAnnotator", FakeGemini)
+    monkeypatch.setattr(
+        confidence_router_module,
+        "load_nlp_config",
+        lambda: NLPConfig(gemini_batch_size=17),
+    )
+    router = ConfidenceRouter(
+        extractor=LowConfidenceExtractor(),
+        classifier=_FakeClassifier(),
+    )
+
+    assert router.annotate("low confidence")[0]["source"] == "gemini"
+    assert created_batch_sizes == [17]
+
+
+def test_confidence_router_returns_empty_list_when_gemini_omits_sentence() -> None:
+    class LowConfidenceExtractor:
+        def extract(self, sentence: str) -> list[dict]:
+            return [{"aspect_label": "Pin", "segment_text": "pin", "confidence": 0.60}]
+
+    class EmptyGemini:
+        def annotate_all(self, sentences: list[str]) -> list[dict]:
+            return []
+
+    router = ConfidenceRouter(
+        extractor=LowConfidenceExtractor(),
+        classifier=_FakeClassifier(),
+        gemini_factory=EmptyGemini,
+    )
+
+    assert router.annotate("missing result") == []
 
 
 @pytest.mark.skipif(

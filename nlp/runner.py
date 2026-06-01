@@ -95,9 +95,16 @@ def build_result_rows(
 ) -> list[dict]:
     processed_at = processed_at or _utc_now_iso()
     output: list[dict] = []
+    records = list(records)
+    annotations_by_record = router.annotate_many(
+        [record.sentence_text for record in records]
+    )
+    missing_count = 0
 
-    for record in records:
-        annotations = router.annotate(record.sentence_text)
+    for record, annotations in zip(records, annotations_by_record):
+        if not annotations:
+            missing_count += 1
+            continue
         for item in annotations:
             aspect_label = str(item["aspect_label"])
             segment_text = str(item.get("segment_text", ""))
@@ -119,6 +126,11 @@ def build_result_rows(
                 "processed_at": processed_at,
             })
 
+    if missing_count:
+        logger.warning(
+            "Skipped %d sentences without annotations; they will be retried on a later run",
+            missing_count,
+        )
     return output
 
 

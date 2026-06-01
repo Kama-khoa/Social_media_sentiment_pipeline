@@ -9,23 +9,26 @@ from nlp.runner import (
 
 
 class _FakeRouter:
-    def annotate(self, sentence: str) -> list[dict]:
+    def annotate_many(self, sentences: list[str]) -> list[list[dict]]:
         return [
-            {
-                "sentence": sentence,
-                "aspect_label": "Pin",
-                "segment_text": "pin",
-                "sentiment_label": "positive",
-                "source": "model",
-                "confidence": 0.91,
-            },
-            {
-                "sentence": sentence,
-                "aspect_label": "Camera",
-                "segment_text": "camera",
-                "sentiment_label": "negative",
-                "source": "gemini",
-            },
+            [
+                {
+                    "sentence": sentence,
+                    "aspect_label": "Pin",
+                    "segment_text": "pin",
+                    "sentiment_label": "positive",
+                    "source": "model",
+                    "confidence": 0.91,
+                },
+                {
+                    "sentence": sentence,
+                    "aspect_label": "Camera",
+                    "segment_text": "camera",
+                    "sentiment_label": "negative",
+                    "source": "gemini",
+                },
+            ]
+            for sentence in sentences
         ]
 
 
@@ -73,6 +76,30 @@ def test_build_result_rows_maps_router_output_to_bq_schema() -> None:
         },
     ]
     assert rows[0]["result_id"] != rows[1]["result_id"]
+
+
+def test_build_result_rows_skips_records_without_annotations() -> None:
+    class MissingAnnotationRouter:
+        def annotate_many(self, sentences: list[str]) -> list[list[dict]]:
+            return [[], [{
+                "sentence": sentences[1],
+                "aspect_label": "Pin",
+                "segment_text": "pin",
+                "sentiment_label": "positive",
+                "source": "model",
+                "confidence": 0.91,
+            }]]
+
+    rows = build_result_rows(
+        [
+            SentenceRecord("s1", "c1", "v1", "missing"),
+            SentenceRecord("s2", "c2", "v2", "pin tot"),
+        ],
+        router=MissingAnnotationRouter(),
+        processed_at="2026-05-30T00:00:00+00:00",
+    )
+
+    assert [row["sentence_id"] for row in rows] == ["s2"]
 
 
 class _DebugRouter:

@@ -4,12 +4,11 @@ import logging
 from typing import Callable
 
 from nlp.annotation.gemini_annotator import GeminiAnnotator
+from nlp.config import load_nlp_config
 from nlp.inference.phobert_classifier import PhoBERTClassifier
 from nlp.inference.velectra_extractor import VELECTRAExtractor
 
 logger = logging.getLogger(__name__)
-
-_THRESHOLD = 0.70
 
 
 class ConfidenceRouter:
@@ -17,19 +16,51 @@ class ConfidenceRouter:
         self,
         extractor: VELECTRAExtractor | None = None,
         classifier: PhoBERTClassifier | None = None,
-        confidence_threshold: float = _THRESHOLD,
+        confidence_threshold: float | None = None,
+        gemini_batch_size: int | None = None,
         gemini_factory: Callable[[], GeminiAnnotator] | None = None,
     ) -> None:
+        config = load_nlp_config()
         self._extractor = extractor or VELECTRAExtractor()
         self._classifier = classifier or PhoBERTClassifier()
-        self._confidence_threshold = confidence_threshold
-        self._gemini_factory = gemini_factory or (lambda: GeminiAnnotator(batch_size=1))
+        self._confidence_threshold = (
+            config.confidence_threshold
+            if confidence_threshold is None
+            else confidence_threshold
+        )
+        self._gemini_batch_size = (
+            config.gemini_batch_size if gemini_batch_size is None else gemini_batch_size
+        )
+        self._gemini_factory = gemini_factory or (
+            lambda: GeminiAnnotator(batch_size=self._gemini_batch_size)
+        )
         self._gemini: GeminiAnnotator | None = None
 
     def annotate(self, sentence: str) -> list[dict]:
-        aspects = self._extractor.extract(sentence)
+        return self.annotate_many([sentence])[0]
 
+    def annotate_many(self, sentences: list[str]) -> list[list[dict]]:
+        local_results: list[list[dict] | None] = []
+        fallback_sentences: list[str] = []
+
+        for sentence in sentences:
+            annotations = self._annotate_local(sentence)
+            local_results.append(annotations)
+            if annotations is None:
+                fallback_sentences.append(sentence)
+
+        unique_fallback_sentences = list(dict.fromkeys(fallback_sentences))
+        gemini_results = self._gemini_fallback(unique_fallback_sentences)
+
+        return [
+            annotations if annotations is not None else gemini_results.get(sentence, [])
+            for sentence, annotations in zip(sentences, local_results)
+        ]
+
+    def _annotate_local(self, sentence: str) -> list[dict] | None:
+        aspects = self._extractor.extract(sentence)
         results: list[dict] = []
+
         for aspect in aspects:
             ner_conf = float(aspect["confidence"])
             if aspect["aspect_label"] == "NONE":
@@ -47,17 +78,15 @@ class ConfidenceRouter:
                 continue
 
             if ner_conf < self._confidence_threshold:
-                return self._gemini_fallback(sentence)
+                return None
 
             sentiment_label, sentiment_conf = self._classifier.classify(
                 sentence, aspect["aspect_label"]
             )
             sentiment_conf = float(sentiment_conf)
-
             if sentiment_conf < self._confidence_threshold:
-                return self._gemini_fallback(sentence)
+                return None
 
-            final_conf = min(ner_conf, sentiment_conf)
             results.append({
                 "sentence": sentence,
                 "aspect_label": aspect["aspect_label"],
@@ -66,7 +95,7 @@ class ConfidenceRouter:
                 "source": "model",
                 "ner_confidence": ner_conf,
                 "sentiment_confidence": sentiment_conf,
-                "confidence": final_conf,
+                "confidence": min(ner_conf, sentiment_conf),
                 "routing_decision": "model_accept",
             })
 
@@ -118,8 +147,28 @@ class ConfidenceRouter:
 
         return results
 
-    def _gemini_fallback(self, sentence: str) -> list[dict]:
-        logger.info("Low confidence — routing to Gemini: %.50s", sentence)
+    def _gemini_fallback(self, sentences: list[str]) -> dict[str, list[dict]]:
+        if not sentences:
+            return {}
+
+        logger.info("Routing %d low-confidence sentences to Gemini", len(sentences))
         if self._gemini is None:
             self._gemini = self._gemini_factory()
-        return [{**r, "source": "gemini"} for r in self._gemini.annotate_all([sentence])]
+
+        expected_sentences = set(sentences)
+        grouped: dict[str, list[dict]] = {}
+        for result in self._gemini.annotate_all(sentences):
+            sentence = str(result["sentence"])
+            if sentence not in expected_sentences:
+                logger.warning("Ignoring Gemini result for unexpected sentence: %.50s", sentence)
+                continue
+            grouped.setdefault(sentence, []).append({**result, "source": "gemini"})
+
+        missing = [sentence for sentence in sentences if sentence not in grouped]
+        if missing:
+            logger.warning(
+                "Gemini returned no annotations for %d/%d low-confidence sentences",
+                len(missing),
+                len(sentences),
+            )
+        return grouped

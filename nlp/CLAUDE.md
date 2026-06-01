@@ -17,7 +17,7 @@ Xây dựng pipeline NLP hybrid để phân tích cảm xúc theo khía cạnh (
 | `training/upload_to_drive.py` | Script upload dataset và model checkpoints lên Google Drive |
 | `inference/phobert_classifier.py` | `PhoBERTClassifier` class — load weights PhoBERT local, predict sentiment score + confidence |
 | `inference/velectra_extractor.py` | `VELECTRAExtractor` class — load weights vELECTRA local, extract aspect spans từ câu |
-| `inference/confidence_router.py` | `ConfidenceRouter` class — điều phối: nếu local confidence < 0.70 → fallback sang Gemini Flash |
+| `inference/confidence_router.py` | `ConfidenceRouter` class — điều phối: nếu local confidence < 0.70 → gom batch fallback sang Gemini Flash |
 | `runner.py` | Batch inference runner — đọc `int_comment_sentences`, chạy vELECTRA + PhoBERT + confidence routing, upsert vào `raw_sentiment_results` |
 
 ---
@@ -82,7 +82,7 @@ inference/phobert_classifier.py
     └── confidence < 0.70
             ▼
         inference/confidence_router.py
-            │ fallback → Gemini 1.5 Flash API
+            │ gom các câu fallback theo batch cấu hình → Gemini Flash API
             ▼
         kết quả Gemini → raw_sentiment_results → int_sentiment_results
 ```
@@ -134,7 +134,7 @@ NLP phase đã hoàn chỉnh ở mức vận hành:
 - PhoBERT sentiment: best validation macro F1 khoảng `0.804`, đủ gate dự án.
 - vELECTRA NER boundary dataset: entity F1 khoảng `0.90`, model local load ổn định.
 - Local smoke tests pass cho `PhoBERTClassifier`, `VELECTRAExtractor`, `ConfidenceRouter`.
-- `ConfidenceRouter` threshold hiện tại là `0.70`; Gemini fallback chỉ lazy-load khi cần.
+- `ConfidenceRouter` đọc `nlp.confidence_threshold` và `nlp.gemini_batch_size` từ `config/pipeline_config.yaml`; Gemini fallback chỉ lazy-load khi cần và gom batch toàn bộ câu confidence thấp trong mỗi lần chạy runner.
 - Debug `scratch/local_confidence_debug_500_t070.jsonl`: 500 sentences, fallback tổng `6.0%`, fallback aspect thật `15.8%`.
 - `nlp.runner` hỗ trợ batch inference từ BigQuery, debug confidence, dry-run JSONL, reprocess, và BigQuery MERGE/upsert vào `raw_sentiment_results`.
 - dbt promote kết quả qua `int_sentiment_results`, sau đó `fact_product_mentions`.
