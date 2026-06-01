@@ -18,6 +18,9 @@ logs/
 youtube_cookies*.txt
 # Models
 models/
+!transform/models/
+!transform/models/marts/
+!transform/models/marts/schema.yml
 
 # Airflow local files
 airflow.db

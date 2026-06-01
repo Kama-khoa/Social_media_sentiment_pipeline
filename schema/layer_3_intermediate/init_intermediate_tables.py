@@ -59,7 +59,7 @@ def create_int_sentiment_results(client: bigquery.Client) -> None:
     table.schema = schema
     table.description = (
         "T11 — dbt Intermediate: ket qua NLP. vELECTRA trich xuat aspect, "
-        "PhoBERT phan loai cam xuc. Gemini fallback khi confidence < 0.80."
+        "PhoBERT phan loai cam xuc. Gemini fallback khi confidence < 0.70."
     )
     client.create_table(table, exists_ok=True)
     print("int_sentiment_results: OK")

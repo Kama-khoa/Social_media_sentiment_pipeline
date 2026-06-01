@@ -31,7 +31,7 @@ quota:
   bucket_channel_seed: 500
 
 nlp:
-  confidence_threshold: 0.80
+  confidence_threshold: 0.70
   aspect_labels:
     - Pin
     - Camera

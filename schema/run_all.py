@@ -21,7 +21,7 @@ def ensure_dataset_exists() -> None:
 
     client = bigquery.Client(project=project_id)
     dataset_ref = bigquery.Dataset(f"{project_id}.{dataset_id}")
-    dataset_ref.location = "US"
+    dataset_ref.location = "asia-southeast1"
 
     client.create_dataset(dataset_ref, exists_ok=True)
     print(f"Dataset {dataset_id}: OK\n")

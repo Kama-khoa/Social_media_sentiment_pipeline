@@ -6,14 +6,21 @@ load_dotenv()
 
 PROJECT_ID = os.environ["GCP_PROJECT_ID"]
 DATASET = os.environ["BQ_DATASET"]
+MARTS_DATASET = f"{DATASET}_marts"
 
 
 def get_client() -> bigquery.Client:
     return bigquery.Client(project=PROJECT_ID)
 
 
+def ensure_marts_dataset(client: bigquery.Client) -> None:
+    dataset = bigquery.Dataset(f"{PROJECT_ID}.{MARTS_DATASET}")
+    dataset.location = "asia-southeast1"
+    client.create_dataset(dataset, exists_ok=True)
+
+
 def table_ref(client: bigquery.Client, table_name: str) -> bigquery.Table:
-    return bigquery.Table(f"{PROJECT_ID}.{DATASET}.{table_name}")
+    return bigquery.Table(f"{PROJECT_ID}.{MARTS_DATASET}.{table_name}")
 
 
 def create_dim_products(client: bigquery.Client) -> None:
@@ -77,6 +84,7 @@ def create_agg_daily_product_ranking(client: bigquery.Client) -> None:
         bigquery.SchemaField("positive_count", "INT64", mode="REQUIRED"),
         bigquery.SchemaField("negative_count", "INT64", mode="REQUIRED"),
         bigquery.SchemaField("neutral_count", "INT64", mode="REQUIRED"),
+        bigquery.SchemaField("excluded_none_count", "INT64", mode="REQUIRED"),
         bigquery.SchemaField("top_aspect", "STRING", mode="NULLABLE"),
         bigquery.SchemaField("sentiment_trend", "FLOAT64", mode="NULLABLE"),
         bigquery.SchemaField("rank_position", "INT64", mode="REQUIRED"),
@@ -115,6 +123,11 @@ def create_causal_events(client: bigquery.Client) -> None:
     ]
     table = table_ref(client, "causal_events")
     table.schema = schema
+    table.time_partitioning = bigquery.TimePartitioning(
+        type_=bigquery.TimePartitioningType.DAY,
+        field="change_point_date",
+    )
+    table.clustering_fields = ["product_id"]
     table.description = (
         "T16 — dbt Marts: ket qua PELT (ruptures). "
         "Moi row = 1 su kien tuong quan voi bien dong sentiment. "
@@ -126,6 +139,7 @@ def create_causal_events(client: bigquery.Client) -> None:
 
 def run() -> None:
     client = get_client()
+    ensure_marts_dataset(client)
     create_dim_products(client)
     create_fact_product_mentions(client)
     create_agg_daily_product_ranking(client)

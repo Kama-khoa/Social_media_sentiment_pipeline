@@ -17,7 +17,7 @@ Mỗi script chạy thủ công, độc lập, idempotent (chạy lại không b
 | `layer_1_raw/init_raw_tables.py` | Tạo External Tables trong BQ trỏ vào GCS bucket. Dữ liệu vẫn nằm trên GCS, BQ chỉ đọc qua đây |
 | `layer_2_staging/init_staging_tables.py` | Tạo managed tables staging: `stg_youtube_videos`, `stg_youtube_comments`. Schema phẳng, đã qua bước JSON flatten |
 | `layer_3_intermediate/init_staging_tables.py` | Tạo bảng trung gian: `int_comment_sentences`, `int_sentiment_results`. Kết quả NLP được ghi vào đây |
-| `layer_4_marts/init_marts_tables.py` | Tạo bảng phân tích cuối: `dim_products`, `fact_product_mentions`, `agg_daily_product_ranking` |
+| `layer_4_marts/init_marts_tables.py` | Tạo bảng phân tích cuối trong `<BQ_DATASET>_marts`: `dim_products`, `fact_product_mentions`, `agg_daily_product_ranking`, `causal_events` |
 
 ---
 
@@ -47,6 +47,7 @@ run_all.py
             dim_products
             fact_product_mentions
             agg_daily_product_ranking
+            causal_events
 ```
 
 ---

@@ -215,7 +215,9 @@ python -m dotenv -f ..\.env run -- dbt run --profiles-dir . --select int_sentime
 Tính toán các chỉ số nâng cao (Bayesian Score, Controversy Index, PELT Attribution).
 ```bash
 conda activate etl-py313
-# Tham khảo thư mục analytics/ để chạy các module tương ứng
+python -m schema.layer_4_marts.init_marts_tables
+conda run -n etl-py313 python scripts/dbt/dbt_runner.py run --select agg_daily_product_ranking
+python -m analytics.pelt_attribution --dry-run
 ```
 
 ### Bước 5: Khởi động Dashboard & API

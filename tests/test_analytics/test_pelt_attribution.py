@@ -1,96 +1,136 @@
-import unittest
-from unittest.mock import patch, MagicMock
 from datetime import date, datetime
+from unittest.mock import MagicMock, patch
+
 import pandas as pd
-import numpy as np
-import pytest
 
 from analytics.pelt_attribution import PELTAttribution
 
-def test_fetch_sentiment_timeseries():
-    with patch("analytics.pelt_attribution.bigquery.Client") as mock_bq_class, \
-         patch("analytics.pelt_attribution.genai.Client"), \
-         patch("analytics.pelt_attribution.load_config") as mock_load_config:
-        
-        mock_config = MagicMock()
-        mock_config.gcp.project_id = "test-project"
-        mock_config.gcp.dataset = "test-dataset"
-        mock_load_config.return_value = mock_config
 
-        mock_bq_client = MagicMock()
-        mock_bq_class.return_value = mock_bq_client
+def _config():
+    config = MagicMock()
+    config.gcp.project_id = "test-project"
+    config.gcp.dataset = "test-dataset"
+    config.gemini_api_key = "test-key"
+    return config
 
-        mock_df = pd.DataFrame([
-            {"ranking_date": date(2025, 1, 1), "product_id": "prod-1", "product_name": "Product 1", "category": "Cat 1", "total_mentions": 10, "positive_count": 8, "negative_count": 1, "neutral_count": 1, "avg_sentiment": 0.7}
-        ])
-        mock_bq_client.query.return_value.to_dataframe.return_value = mock_df
 
-        attribution = PELTAttribution()
-        result = attribution.fetch_sentiment_timeseries()
+def _daily_frame(days: list[int], sentiments: list[float]) -> pd.DataFrame:
+    return pd.DataFrame({
+        "ranking_date": [date(2025, 1, day) for day in days],
+        "product_id": ["prod-1"] * len(days),
+        "product_name": ["Product 1"] * len(days),
+        "category": ["Cat 1"] * len(days),
+        "total_mentions": [10] * len(days),
+        "positive_count": [5] * len(days),
+        "negative_count": [2] * len(days),
+        "neutral_count": [3] * len(days),
+        "avg_sentiment": sentiments,
+    })
 
-        assert not result.empty
-        assert len(result) == 1
-        assert result.iloc[0]["product_id"] == "prod-1"
 
-def test_run_attribution():
-    with patch("analytics.pelt_attribution.bigquery.Client") as mock_bq_class, \
-         patch("analytics.pelt_attribution.genai.Client") as mock_genai_class, \
-         patch("analytics.pelt_attribution.load_config") as mock_load_config, \
-         patch("analytics.pelt_attribution.rpt.Pelt") as mock_pelt_class:
+def test_fetch_sentiment_timeseries_uses_valid_daily_mentions():
+    bq_client = MagicMock()
+    bq_client.insert_rows_json.return_value = []
+    expected = _daily_frame([1], [0.7])
+    bq_client.query.return_value.to_dataframe.return_value = expected
 
-        mock_config = MagicMock()
-        mock_config.gcp.project_id = "test-project"
-        mock_config.gcp.dataset = "test-dataset"
-        mock_config.gemini_api_key = "test-key"
-        mock_load_config.return_value = mock_config
+    result = PELTAttribution(config=_config(), bq_client=bq_client).fetch_sentiment_timeseries()
 
-        mock_bq_client = MagicMock()
-        mock_bq_class.return_value = mock_bq_client
+    assert result.equals(expected)
+    query = bq_client.query.call_args.args[0]
+    assert "fact_product_mentions" in query
+    assert "aspect_label != 'NONE'" in query
 
-        mock_genai_client = MagicMock()
-        mock_genai_class.return_value = mock_genai_client
 
-        mock_algo = MagicMock()
-        mock_algo.predict.return_value = [7, 15]
-        mock_pelt_class.return_value.fit.return_value = mock_algo
+def test_prepare_product_timeseries_interpolates_gap_up_to_two_days():
+    frame = _daily_frame([1, 2, 5, 6, 7, 8, 9, 10], [0.1, 0.2, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0])
+    attribution = PELTAttribution(config=_config(), bq_client=MagicMock())
 
-        dates = [date(2025, 1, i) for i in range(1, 16)]
-        avg_sentiments = [0.1] * 7 + [0.7] * 8
-        product_df = pd.DataFrame({
-            "ranking_date": dates,
-            "product_id": ["prod-1"] * 15,
-            "product_name": ["Product 1"] * 15,
-            "category": ["Cat 1"] * 15,
-            "total_mentions": [10] * 15,
-            "positive_count": [5] * 15,
-            "negative_count": [2] * 15,
-            "neutral_count": [3] * 15,
-            "avg_sentiment": avg_sentiments
-        })
+    prepared = attribution.prepare_product_timeseries(frame, min_points=8, min_coverage=0.7)
 
-        mock_bq_client.query.return_value.to_dataframe.return_value = product_df
+    assert prepared is not None
+    assert len(prepared) == 10
+    assert prepared["avg_sentiment"].isna().sum() == 0
 
-        mock_videos = [
-            {"video_id": "vid-1", "title": "Review Product 1", "view_count": 100000, "published_at": datetime(2025, 1, 8, 12, 0, 0)}
-        ]
-        
-        mock_bq_client.query.return_value.result.side_effect = [
-            mock_videos,
-            [MagicMock(avg_sentiment=0.8)],
-            [MagicMock(sentence_text="Bình luận tốt")],
-            [MagicMock(cnt=0)]
-        ]
 
-        mock_genai_client.models.generate_content.return_value.text = "Giải thích từ Gemini"
+def test_prepare_product_timeseries_skips_long_gap():
+    frame = _daily_frame([1, 2, 3, 7, 8, 9, 10], [0.1] * 7)
+    attribution = PELTAttribution(config=_config(), bq_client=MagicMock())
 
-        attribution = PELTAttribution()
-        attribution.run_attribution(min_points=10)
+    prepared = attribution.prepare_product_timeseries(frame, min_points=7, min_coverage=0.7)
 
-        assert mock_bq_client.insert_rows_json.called
-        call_args = mock_bq_client.insert_rows_json.call_args[0]
-        assert call_args[0] == "test-project.test-dataset.causal_events"
-        row = call_args[1][0]
-        assert row["product_id"] == "prod-1"
-        assert row["event_video_id"] == "vid-1"
-        assert row["sentiment_direction"] == "POSITIVE"
-        assert row["explanation_text"] == "Giải thích từ Gemini"
+    assert prepared is None
+
+
+def test_prepare_product_timeseries_skips_low_coverage():
+    frame = _daily_frame([1, 5, 10], [0.1] * 3)
+    attribution = PELTAttribution(config=_config(), bq_client=MagicMock())
+
+    prepared = attribution.prepare_product_timeseries(frame, min_points=3, min_coverage=0.7)
+
+    assert prepared is None
+
+
+@patch("analytics.pelt_attribution.rpt.Pelt")
+def test_run_attribution_writes_marts_event_for_viral_candidate(mock_pelt_class):
+    bq_client = MagicMock()
+    bq_client.insert_rows_json.return_value = []
+    genai_client = MagicMock()
+    genai_client.models.generate_content.return_value.text = "Giải thích từ Gemini"
+    bq_client.query.return_value.to_dataframe.return_value = _daily_frame(list(range(1, 16)), [0.1] * 7 + [0.7] * 8)
+    bq_client.query.return_value.result.side_effect = [
+        [{"video_id": "vid-1", "title": "Review Product 1", "view_count": 100001, "published_at": datetime(2025, 1, 8, 12)}],
+        [MagicMock(avg_sentiment=0.8)],
+        [MagicMock(sentence_text="Bình luận tốt")],
+        [MagicMock(cnt=0)],
+    ]
+    mock_pelt_class.return_value.fit.return_value.predict.return_value = [7, 15]
+
+    PELTAttribution(config=_config(), bq_client=bq_client, genai_client=genai_client).run_attribution()
+
+    table_id, rows = bq_client.insert_rows_json.call_args.args
+    assert table_id == "test-project.test-dataset_marts.causal_events"
+    assert rows[0]["event_video_id"] == "vid-1"
+    assert rows[0]["sentiment_direction"] == "POSITIVE"
+
+
+def test_dry_run_skips_gemini_and_bigquery_write():
+    bq_client = MagicMock()
+    attribution = PELTAttribution(config=_config(), bq_client=bq_client)
+    attribution._query_videos_in_window = MagicMock(return_value=[
+        {"video_id": "vid-1", "title": "Review", "view_count": 100001, "published_at": datetime(2025, 1, 8)}
+    ])
+    attribution._query_video_sentiment = MagicMock(return_value=0.8)
+
+    attribution._attribute_event("prod-1", "Product 1", date(2025, 1, 8), "POSITIVE", dry_run=True)
+
+    assert attribution._genai_client is None
+    bq_client.insert_rows_json.assert_not_called()
+
+
+def test_no_viral_candidate_skips_event():
+    bq_client = MagicMock()
+    attribution = PELTAttribution(config=_config(), bq_client=bq_client)
+    attribution._query_videos_in_window = MagicMock(return_value=[])
+
+    attribution._attribute_event("prod-1", "Product 1", date(2025, 1, 8), "POSITIVE")
+
+    bq_client.insert_rows_json.assert_not_called()
+
+
+def test_existing_event_is_not_inserted_twice():
+    bq_client = MagicMock()
+    attribution = PELTAttribution(config=_config(), bq_client=bq_client)
+    attribution._event_exists = MagicMock(return_value=True)
+    video = {
+        "video_id": "vid-1",
+        "title": "Review",
+        "view_count": 100001,
+        "temporal_proximity": 1.0,
+        "direction_alignment": 1.0,
+        "attribution_score": 1.0,
+    }
+
+    attribution._save_causal_event("prod-1", date(2025, 1, 8), "POSITIVE", video, "Explanation")
+
+    bq_client.insert_rows_json.assert_not_called()

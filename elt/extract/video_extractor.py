@@ -246,8 +246,8 @@ class VideoExtractor(BaseExtractor):
 
                     if dtos and not recent_dtos:
                         logger.info(
-                            "Phase B: channel %s reached historical lookback cutoff at batch %d/%d",
-                            ch.channel_name, batch_num, total_batches,
+                            "Phase B: channel %s completed. All remaining videos in batch %d/%d and onwards are older than the lookback cutoff date (%s).",
+                            ch.channel_name, batch_num, total_batches, cutoff_date.strftime("%Y-%m-%d"),
                         )
                         break
 

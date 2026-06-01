@@ -1,0 +1,28 @@
+version: 2
+
+models:
+  - name: agg_daily_product_ranking
+    description: Rolling 30-day product analytics snapshot excluding NONE aspects from KPIs.
+    columns:
+      - name: ranking_id
+        data_tests:
+          - not_null
+          - unique
+      - name: product_id
+        data_tests:
+          - not_null
+      - name: ranking_date
+        data_tests:
+          - not_null
+      - name: bayesian_score
+        data_tests:
+          - not_null
+      - name: controversy_index
+        data_tests:
+          - not_null
+      - name: controversy_label
+        data_tests:
+          - not_null
+      - name: top_aspect
+        data_tests:
+          - not_null
