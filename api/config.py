@@ -16,6 +16,9 @@ class Settings:
     airflow_api_username: str = os.getenv("AIRFLOW_API_USERNAME", "admin")
     airflow_api_password: str = os.getenv("AIRFLOW_API_PASSWORD", "admin")
     next_public_api_base_url: str = os.getenv("NEXT_PUBLIC_API_BASE_URL", "http://localhost:8000")
+    gcp_project_id: str = os.getenv("GCP_PROJECT_ID", "")
+    bq_dataset: str = os.getenv("BQ_DATASET", "sentiment_platform")
+    bq_marts_dataset: str = os.getenv("BQ_DATASET", "sentiment_platform") + "_marts"
 
 
 @lru_cache()

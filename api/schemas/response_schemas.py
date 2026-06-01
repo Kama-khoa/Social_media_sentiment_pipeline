@@ -3,6 +3,113 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel
 
+# ── Products / Analytics ──────────────────────────────────────────────────────
+
+class AspectSentiment(BaseModel):
+    aspect_label: str
+    positive_count: int
+    negative_count: int
+    neutral_count: int
+    total_mentions: int
+    positive_pct: float
+    negative_pct: float
+
+
+class ProductDetailResponse(BaseModel):
+    product_id: str
+    product_name: str
+    brand: str
+    category: str
+    bayesian_score: float
+    controversy_label: str
+    total_mentions: int
+    aspects: list[AspectSentiment]
+    as_of_date: date
+
+
+class AttributionResponse(BaseModel):
+    product_id: str
+    product_name: str
+    events: list["CausalEventSummary"]
+
+
+class SearchResultItem(BaseModel):
+    product_id: str
+    product_name: str
+    brand: str
+    category: str
+    bayesian_score: float
+    controversy_label: str
+    total_mentions: int
+
+
+class SearchResponse(BaseModel):
+    results: list[SearchResultItem]
+    total: int
+    query: str
+
+
+# ── Admin Config ──────────────────────────────────────────────────────────────
+
+class ChannelConfigItem(BaseModel):
+    channel_id: str
+    channel_name: str
+    channel_url: Optional[str]
+    channel_handle: Optional[str]
+    subscriber_count: Optional[int]
+    is_active: bool
+    is_historically_scanned: bool
+    created_at: datetime
+    last_updated_at: Optional[datetime]
+
+
+class KeywordConfigItem(BaseModel):
+    keyword_id: str
+    keyword_text: str
+    search_cluster: Optional[str]
+    is_active: bool
+    created_at: datetime
+    last_updated_at: Optional[datetime]
+
+
+# ── Pipeline Health ───────────────────────────────────────────────────────────
+
+class AirflowHealth(BaseModel):
+    webserver: str
+    scheduler: str
+
+
+class TaskInstanceDetail(BaseModel):
+    task_id: str
+    state: str
+    duration: Optional[float]
+    try_number: int
+
+
+class DagRunDetail(BaseModel):
+    dag_id: str
+    run_id: str
+    state: str
+    start_date: Optional[str]
+    duration_seconds: Optional[int]
+    tasks: list[TaskInstanceDetail] = []
+
+
+class PipelineMetrics(BaseModel):
+    quota_used_today: int
+    quota_limit: int
+    videos_crawled_today: int
+    comments_crawled_today: int
+    channels_pending_historical: int
+    last_nlp_batch_id: Optional[str]
+
+
+class PipelineHealthResponse(BaseModel):
+    airflow: AirflowHealth
+    recent_dag_runs: list[DagRunDetail]
+    metrics: PipelineMetrics
+    as_of: datetime
+
 
 class TokenResponse(BaseModel):
     access_token: str

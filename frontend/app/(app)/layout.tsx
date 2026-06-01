@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
@@ -9,10 +9,15 @@ import { Header } from "@/components/layout/Header";
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { user, isLoading } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
 
   useEffect(() => {
-    if (!isLoading && !user) {
-      router.replace("/login");
+    if (!isLoading) {
+      if (!user) {
+        router.replace("/login");
+      } else if (user.role !== "admin") {
+        router.replace("/analytics/top-products");
+      }
     }
   }, [user, isLoading, router]);
 
@@ -24,7 +29,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (!user) return null;
+  if (!user || user.role !== "admin") return null;
 
   const titleMap: Record<string, string> = {
     "/dashboard": "Tổng quan",
@@ -38,7 +43,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-slate-50">
       <Sidebar />
-      <Header title={titleMap["/dashboard"] ?? "SentimentIQ"} />
+      <Header title={titleMap[pathname] ?? "SentimentIQ"} />
       <main className="ml-56 pt-14 min-h-screen">
         <div className="p-6">{children}</div>
       </main>

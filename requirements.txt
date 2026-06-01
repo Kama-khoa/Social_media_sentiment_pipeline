@@ -7,7 +7,7 @@ tqdm==4.67.1
 # ── Google Cloud Platform ──────────────────────────────────────────────────────
 google-cloud-storage==2.18.2
 google-cloud-bigquery==3.27.0
-google-auth==2.37.0
+google-auth>=2.48.1,<3.0.0
 google-api-python-client==2.166.0
 db-dtypes==1.3.1
 
@@ -22,7 +22,7 @@ dbt-bigquery>=1.8.0
 
 # ── Vietnamese NLP ─────────────────────────────────────────────────────────────
 underthesea==8.3.0
-pyvi==0.1.11
+pyvi==0.1.1
 
 
 # ── Machine Learning / NLP Inference ──────────────────────────────────────────
@@ -44,7 +44,15 @@ google-genai>=2.4.0
 # ── API Layer ──────────────────────────────────────────────────────────────────
 fastapi==0.115.6
 uvicorn==0.34.0
+pydantic>=2.0.0
+pydantic[email]>=2.0.0
+python-multipart>=0.0.12
 redis==5.2.1
+passlib[bcrypt]==1.7.4
+bcrypt==4.2.1
+python-jose[cryptography]==3.5.0
+email-validator==2.3.0
+httpx>=0.27.0
 
 # ── Dashboard ──────────────────────────────────────────────────────────────────
 streamlit>=1.40.0

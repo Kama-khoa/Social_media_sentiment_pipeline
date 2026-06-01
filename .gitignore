@@ -39,3 +39,22 @@ Thumbs.db
 
 # Temp files
 allfileshas.txt
+
+# ── Web App — Frontend (Next.js) ───────────────────────────────────────────────
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/.turbo/
+frontend/.env.local
+frontend/.env.production.local
+frontend/.env.development.local
+
+# ── Web App — Backend (FastAPI) ────────────────────────────────────────────────
+data/web_app.db
+data/*.db
+
+# ── Web App — Auth / Session ───────────────────────────────────────────────────
+*.pem
+*.key
+*.p12
+*.pfx
