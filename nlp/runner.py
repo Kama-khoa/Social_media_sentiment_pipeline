@@ -5,15 +5,20 @@ import hashlib
 import json
 import logging
 import os
+import re
+import time
 import uuid
+from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, TypeVar
 
 from dotenv import load_dotenv
 
+from nlp.config import NLPConfig, load_nlp_config
 from nlp.inference.confidence_router import ConfidenceRouter
+from pipeline_progress import progress_bar
 
 load_dotenv()
 
@@ -22,6 +27,7 @@ logger = logging.getLogger(__name__)
 _DEFAULT_LIMIT = 500
 _DEFAULT_DAG_RUN_ID = "manual"
 _MODEL_NAME = "velectra_aspect+phobert_sentiment"
+_FAILED_BATCH_LOG_DIR = Path("logs") / "nlp_failed_batches"
 _RESULT_COLUMNS = [
     "result_id",
     "sentence_id",
@@ -35,6 +41,7 @@ _RESULT_COLUMNS = [
     "dag_run_id",
     "processed_at",
 ]
+_T = TypeVar("_T")
 
 
 @dataclass(frozen=True)
@@ -87,24 +94,20 @@ def write_jsonl(path: Path, rows: Iterable[dict]) -> None:
             f.write(json.dumps(row, ensure_ascii=False) + "\n")
 
 
-def build_result_rows(
-    records: Iterable[SentenceRecord],
-    router: ConfidenceRouter,
-    dag_run_id: str = _DEFAULT_DAG_RUN_ID,
-    processed_at: str | None = None,
-) -> list[dict]:
-    processed_at = processed_at or _utc_now_iso()
-    output: list[dict] = []
-    records = list(records)
-    annotations_by_record = router.annotate_many(
-        [record.sentence_text for record in records]
-    )
-    missing_count = 0
+def _chunks(items: list[_T], batch_size: int) -> Iterable[list[_T]]:
+    if batch_size <= 0:
+        raise ValueError("batch_size must be greater than zero")
+    for start in range(0, len(items), batch_size):
+        yield items[start : start + batch_size]
 
-    for record, annotations in zip(records, annotations_by_record):
-        if not annotations:
-            missing_count += 1
-            continue
+
+def _build_rows_for_annotations(
+    record_annotations: Iterable[tuple[SentenceRecord, list[dict]]],
+    dag_run_id: str,
+    processed_at: str,
+) -> list[dict]:
+    output: list[dict] = []
+    for record, annotations in record_annotations:
         for item in annotations:
             aspect_label = str(item["aspect_label"])
             segment_text = str(item.get("segment_text", ""))
@@ -125,13 +128,35 @@ def build_result_rows(
                 "dag_run_id": dag_run_id,
                 "processed_at": processed_at,
             })
+    return output
+
+
+def build_result_rows(
+    records: Iterable[SentenceRecord],
+    router: ConfidenceRouter,
+    dag_run_id: str = _DEFAULT_DAG_RUN_ID,
+    processed_at: str | None = None,
+) -> list[dict]:
+    processed_at = processed_at or _utc_now_iso()
+    records = list(records)
+    annotations_by_record = router.annotate_many(
+        [record.sentence_text for record in records]
+    )
+    record_annotations: list[tuple[SentenceRecord, list[dict]]] = []
+    missing_count = 0
+
+    for record, annotations in zip(records, annotations_by_record):
+        if not annotations:
+            missing_count += 1
+            continue
+        record_annotations.append((record, annotations))
 
     if missing_count:
         logger.warning(
             "Skipped %d sentences without annotations; they will be retried on a later run",
             missing_count,
         )
-    return output
+    return _build_rows_for_annotations(record_annotations, dag_run_id, processed_at)
 
 
 def build_local_debug_rows(
@@ -285,13 +310,208 @@ def write_rows_to_bigquery(rows: list[dict]) -> None:
         schema=_raw_results_schema(),
         write_disposition=bigquery.WriteDisposition.WRITE_TRUNCATE,
     )
-    load_job = client.load_table_from_json(rows, staging_table, job_config=job_config)
-    load_job.result()
-
     try:
+        load_job = client.load_table_from_json(rows, staging_table, job_config=job_config)
+        load_job.result()
         client.query(_build_merge_sql(target_table, staging_table)).result()
     finally:
         client.delete_table(staging_table, not_found_ok=True)
+
+
+def _failed_batch_log_path(dag_run_id: str) -> Path:
+    safe_run_id = re.sub(r"[^A-Za-z0-9_.-]+", "_", dag_run_id).strip("._")
+    return _FAILED_BATCH_LOG_DIR / f"{safe_run_id or 'unknown_run'}.jsonl"
+
+
+def _log_failed_bq_batch(
+    *,
+    rows: list[dict],
+    dag_run_id: str,
+    batch_index: int,
+    phase: str,
+    attempts: int,
+    error: Exception,
+) -> None:
+    payload = {
+        "timestamp": _utc_now_iso(),
+        "dag_run_id": dag_run_id,
+        "batch_index": batch_index,
+        "phase": phase,
+        "sentence_ids": sorted({str(row["sentence_id"]) for row in rows}),
+        "attempts": attempts,
+        "error_type": type(error).__name__,
+        "error_message": str(error),
+        "rows": rows,
+    }
+    path = _failed_batch_log_path(dag_run_id)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(payload, ensure_ascii=False) + "\n")
+    except OSError:
+        logger.exception("Could not write failed NLP batch log to %s", path)
+
+
+def write_rows_to_bigquery_with_retry(
+    rows: list[dict],
+    *,
+    dag_run_id: str,
+    batch_index: int,
+    phase: str,
+    max_retries: int,
+    retry_base_seconds: float,
+) -> bool:
+    if not rows:
+        return True
+
+    attempts = max_retries + 1
+    for attempt in range(1, attempts + 1):
+        try:
+            write_rows_to_bigquery(rows)
+            return True
+        except Exception as exc:
+            if attempt < attempts:
+                delay = retry_base_seconds * (2 ** (attempt - 1))
+                logger.warning(
+                    "BigQuery write batch %d [%s] attempt %d/%d failed: %s. "
+                    "Retrying in %.1fs",
+                    batch_index,
+                    phase,
+                    attempt,
+                    attempts,
+                    exc,
+                    delay,
+                )
+                time.sleep(delay)
+                continue
+
+            logger.error(
+                "Skipping BigQuery write batch %d [%s] after %d attempts: %s",
+                batch_index,
+                phase,
+                attempts,
+                exc,
+            )
+            _log_failed_bq_batch(
+                rows=rows,
+                dag_run_id=dag_run_id,
+                batch_index=batch_index,
+                phase=phase,
+                attempts=attempts,
+                error=exc,
+            )
+            return False
+
+    return False
+
+
+@dataclass
+class _BatchWriteStats:
+    committed_batches: int = 0
+    skipped_batches: int = 0
+    unresolved_sentences: int = 0
+
+
+def _run_and_write_bq_batches(
+    records: list[SentenceRecord],
+    router: ConfidenceRouter,
+    dag_run_id: str,
+    config: NLPConfig,
+    progress=None,
+) -> list[dict]:
+    processed_at = _utc_now_iso()
+    output: list[dict] = []
+    record_order = {record.sentence_id: index for index, record in enumerate(records)}
+    pending_fallback: dict[str, list[SentenceRecord]] = defaultdict(list)
+    gemini_cache: dict[str, list[dict]] = {}
+    stats = _BatchWriteStats()
+    write_batch_index = 0
+
+    def persist(
+        record_annotations: list[tuple[SentenceRecord, list[dict]]],
+        phase: str,
+    ) -> None:
+        nonlocal write_batch_index
+        for pair_batch in _chunks(record_annotations, config.bq_write_batch_size):
+            rows = _build_rows_for_annotations(pair_batch, dag_run_id, processed_at)
+            output.extend(rows)
+            if not rows:
+                continue
+            write_batch_index += 1
+            if write_rows_to_bigquery_with_retry(
+                rows,
+                dag_run_id=dag_run_id,
+                batch_index=write_batch_index,
+                phase=phase,
+                max_retries=config.bq_write_max_retries,
+                retry_base_seconds=config.bq_write_retry_base_seconds,
+            ):
+                stats.committed_batches += 1
+            else:
+                stats.skipped_batches += 1
+
+    def flush_gemini_queue(max_sentences: int) -> None:
+        fallback_sentences = list(pending_fallback)[:max_sentences]
+        if not fallback_sentences:
+            return
+        grouped_annotations = router.annotate_gemini_many(fallback_sentences)
+        ready: list[tuple[SentenceRecord, list[dict]]] = []
+        for sentence in fallback_sentences:
+            records_for_sentence = pending_fallback.pop(sentence)
+            annotations = grouped_annotations.get(sentence, [])
+            if progress is not None:
+                progress.update(len(records_for_sentence))
+            if not annotations:
+                stats.unresolved_sentences += len(records_for_sentence)
+                continue
+            gemini_cache[sentence] = annotations
+            ready.extend((record, annotations) for record in records_for_sentence)
+        persist(ready, phase="gemini")
+
+    for record_batch in _chunks(records, config.bq_write_batch_size):
+        local_annotations = router.annotate_local_many(
+            [record.sentence_text for record in record_batch]
+        )
+        local_ready: list[tuple[SentenceRecord, list[dict]]] = []
+        cached_gemini_ready: list[tuple[SentenceRecord, list[dict]]] = []
+        completed_locally = 0
+
+        for record, annotations in zip(record_batch, local_annotations):
+            if annotations is not None:
+                completed_locally += 1
+                if annotations:
+                    local_ready.append((record, annotations))
+                else:
+                    stats.unresolved_sentences += 1
+                continue
+
+            if record.sentence_text in gemini_cache:
+                completed_locally += 1
+                cached_gemini_ready.append((record, gemini_cache[record.sentence_text]))
+            else:
+                pending_fallback[record.sentence_text].append(record)
+
+        persist(local_ready, phase="local")
+        persist(cached_gemini_ready, phase="gemini")
+        if progress is not None and completed_locally:
+            progress.update(completed_locally)
+        while len(pending_fallback) >= config.gemini_batch_size:
+            flush_gemini_queue(config.gemini_batch_size)
+
+    while pending_fallback:
+        flush_gemini_queue(config.gemini_batch_size)
+
+    logger.info(
+        "BigQuery checkpoint summary: %d committed batches, %d skipped batches, "
+        "%d unresolved sentences",
+        stats.committed_batches,
+        stats.skipped_batches,
+        stats.unresolved_sentences,
+    )
+    return sorted(
+        output,
+        key=lambda row: record_order.get(str(row["sentence_id"]), len(record_order)),
+    )
 
 
 def run(
@@ -312,16 +532,24 @@ def run(
         records = records[:limit]
 
     logger.info("Running NLP inference for %d sentences", len(records))
-    result_rows = build_result_rows(records, router or ConfidenceRouter(), dag_run_id=dag_run_id)
+    router = router or ConfidenceRouter()
+    with progress_bar(total=len(records), desc="NLP inference", unit="sentence") as progress:
+        if write_bq:
+            result_rows = _run_and_write_bq_batches(
+                records,
+                router,
+                dag_run_id,
+                load_nlp_config(),
+                progress=progress,
+            )
+        else:
+            result_rows = build_result_rows(records, router, dag_run_id=dag_run_id)
+            progress.update(len(records))
     logger.info("NLP inference produced %d result rows", len(result_rows))
 
     if output_jsonl:
         write_jsonl(output_jsonl, result_rows)
         logger.info("Wrote NLP results to %s", output_jsonl)
-
-    if write_bq:
-        write_rows_to_bigquery(result_rows)
-        logger.info("Upserted NLP results into BigQuery")
 
     return result_rows
 
@@ -342,7 +570,10 @@ def debug_local_confidence(
         records = records[:limit]
 
     logger.info("Debugging local model confidence for %d sentences", len(records))
-    rows = build_local_debug_rows(records, router or ConfidenceRouter())
+    rows = build_local_debug_rows(
+        progress_bar(records, desc="NLP confidence debug", unit="sentence"),
+        router or ConfidenceRouter(),
+    )
     log_debug_summary(rows)
 
     if output_jsonl:

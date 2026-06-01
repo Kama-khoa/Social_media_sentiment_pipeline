@@ -3,7 +3,7 @@
 [![Python 3.13](https://img.shields.io/badge/python-3.13-blue.svg)](https://www.python.org/downloads/release/python-3130/)
 [![dbt-bigquery](https://img.shields.io/badge/dbt-1.8-orange.svg)](https://www.getdbt.com/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688.svg)](https://fastapi.tiangolo.com/)
-[![Streamlit](https://img.shields.io/badge/Streamlit-1.42-FF4B4B.svg)](https://streamlit.io/)
+[![Next.js](https://img.shields.io/badge/Next.js-App_Router-000000.svg)](https://nextjs.org/docs/app)
 [![Google Cloud Platform](https://img.shields.io/badge/GCP-BigQuery%20%7C%20GCS-4285F4.svg)](https://cloud.google.com/)
 
 Hệ thống end-to-end phân tích cảm xúc (Sentiment Analysis) đa khía cạnh dành cho bình luận YouTube về các sản phẩm công nghệ Việt Nam (smartphone, laptop, thiết bị smarthome). Đồ án tốt nghiệp 2026.
@@ -52,7 +52,7 @@ graph TD
 
     subgraph Application ["Application (Phase 5)"]
         F1[FastAPI + Redis]
-        F2[Streamlit Dashboard]
+        F2[Next.js Web App: Guest/User + Admin]
     end
 
     A1 --> B1
@@ -220,16 +220,17 @@ conda run -n etl-py313 python scripts/dbt/dbt_runner.py run --select agg_daily_p
 python -m analytics.pelt_attribution --dry-run
 ```
 
-### Bước 5: Khởi động Dashboard & API
+### Bước 5: Khởi động Web App & API
 1. Mở Terminal 1 (Khởi chạy FastAPI Backend):
 ```bash
 conda activate etl-py313
 uvicorn api.main:app --reload --host 0.0.0.0 --port 8000
 ```
-2. Mở Terminal 2 (Khởi chạy Streamlit Dashboard):
+2. Mở Terminal 2 (Khởi chạy Next.js Web App):
 ```bash
-conda activate etl-py313
-streamlit run dashboard/app.py
+cd frontend
+npm install
+npm run dev
 ```
 
 ---
@@ -251,8 +252,8 @@ streamlit run dashboard/app.py
 - **Lỗi Tokenizer Mismatch**: Đảm bảo phân tách tiền xử lý đúng cho từng model: PhoBERT sử dụng `pyvi` (`ViTokenizer`) và format input `aspect </s> sentence`, còn vELECTRA sử dụng `underthesea.word_tokenize` để tách âm tiết và align nhãn BIO.
 - **Lỗi Gemini Fallback**: Threshold hiện tại là `0.70`. Nếu tỷ lệ route sang Gemini quá cao (>20% trên aspect thật), chạy `python -m nlp.runner --limit 500 --debug-local-confidence --output-jsonl scratch\local_confidence_debug_check.jsonl` để phân tách nguyên nhân NER thấp hay sentiment thấp.
 
-### Giai đoạn 4 & 5: API & Dashboard
-- **Dashboard load chậm (> 2 giây)**: Đảm bảo Redis caching (TTL=300s) đang hoạt động. Test bằng cách tắt Redis, nếu API báo lỗi connection refused, hãy khởi động lại Redis server.
+### Giai đoạn 4 & 5: API & Web App
+- **Web app load chậm (> 2 giây)**: Đảm bảo Redis caching (TTL=300s) đang hoạt động. Test bằng cách tắt Redis, nếu API báo lỗi connection refused, hãy khởi động lại Redis server.
 - **Ranking không hợp lý**: Kiểm tra lại công thức Bayesian Ranking trong bảng `agg_daily_product_ranking` (BigQuery/dbt), đảm bảo `C` (prior strength) không quá nhỏ hoặc quá lớn.
 
 ---

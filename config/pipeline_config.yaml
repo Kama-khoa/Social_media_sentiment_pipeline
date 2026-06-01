@@ -44,6 +44,9 @@ nlp:
     - negative
     - neutral
   gemini_batch_size: 50
+  bq_write_batch_size: 50
+  bq_write_max_retries: 2
+  bq_write_retry_base_seconds: 2
 
 api:
   redis_ttl_seconds: 300

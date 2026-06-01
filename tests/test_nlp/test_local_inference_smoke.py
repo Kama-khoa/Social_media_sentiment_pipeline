@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 import nlp.inference.confidence_router as confidence_router_module
+from nlp.annotation.prompt_builder import annotation_input_id
 from nlp.config import NLPConfig
 from nlp.inference.confidence_router import ConfidenceRouter
 
@@ -184,6 +185,31 @@ def test_confidence_router_returns_empty_list_when_gemini_omits_sentence() -> No
     )
 
     assert router.annotate("missing result") == []
+
+
+def test_confidence_router_maps_rewritten_gemini_sentence_by_input_id() -> None:
+    class LowConfidenceExtractor:
+        def extract(self, sentence: str) -> list[dict]:
+            return [{"aspect_label": "Camera", "segment_text": "camera", "confidence": 0.60}]
+
+    class RewritingGemini:
+        def annotate_all(self, sentences: list[str]) -> list[dict]:
+            return [{
+                "input_id": annotation_input_id(sentences[0]),
+                "sentence": "@ngango9888 camera của sony",
+                "aspect_label": "Camera",
+                "segment_text": "camera",
+                "sentiment_label": "neutral",
+            }]
+
+    sentence = "@ngango9888  camera của sony nhưng tinh chỉ là app"
+    router = ConfidenceRouter(
+        extractor=LowConfidenceExtractor(),
+        classifier=_FakeClassifier(),
+        gemini_factory=RewritingGemini,
+    )
+
+    assert router.annotate(sentence)[0]["sentence"] == sentence
 
 
 @pytest.mark.skipif(

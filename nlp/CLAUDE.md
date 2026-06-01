@@ -18,7 +18,7 @@ Xây dựng pipeline NLP hybrid để phân tích cảm xúc theo khía cạnh (
 | `inference/phobert_classifier.py` | `PhoBERTClassifier` class — load weights PhoBERT local, predict sentiment score + confidence |
 | `inference/velectra_extractor.py` | `VELECTRAExtractor` class — load weights vELECTRA local, extract aspect spans từ câu |
 | `inference/confidence_router.py` | `ConfidenceRouter` class — điều phối: nếu local confidence < 0.70 → gom batch fallback sang Gemini Flash |
-| `runner.py` | Batch inference runner — đọc `int_comment_sentences`, chạy vELECTRA + PhoBERT + confidence routing, upsert vào `raw_sentiment_results` |
+| `runner.py` | Batch inference runner — đọc `int_comment_sentences`, chạy vELECTRA + PhoBERT + confidence routing, checkpoint BigQuery theo batch vào `raw_sentiment_results` |
 
 ---
 
@@ -136,7 +136,7 @@ NLP phase đã hoàn chỉnh ở mức vận hành:
 - Local smoke tests pass cho `PhoBERTClassifier`, `VELECTRAExtractor`, `ConfidenceRouter`.
 - `ConfidenceRouter` đọc `nlp.confidence_threshold` và `nlp.gemini_batch_size` từ `config/pipeline_config.yaml`; Gemini fallback chỉ lazy-load khi cần và gom batch toàn bộ câu confidence thấp trong mỗi lần chạy runner.
 - Debug `scratch/local_confidence_debug_500_t070.jsonl`: 500 sentences, fallback tổng `6.0%`, fallback aspect thật `15.8%`.
-- `nlp.runner` hỗ trợ batch inference từ BigQuery, debug confidence, dry-run JSONL, reprocess, và BigQuery MERGE/upsert vào `raw_sentiment_results`.
+- `nlp.runner` hỗ trợ batch inference từ BigQuery, debug confidence, dry-run JSONL, reprocess, và checkpoint BigQuery MERGE/upsert theo `nlp.bq_write_batch_size`. Batch ghi lỗi được retry theo exponential backoff rồi lưu payload tại `logs/nlp_failed_batches/<dag_run_id>.jsonl` để xử lý sau run.
 - dbt promote kết quả qua `int_sentiment_results`, sau đó `fact_product_mentions`.
 
 Lệnh kiểm tra nhanh:

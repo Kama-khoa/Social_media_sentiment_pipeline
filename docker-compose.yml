@@ -21,6 +21,23 @@ x-airflow-common: &airflow-common
   user: "${AIRFLOW_UID:-50000}:0"
 
 services:
+  web-db:
+    image: postgres:15
+    environment:
+      - POSTGRES_USER=webapi
+      - POSTGRES_PASSWORD=webapi
+      - POSTGRES_DB=sentiment_webapi
+    ports:
+      - "5433:5432"
+    volumes:
+      - web-db-volume:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "webapi"]
+      interval: 10s
+      retries: 5
+      start_period: 5s
+    restart: always
+
   postgres:
     image: postgres:13
     environment:
@@ -74,4 +91,5 @@ services:
         condition: service_healthy
 
 volumes:
+  web-db-volume:
   postgres-db-volume:

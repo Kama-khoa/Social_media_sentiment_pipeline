@@ -12,7 +12,7 @@ from google import genai
 from dotenv import load_dotenv
 from underthesea import word_tokenize
 
-from nlp.annotation.prompt_builder import PromptBuilder
+from nlp.annotation.prompt_builder import PromptBuilder, annotation_input_id
 from nlp.annotation.prompt_config import ASPECT_LABELS, SENTIMENT_LABELS
 
 load_dotenv()
@@ -170,16 +170,22 @@ class GeminiAnnotator:
             batch_idx = i // self._batch_size + 1
 
             last_exc: Exception | None = None
+            items: list[dict] = []
+            remaining = batch
             for attempt in range(3):
                 try:
-                    items = self._annotate_batch(batch)
-                    results.extend(items)
-                    if checkpoint_file:
-                        Path(checkpoint_file).parent.mkdir(parents=True, exist_ok=True)
-                        with open(checkpoint_file, "w", encoding="utf-8") as f:
-                            json.dump(results, f, ensure_ascii=False, indent=2)
-                    logger.info("Batch %d/%d: %d items OK", batch_idx, total_batches, len(items))
+                    round_items = self._annotate_batch(remaining)
+                    items.extend(round_items)
+                    remaining = self._missing_sentences(remaining, round_items)
                     last_exc = None
+                    if remaining and attempt < 2:
+                        logger.warning(
+                            "Batch %d/%d thiếu %d câu; retry riêng các câu chưa có annotation",
+                            batch_idx,
+                            total_batches,
+                            len(remaining),
+                        )
+                        continue
                     break
                 except Exception as exc:
                     last_exc = exc
@@ -202,6 +208,19 @@ class GeminiAnnotator:
                     "Batch %d/%d bỏ qua sau 3 lần thất bại: %s",
                     batch_idx, total_batches, last_exc,
                 )
+            if remaining:
+                logger.warning(
+                    "Batch %d/%d vẫn thiếu %d câu sau tối đa 3 lần gọi Gemini",
+                    batch_idx,
+                    total_batches,
+                    len(remaining),
+                )
+            results.extend(items)
+            if checkpoint_file:
+                Path(checkpoint_file).parent.mkdir(parents=True, exist_ok=True)
+                with open(checkpoint_file, "w", encoding="utf-8") as f:
+                    json.dump(results, f, ensure_ascii=False, indent=2)
+            logger.info("Batch %d/%d: %d items OK", batch_idx, total_batches, len(items))
 
         return results
 
@@ -215,7 +234,39 @@ class GeminiAnnotator:
                 "Dropped %d invalid items from batch (kept %d)",
                 len(parsed) - len(valid), len(valid),
             )
-        return [self._attach_bio_tags(item) for item in valid]
+        normalized = [
+            normalized_item
+            for item in valid
+            if (normalized_item := self._normalize_item_sentence(item, sentences)) is not None
+        ]
+        return [self._attach_bio_tags(item) for item in normalized]
+
+    def _normalize_item_sentence(
+        self,
+        item: dict,
+        expected_sentences: list[str],
+    ) -> dict | None:
+        expected_by_input_id = {
+            annotation_input_id(sentence): sentence for sentence in expected_sentences
+        }
+        sentence = str(item["sentence"])
+        original_sentence = expected_by_input_id.get(str(item.get("input_id", "")))
+        if original_sentence is None and sentence in expected_sentences:
+            original_sentence = sentence
+        if original_sentence is None:
+            logger.warning("Ignoring Gemini result for unexpected sentence: %.50s", sentence)
+            return None
+        return {**item, "sentence": original_sentence}
+
+    def _missing_sentences(
+        self,
+        expected_sentences: list[str],
+        items: list[dict],
+    ) -> list[str]:
+        annotated_sentences = {str(item["sentence"]) for item in items}
+        return [
+            sentence for sentence in expected_sentences if sentence not in annotated_sentences
+        ]
 
     def _call_llm_with_fallback(self, prompt: str) -> str:
         if not self._client:

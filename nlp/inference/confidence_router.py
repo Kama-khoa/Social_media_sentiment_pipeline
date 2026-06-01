@@ -4,6 +4,7 @@ import logging
 from typing import Callable
 
 from nlp.annotation.gemini_annotator import GeminiAnnotator
+from nlp.annotation.prompt_builder import annotation_input_id
 from nlp.config import load_nlp_config
 from nlp.inference.phobert_classifier import PhoBERTClassifier
 from nlp.inference.velectra_extractor import VELECTRAExtractor
@@ -40,22 +41,26 @@ class ConfidenceRouter:
         return self.annotate_many([sentence])[0]
 
     def annotate_many(self, sentences: list[str]) -> list[list[dict]]:
-        local_results: list[list[dict] | None] = []
+        local_results = self.annotate_local_many(sentences)
         fallback_sentences: list[str] = []
 
-        for sentence in sentences:
-            annotations = self._annotate_local(sentence)
-            local_results.append(annotations)
+        for sentence, annotations in zip(sentences, local_results):
             if annotations is None:
                 fallback_sentences.append(sentence)
 
         unique_fallback_sentences = list(dict.fromkeys(fallback_sentences))
-        gemini_results = self._gemini_fallback(unique_fallback_sentences)
+        gemini_results = self.annotate_gemini_many(unique_fallback_sentences)
 
         return [
             annotations if annotations is not None else gemini_results.get(sentence, [])
             for sentence, annotations in zip(sentences, local_results)
         ]
+
+    def annotate_local_many(self, sentences: list[str]) -> list[list[dict] | None]:
+        return [self._annotate_local(sentence) for sentence in sentences]
+
+    def annotate_gemini_many(self, sentences: list[str]) -> dict[str, list[dict]]:
+        return self._gemini_fallback(list(dict.fromkeys(sentences)))
 
     def _annotate_local(self, sentence: str) -> list[dict] | None:
         aspects = self._extractor.extract(sentence)
@@ -156,13 +161,23 @@ class ConfidenceRouter:
             self._gemini = self._gemini_factory()
 
         expected_sentences = set(sentences)
+        expected_by_input_id = {
+            annotation_input_id(sentence): sentence for sentence in sentences
+        }
         grouped: dict[str, list[dict]] = {}
         for result in self._gemini.annotate_all(sentences):
             sentence = str(result["sentence"])
-            if sentence not in expected_sentences:
+            original_sentence = expected_by_input_id.get(str(result.get("input_id", "")))
+            if original_sentence is None and sentence in expected_sentences:
+                original_sentence = sentence
+            if original_sentence is None:
                 logger.warning("Ignoring Gemini result for unexpected sentence: %.50s", sentence)
                 continue
-            grouped.setdefault(sentence, []).append({**result, "source": "gemini"})
+            grouped.setdefault(original_sentence, []).append({
+                **result,
+                "sentence": original_sentence,
+                "source": "gemini",
+            })
 
         missing = [sentence for sentence in sentences if sentence not in grouped]
         if missing:

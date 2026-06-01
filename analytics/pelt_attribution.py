@@ -16,6 +16,7 @@ import pandas as pd
 import ruptures as rpt
 
 from elt.config import load_config
+from pipeline_progress import progress_bar
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)-7s | %(name)s | %(message)s")
 logger = logging.getLogger("pelt_attribution")
@@ -115,7 +116,8 @@ class PELTAttribution:
             logger.warning("No valid daily product sentiment data found.")
             return
 
-        for product_id in df["product_id"].unique():
+        product_ids = df["product_id"].unique()
+        for product_id in progress_bar(product_ids, desc="PELT attribution", unit="product"):
             source_df = df[df["product_id"] == product_id].copy()
             product_name = source_df["product_name"].iloc[0]
             product_df = self.prepare_product_timeseries(source_df, min_points, min_coverage)

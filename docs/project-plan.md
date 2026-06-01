@@ -15,7 +15,7 @@ Kế hoạch còn lại của dự án chuyển trọng tâm sang Phase 4 Analyt
 1. Populate thêm dữ liệu NLP đủ lớn.
 2. Hoàn thiện Bayesian ranking và controversy index trên `fact_product_mentions`.
 3. Hoàn thiện PELT attribution và bảng causal events.
-4. Sau analytics mới chuyển sang API và dashboard.
+4. Sau analytics mới chuyển sang xây dựng web app FastAPI + Next.js.
 
 ---
 
@@ -38,7 +38,8 @@ Sentiment Intelligence Platform là hệ thống end-to-end thu thập bình
 luận YouTube về sản phẩm công nghệ Việt Nam (smartphone, laptop, tai
 nghe, thiết bị nhà thông minh), chạy qua pipeline NLP Hybrid gồm
 vELECTRA + PhoBERT fine-tuned kết hợp Gemini Flash làm fallback, và cuối
-cùng trình bày kết quả phân tích qua dashboard Streamlit 3 tab.
+cùng trình bày kết quả phân tích qua một web app thống nhất cho hai
+actor: Guest/User và Admin.
 
 ### Kiến trúc luồng dữ liệu tổng thể
 
@@ -59,7 +60,9 @@ cùng trình bày kết quả phân tích qua dashboard Streamlit 3 tab.
 - Analytics: Bayesian Ranking, Controversy Index, Correlation
   Attribution Engine dùng thuật toán PELT (ruptures).
 
-- Application: FastAPI + Redis Cache + Streamlit dashboard 3 tab.
+- Application: một Next.js web app gọi FastAPI + Redis Cache, hỗ trợ
+  Guest/User tra cứu insight và Admin quản lý cấu hình tìm kiếm, theo
+  dõi health của Airflow pipeline.
 
 ### Các điểm nhấn quan trọng mang tính quyết định
 
@@ -264,7 +267,8 @@ Analytics.
 
 **Công cụ sử dụng**
 
-- Apache Airflow 3.1.8: DAG, PythonOperator, XCom để truyền kết quả giữa
+- Apache Airflow 2.10.4: DAG, BashOperator, sensor và REST API `/api/v1`
+  theo runtime hiện tại trong `Dockerfile.airflow`.
   các task.
 
 - Google Cloud Storage: lưu trữ JSON thô phân vùng theo ngày.
@@ -681,32 +685,62 @@ Nguyên tắc tuyệt đối: Không thêm tính năng mới sau tuần 10. Ch�
 và fix bugs những gì đã có. Vi phạm nguyên tắc này là nguy cơ lớn nhất
 dẫn đến nộp trễ.
 
-### Tuần 11 — FastAPI Backend và Streamlit Dashboard
+### Tuần 11 — Web App FastAPI + Next.js với 2 Actor
+
+**Phạm vi use-case**
+
+| **Actor** | **Use-case chính** | **Mô tả** |
+|----|----|----|
+| Guest/User | Đăng ký | Tạo tài khoản để sử dụng web app. |
+| Guest/User | Đăng nhập/Đăng xuất | Xác thực phiên làm việc và kết thúc phiên an toàn. |
+| Guest/User | Tìm kiếm và lọc dữ liệu | Tìm sản phẩm, lọc theo danh mục và các điều kiện phân tích được hỗ trợ. |
+| Guest/User | Xem các trang phân tích | Xem bảng xếp hạng, chi tiết khía cạnh và timeline attribution. |
+| Admin | Quản lý từ khóa tìm kiếm | Xem, thêm, sửa, xóa cấu hình `keyword_config`. |
+| Admin | Quản lý kênh tìm kiếm | Xem, thêm, sửa, xóa cấu hình `channel_config`. |
+| Admin | Theo dõi Airflow pipeline | Xem health, DAG runs, task status và metrics vận hành. |
+
+Admin kế thừa toàn bộ quyền của Guest/User. Phase 5 chỉ xây dựng **một**
+Next.js web app; giao diện điều hướng và quyền truy cập thay đổi theo
+role trả về từ FastAPI. Trigger ELT backfill sau khi thay đổi cấu hình là
+phần mở rộng sau MVP, không phải điều kiện hoàn thành use-case quản trị.
 
 **Các bước thực hiện**
 
-64. Viết 4 FastAPI endpoints: GET /products/top/{category} trả về top 10
-    theo Bayesian Score, GET /products/{id}/aspects trả về radar chart
-    data 6 khía cạnh, GET /products/{id}/attribution trả về danh sách
-    causal events, GET /health trả về trạng thái hệ thống.
+64. Tạo auth layer FastAPI: SQLite local qua SQLAlchemy cho bảng
+    `app_users`, hash mật khẩu, JWT access token, role `user|admin`;
+    viết `POST /auth/register`, `POST /auth/login`, `POST /auth/logout`,
+    `GET /auth/me`. Không dùng BigQuery làm transactional user store.
 
-65. Cấu hình Redis cache với decorator @cached(ttl=300) cho tất cả
-    endpoint — tránh query BigQuery liên tục, giữ thời gian phản hồi \<
-    2 giây.
+65. Viết Guest/User endpoints: `GET /products/top/{category}`, `GET
+    /products/{id}/aspects`, `GET /products/{id}/attribution`, `GET
+    /search?q=...&category=...`, `GET /health`.
 
-66. Viết Tab 1 Streamlit: hiển thị Top 10 sản phẩm dạng bảng với
-    Bayesian Score, Controversy icon (đỏ/vàng/xanh), số mentions, biểu
-    đồ bar chart.
+66. Viết Admin endpoints có dependency `require_admin`: CRUD
+    `/admin/keywords` và CRUD `/admin/channels`. Validate dữ liệu đầu
+    vào trước khi ghi trực tiếp BigQuery `keyword_config` hoặc
+    `channel_config`; ưu tiên soft delete bằng `is_active=FALSE`.
 
-67. Viết Tab 2: hiển thị radar chart 6 khía cạnh cho sản phẩm được chọn,
-    kèm 5 câu bình luận tiêu biểu nhất (confidence cao nhất, đại diện
-    từng aspect).
+67. Cấu hình Redis cache TTL 300 giây cho endpoint đọc analytics; xóa
+    cache liên quan sau thao tác quản trị. Không cache endpoint auth.
 
-68. Viết Tab 3: timeline biến động sentiment, danh sách causal events
-    với attribution score, câu giải thích do Gemini sinh ra.
+68. Viết một Next.js App Router web app bằng TypeScript có màn đăng ký,
+    đăng nhập, đăng xuất và
+    các trang Guest/User: tìm kiếm/lọc, top sản phẩm, chi tiết radar 6
+    khía cạnh, timeline sentiment và causal events.
 
-69. Test end-to-end: click qua 3 tab, xác nhận không có lỗi, thời gian
-    phản hồi \< 2 giây.
+69. Bổ sung hai trang chỉ dành cho Admin: quản lý từ khóa tìm kiếm và
+    quản lý kênh tìm kiếm. Ẩn menu quản trị với user thường và bắt buộc
+    FastAPI kiểm tra role để ngăn gọi API trực tiếp.
+
+70. Thêm trang Admin Pipeline Health. Next.js gọi FastAPI
+    `/admin/pipeline/*`; FastAPI proxy Airflow REST API `/health`,
+    `/api/v1/dags`, DAG runs, task instances và kết hợp metrics vận hành
+    từ BigQuery. Không đưa Airflow credentials xuống frontend.
+
+71. Test end-to-end theo hai role: đăng ký, đăng nhập, đăng xuất, tìm
+    kiếm/lọc, xem analytics; Admin CRUD keyword/channel; user thường gọi
+    endpoint Admin phải nhận `403`; endpoint analytics đã cache phản hồi
+    \< 2 giây; trang Pipeline Health hiển thị đúng trạng thái DAG gần nhất.
 
 **Công cụ sử dụng**
 
@@ -714,17 +748,32 @@ dẫn đến nộp trễ.
 
 - Redis 7: in-memory cache, TTL 300 giây.
 
-- Streamlit 1.32+: dashboard frontend.
+- Next.js App Router + TypeScript: frontend có routing và điều hướng theo
+  role.
 
-- Plotly (tích hợp sẵn trong Streamlit): radar chart và timeline chart.
+- Node.js 20.9+ và npm: runtime frontend Next.js.
 
-- Docker Compose: chạy Backend + Redis + Streamlit trong cùng stack.
+- Tailwind CSS + shadcn/ui: layout, form CRUD và bảng Admin.
+
+- Recharts hoặc Plotly.js: radar chart và timeline chart.
+
+- passlib/bcrypt hoặc pwdlib: hash mật khẩu.
+
+- python-jose hoặc PyJWT: ký và kiểm tra JWT.
+
+- SQLAlchemy + SQLite: lưu tài khoản web app trong MVP local; có thể đổi
+  sang PostgreSQL nếu triển khai production.
+
+- Docker Compose: chạy Backend + Redis + Next.js web app trong cùng
+  stack.
 
 **Tài liệu tham khảo**
 
 - FastAPI documentation: https://fastapi.tiangolo.com/
 
-- Streamlit components: https://docs.streamlit.io/develop/api-reference
+- Next.js App Router: https://nextjs.org/docs/app
+
+- Next.js Installation: https://nextjs.org/docs/app/getting-started/installation
 
 - Redis Python (redis-py): https://redis-py.readthedocs.io/
 
@@ -732,32 +781,32 @@ dẫn đến nộp trễ.
 
 **Các bước thực hiện**
 
-70. Đóng băng code: không commit tính năng mới sau ngày đầu tuần 12. Chỉ
+72. Đóng băng code: không commit tính năng mới sau ngày đầu tuần 12. Chỉ
     hotfix lỗi nghiêm trọng.
 
-71. Vẽ và xuất các sơ đồ chất lượng cao: System Architecture tổng thể,
+73. Vẽ và xuất các sơ đồ chất lượng cao: System Architecture tổng thể,
     Data Flow Diagram (DFD), Database Schema ERD, NLP Pipeline
     Flowchart.
 
-72. Hoàn thiện 5 chương báo cáo: đặc biệt chú trọng Chương 4 Đánh giá —
+74. Hoàn thiện 5 chương báo cáo: đặc biệt chú trọng Chương 4 Đánh giá —
     cần giải thích trung thực tỷ lệ sai sót của PhoBERT, điều kiện
     Confidence-Routing, giới hạn Attribution Engine.
 
-73. Tạo bảng so sánh model performance: PhoBERT trước fine-tune (~65%
+75. Tạo bảng so sánh model performance: PhoBERT trước fine-tune (~65%
     accuracy), PhoBERT sau fine-tune (~81%), Gemini only (~85%), Hybrid
     Confidence-Routing (~83%).
 
-74. Export sample dataset (~500 câu anonymized) lên HuggingFace Dataset
+76. Export sample dataset (~500 câu anonymized) lên HuggingFace Dataset
     Hub để đóng góp học thuật.
 
-75. Chuẩn bị slide bảo vệ nhấn mạnh 3 điểm khác biệt: Hybrid NLP với
+77. Chuẩn bị slide bảo vệ nhấn mạnh 3 điểm khác biệt: Hybrid NLP với
     Confidence-Routing, Correlation Attribution Engine, Controversy
     Index.
 
-76. Quay video demo end-to-end backup phòng trường hợp mất mạng tại buổi
+78. Quay video demo end-to-end backup phòng trường hợp mất mạng tại buổi
     bảo vệ.
 
-77. Ẩn toàn bộ API key khỏi code, push GitHub public.
+79. Ẩn toàn bộ API key khỏi code, push GitHub public.
 
 **Công cụ sử dụng**
 
@@ -825,8 +874,9 @@ dẫn đến nộp trễ.
 | **Hạng mục chi phí** | **Đơn giá** | **Ước tính dùng** | **Thành tiền** |
 |----|:--:|:--:|:--:|
 | Redis (chạy local trong Docker) | Free | \- | \$0 |
-| FastAPI + Streamlit (local) | Free | \- | \$0 |
-| BigQuery API reads từ Dashboard | \$5/TB | ~1GB | ~\$0.005 |
+| FastAPI + Next.js web app (local) | Free | \- | \$0 |
+| JWT auth + password hashing (local) | Free | \- | \$0 |
+| BigQuery API reads từ web app | \$5/TB | ~1GB | ~\$0.005 |
 | HuggingFace dataset upload | Free | \- | \$0 |
 | TỔNG GIAI ĐOẠN 5 |  |  | \< \$1 |
 

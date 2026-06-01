@@ -3,7 +3,7 @@
 ## Tổng quan dự án
 
 **Tên:** Social Media Sentiment Pipeline
-**Mục tiêu:** Hệ thống thu thập bình luận YouTube về sản phẩm công nghệ Việt Nam (điện thoại, laptop, tai nghe, thiết bị smarthome), phân tích cảm xúc đa chiều theo từng khía cạnh sản phẩm, và hiển thị insight qua dashboard tương tác.
+**Mục tiêu:** Hệ thống thu thập bình luận YouTube về sản phẩm công nghệ Việt Nam (điện thoại, laptop, tai nghe, thiết bị smarthome), phân tích cảm xúc đa chiều theo từng khía cạnh sản phẩm, và hiển thị insight qua một web app cho Guest/User và Admin.
 
 **Đây là đồ án tốt nghiệp** — output phải đạt cả tiêu chuẩn kỹ thuật lẫn học thuật.
 
@@ -36,7 +36,7 @@ YouTube Data API / yt-dlp
   Analytics Engine (analytics/)
      │
      ▼
-  FastAPI + Streamlit (api/ + dashboard/)
+  FastAPI + Redis + Next.js web app (api/ + frontend/)
 ```
 
 ---
@@ -50,7 +50,7 @@ YouTube Data API / yt-dlp
 | 2 | `transform/` | dbt biến đổi raw → Staging → Intermediate → Marts |
 | 3 | `nlp/` | Auto-annotation → Training (Colab) → Local inference |
 | 4 | `analytics/` | Bayesian ranking, Controversy index, PELT attribution |
-| 5 | `api/` + `dashboard/` | FastAPI backend + Streamlit frontend |
+| 5 | `api/` + `frontend/` | Một web app: FastAPI backend + Redis + Next.js frontend, auth và RBAC |
 | 6 | `airflow/` | DAG automation — TẠO SAU KHI phase 1 chạy thành công |
 
 ---
@@ -71,7 +71,8 @@ YouTube Data API / yt-dlp
 | LLM fallback | Gemini Flash (confidence routing < 0.70) |
 | Change point | ruptures (PELT algorithm) |
 | API | FastAPI + Redis cache (TTL=300s) |
-| Dashboard | Streamlit |
+| Web app frontend | Next.js App Router + TypeScript + Tailwind CSS |
+| Web app auth store | SQLAlchemy + SQLite local cho MVP |
 | Training | Google Colab (GPU T4 16GB) |
 | ETL runtime | Conda environment: etl-py313 (Python 3.13) |
 
@@ -92,6 +93,14 @@ BRIGHTDATA_PROXY_HOST
 BRIGHTDATA_PROXY_PORT
 BRIGHTDATA_USERNAME
 BRIGHTDATA_PASSWORD
+JWT_SECRET_KEY
+JWT_ALGORITHM=HS256
+JWT_EXPIRE_MINUTES=480
+APP_DATABASE_URL=sqlite:///./data/web_app.db
+AIRFLOW_BASE_URL=http://localhost:8080
+AIRFLOW_API_USERNAME=admin
+AIRFLOW_API_PASSWORD=<airflow_api_password>
+NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 ```
 
 Load bằng `python-dotenv`: `from dotenv import load_dotenv; load_dotenv()`
@@ -197,13 +206,35 @@ Social_media_sentiment_pipeline/
 ├── nlp/                    ← NLP pipeline
 ├── analytics/              ← ranking + attribution engine
 ├── api/                    ← FastAPI
-├── dashboard/              ← Streamlit
+├── frontend/               ← Next.js App Router + TypeScript
+├── dashboard/              ← Legacy Streamlit prototype, không phát triển tiếp
 ├── airflow/                ← DAGs (tạo sau phase 1)
 ├── scripts/                ← Script tiện ích / bảo trì
 │   ├── dbt/                ← Script chạy dbt thủ công (dbt_runner.py)
 │   └── maintenance/        ← Các script fix data GCS, xử lý lỗi BigQuery
 └── tests/
 ```
+
+---
+
+## Phase 5 — Web App Contract
+
+Phase 5 xây dựng **một** Next.js web app gọi FastAPI, không tách thành
+nhiều ứng dụng độc lập.
+
+| Actor | Quyền chính |
+|---|---|
+| Guest/User | Đăng ký, đăng nhập, đăng xuất, tìm kiếm/lọc dữ liệu, xem các trang phân tích |
+| Admin | Kế thừa quyền Guest/User; CRUD từ khóa tìm kiếm và kênh tìm kiếm |
+
+Quy tắc bắt buộc:
+
+1. FastAPI là nơi enforce auth và RBAC; ẩn menu Admin trên Next.js chỉ là UX, không phải biện pháp bảo mật.
+2. Mật khẩu phải được hash; JWT secret đọc từ `.env`; không lưu plaintext password hoặc token trong source code.
+3. MVP lưu `app_users` bằng SQLAlchemy + SQLite local; không dùng BigQuery làm transactional user store.
+4. Redis cache TTL 300 giây chỉ áp dụng cho endpoint đọc analytics; không cache endpoint auth.
+5. CRUD Admin ghi trực tiếp BigQuery `keyword_config` và `channel_config`. Trigger ELT backfill tự động là phần mở rộng sau MVP.
+6. Trang Admin Pipeline Health gọi FastAPI `/admin/pipeline/*`; frontend không gọi Airflow trực tiếp.
 
 ---
 
