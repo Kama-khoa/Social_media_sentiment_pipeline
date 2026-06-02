@@ -3,32 +3,40 @@
 interface SentimentBarProps {
   positivePct: number;
   negativePct: number;
+  neutralPct?: number;
   height?: number;
 }
 
-export function SentimentBar({ positivePct, negativePct, height = 6 }: SentimentBarProps) {
-  const neutralPct = Math.max(0, 100 - positivePct - negativePct);
+export function SentimentBar({ positivePct, negativePct, neutralPct, height = 6 }: SentimentBarProps) {
+  const positive = Math.max(0, positivePct);
+  const negative = Math.max(0, negativePct);
+  const neutral = Math.max(0, neutralPct ?? 100 - positive - negative);
+  const total = positive + neutral + negative;
+  const width = (value: number) => total > 0 ? `${value / total * 100}%` : "0%";
+
   return (
-    <div className="flex rounded-full overflow-hidden w-full" style={{ height }}>
-      {positivePct > 0 && (
+    <div
+      className="flex w-full overflow-hidden rounded-full bg-[var(--surface-3)]"
+      style={{ height }}
+      role="img"
+      aria-label={`Cảm xúc: ${positive.toFixed(1)}% tích cực, ${neutral.toFixed(1)}% trung lập, ${negative.toFixed(1)}% tiêu cực`}
+    >
+      {positive > 0 && (
         <div
-          className="bg-emerald-500"
-          style={{ width: `${positivePct}%` }}
-          title={`Tích cực: ${positivePct.toFixed(1)}%`}
+          style={{ width: width(positive), background: "var(--pos)", transition: "width .6s ease" }}
+          title={`Tích cực: ${positive.toFixed(1)}%`}
         />
       )}
-      {neutralPct > 0 && (
+      {neutral > 0 && (
         <div
-          className="bg-slate-600"
-          style={{ width: `${neutralPct}%` }}
-          title={`Trung lập: ${neutralPct.toFixed(1)}%`}
+          style={{ width: width(neutral), background: "var(--neu)", transition: "width .6s ease" }}
+          title={`Trung lập: ${neutral.toFixed(1)}%`}
         />
       )}
-      {negativePct > 0 && (
+      {negative > 0 && (
         <div
-          className="bg-rose-500"
-          style={{ width: `${negativePct}%` }}
-          title={`Tiêu cực: ${negativePct.toFixed(1)}%`}
+          style={{ width: width(negative), background: "var(--neg)", transition: "width .6s ease" }}
+          title={`Tiêu cực: ${negative.toFixed(1)}%`}
         />
       )}
     </div>

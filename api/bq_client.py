@@ -15,7 +15,6 @@ CATEGORY_SLUG_MAP = {
     "dien_thoai": "Điện thoại",
     "laptop": "Laptop",
     "tai_nghe": "Tai nghe",
-    "smarthome": "Smarthome",
 }
 
 

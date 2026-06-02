@@ -77,7 +77,18 @@ export interface AttributionData {
   events: CausalEventSummary[];
 }
 
+export interface ProductComment {
+  comment_id: string;
+  author: string;
+  text: string;
+  aspect_label: string;
+  sentiment_label: "POSITIVE" | "NEGATIVE" | "NEUTRAL";
+  confidence_score: number;
+  published_at: string | null;
+}
+
 export interface SearchResultItem {
+  rank: number;
   product_id: string;
   product_name: string;
   brand: string;
@@ -85,6 +96,8 @@ export interface SearchResultItem {
   bayesian_score: number;
   controversy_label: string;
   total_mentions: number;
+  positive_pct: number;
+  negative_pct: number;
 }
 
 export interface SearchResponse {
@@ -134,6 +147,11 @@ export interface QuickStat {
   active_keywords: number;
 }
 
+export interface DailyMentionStat {
+  mention_date: string;
+  mention_count: number;
+}
+
 export interface AttentionItem {
   level: "warning" | "info";
   message: string;
@@ -142,6 +160,7 @@ export interface AttentionItem {
 export interface AdminDashboardData {
   pipeline_status: PipelineStatus;
   quick_stats: QuickStat;
+  mention_series: DailyMentionStat[];
   recent_dag_runs: DagRunSummary[];
   attention_items: AttentionItem[];
   as_of_date: string;

@@ -18,6 +18,7 @@ from api.schemas.response_schemas import (
     CausalEventSummary,
     ProductDetailResponse,
     ProductDetails,
+    ProductCommentItem,
     ProductSpecTemplateItem,
     TopProduct,
 )
@@ -324,4 +325,59 @@ def get_product_attribution(product_id: str, response: Response):
         events=events,
     )
     set_cached(cache_key, result.model_dump(mode="json"), _CACHE_TTL)
+    return result
+
+
+@router.get("/{product_id}/comments", response_model=list[ProductCommentItem])
+def get_product_comments(product_id: str, response: Response, limit: int = 30):
+    cache_key = _cache_key(f"{product_id}/comments/{limit}")
+    cached = get_cached(cache_key)
+    if cached is not None:
+        response.headers["X-Cache"] = "HIT"
+        return cached
+
+    response.headers["X-Cache"] = "MISS"
+    settings = get_settings()
+    rows = query_to_list(
+        f"""
+        SELECT
+            f.comment_id,
+            COALESCE(c.author_display_name, 'Người dùng YouTube') AS author,
+            s.sentence_text AS text,
+            f.aspect_label,
+            UPPER(f.sentiment_label) AS sentiment_label,
+            f.confidence_score,
+            s.published_at
+        FROM `{settings.gcp_project_id}.{settings.bq_marts_dataset}.fact_product_mentions` f
+        JOIN `{settings.gcp_project_id}.{settings.bq_dataset}_intermediate.int_comment_sentences` s
+          ON f.sentence_id = s.sentence_id
+        LEFT JOIN `{settings.gcp_project_id}.{settings.bq_dataset}_staging.stg_youtube_comments` c
+          ON f.comment_id = c.comment_id
+        WHERE f.product_id = @product_id
+          AND f.aspect_label != 'NONE'
+        QUALIFY ROW_NUMBER() OVER (
+            PARTITION BY f.sentence_id, f.aspect_label
+            ORDER BY f.confidence_score DESC
+        ) = 1
+        ORDER BY s.published_at DESC, f.confidence_score DESC
+        LIMIT @limit
+        """,
+        [
+            bigquery.ScalarQueryParameter("product_id", "STRING", product_id),
+            bigquery.ScalarQueryParameter("limit", "INT64", min(max(limit, 1), 100)),
+        ],
+    )
+    result = [
+        ProductCommentItem(
+            comment_id=row["comment_id"],
+            author=row["author"],
+            text=row["text"],
+            aspect_label=row["aspect_label"],
+            sentiment_label=row["sentiment_label"],
+            confidence_score=round(float(row["confidence_score"] or 0), 4),
+            published_at=row.get("published_at"),
+        )
+        for row in rows
+    ]
+    set_cached(cache_key, [item.model_dump(mode="json") for item in result], _CACHE_TTL)
     return result

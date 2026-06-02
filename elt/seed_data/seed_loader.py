@@ -21,13 +21,8 @@ load_dotenv()
 _PROJECT_ID = os.environ["GCP_PROJECT_ID"]
 _DATASET = os.environ["BQ_DATASET"]
 _YOUTUBE_API_KEY = os.environ["YOUTUBE_API_KEY"]
-_GEMINI_API_KEY = os.environ["GEMINI_API_KEY"]
 
 _YOUTUBE_CHANNELS_URL = "https://www.googleapis.com/youtube/v3/channels"
-_GEMINI_URL = (
-    "https://generativelanguage.googleapis.com/v1beta/models/"
-    "gemini-2.5-flash:generateContent"
-)
 
 _CSV_DIR = Path(__file__).parent
 _SEED_CHANNELS_CSV = _CSV_DIR / "seed_channels.csv"

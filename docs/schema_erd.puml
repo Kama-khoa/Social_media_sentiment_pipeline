@@ -1,0 +1,333 @@
+@startuml
+' Default colors
+skinparam defaultFontName Arial
+skinparam roundcorner 5
+
+' LAYER 0: CONFIG TABLES
+package "Layer 0: Config" {
+  entity "channel_config" as channel_config {
+    * channel_id : STRING
+    --
+    channel_name : STRING
+    channel_url : STRING
+    channel_handle : STRING
+    subscriber_count : INT64
+    is_active : BOOL
+    is_historically_scanned : BOOL
+    historical_scan_completed_at : TIMESTAMP
+    created_at : TIMESTAMP
+    last_updated_at : TIMESTAMP
+  }
+
+  entity "keyword_config" as keyword_config {
+    * keyword_id : STRING
+    --
+    keyword_text : STRING
+    search_cluster : STRING
+    is_active : BOOL
+    created_at : TIMESTAMP
+  }
+
+  entity "product_config" as product_config {
+    * product_id : STRING
+    --
+    product_name : STRING
+    brand : STRING
+    category : STRING
+    release_year : INT64
+    is_active : BOOL
+    created_at : TIMESTAMP
+    updated_at : TIMESTAMP
+  }
+
+  entity "product_aliases" as product_aliases {
+    * alias_id : STRING
+    --
+    product_id : STRING <<FK>>
+    alias_text : STRING
+    alias_type : STRING
+    is_active : BOOL
+    created_at : TIMESTAMP
+  }
+
+  entity "product_details" as product_details {
+    * product_id : STRING <<FK>>
+    --
+    specs : JSON
+    description : STRING
+    official_url : STRING
+    image_url : STRING
+    updated_at : TIMESTAMP
+    updated_by : STRING
+  }
+  
+  entity "video_crawl_state" as video_crawl_state {
+    * video_id : STRING <<FK>>
+    --
+    channel_id : STRING <<FK>>
+    keyword_id : STRING <<FK>>
+    search_mode : STRING
+    published_at : TIMESTAMP
+    maturity_stage : STRING
+    comment_count : INT64
+    total_comments_crawled : INT64
+    is_comment_complete : BOOL
+    crawl_status : STRING
+    updated_at : TIMESTAMP
+  }
+}
+
+' LAYER 1: RAW TABLES
+package "Layer 1: Raw" {
+  entity "raw_videos" as raw_videos {
+    * video_id : STRING
+    --
+    channel_id : STRING <<FK>>
+    title : STRING
+    description : STRING
+    view_count : INT64
+    like_count : INT64
+    comment_count : INT64
+    duration_seconds : INT64
+    tags : STRING[]
+    thumbnail_url : STRING
+    published_at : TIMESTAMP
+    search_mode : STRING
+    keyword_matched : STRING
+    gcs_partition_date : STRING
+    crawled_at : TIMESTAMP
+  }
+
+  entity "raw_comments" as raw_comments {
+    * comment_id : STRING
+    --
+    video_id : STRING <<FK>>
+    channel_id : STRING <<FK>>
+    parent_comment_id : STRING
+    author_channel_id : STRING
+    author_display_name : STRING
+    text_original : STRING
+    text_display : STRING
+    like_count : INT64
+    reply_count : INT64
+    is_reply : BOOL
+    crawl_type : STRING
+    published_at : TIMESTAMP
+    updated_at : TIMESTAMP
+    crawled_at : TIMESTAMP
+    gcs_partition_date : STRING
+  }
+
+  entity "raw_sentiment_results" as raw_sentiment_results {
+    * result_id : STRING
+    --
+    sentence_id : STRING
+    comment_id : STRING <<FK>>
+    video_id : STRING <<FK>>
+    aspect_label : STRING
+    segment_text : STRING
+    sentiment_label : STRING
+    confidence_score : FLOAT64
+    inference_model : STRING
+    dag_run_id : STRING
+    processed_at : TIMESTAMP
+  }
+}
+
+' LAYER 2: STAGING TABLES
+package "Layer 2: Staging" {
+  entity "stg_youtube_videos" as stg_youtube_videos {
+    * video_id : STRING
+    --
+    channel_id : STRING <<FK>>
+    title : STRING
+    description : STRING
+    keyword_matched : STRING
+    view_count : INT64
+    like_count : INT64
+    comment_count : INT64
+    data_quality_score : FLOAT64
+    published_at : TIMESTAMP
+  }
+
+  entity "stg_youtube_comments" as stg_youtube_comments {
+    * comment_id : STRING
+    --
+    video_id : STRING <<FK>>
+    channel_id : STRING
+    parent_comment_id : STRING
+    author_channel_id : STRING
+    text_original : STRING
+    like_count : INT64
+    reply_count : INT64
+    is_reply : BOOL
+    data_quality_score : FLOAT64
+    published_at : TIMESTAMP
+  }
+}
+
+' LAYER 3: INTERMEDIATE TABLES
+package "Layer 3: Intermediate" {
+  entity "int_comment_sentences" as int_comment_sentences {
+    * sentence_id : STRING
+    --
+    comment_id : STRING <<FK>>
+    video_id : STRING <<FK>>
+    channel_id : STRING <<FK>>
+    sentence_index : INT64
+    sentence_text : STRING
+    sentence_text_normalized : STRING
+    is_vietnamese : BOOL
+    word_count : INT64
+    data_quality_score : FLOAT64
+    published_at : TIMESTAMP
+    _dbt_processed_at : TIMESTAMP
+  }
+
+  entity "int_sentiment_results" as int_sentiment_results {
+    * result_id : STRING
+    --
+    sentence_id : STRING <<FK>>
+    comment_id : STRING <<FK>>
+    video_id : STRING <<FK>>
+    aspect_label : STRING
+    segment_text : STRING
+    sentiment_label : STRING
+    confidence_score : FLOAT64
+    inference_model : STRING
+    dag_run_id : STRING
+    processed_at : TIMESTAMP
+  }
+
+  entity "finetune_dataset" as finetune_dataset {
+    * sample_id : STRING
+    --
+    sentence_id : STRING <<FK>>
+    sentence_text : STRING
+    tokens_json : STRING
+    bio_tags_json : STRING
+    aspect_labels_json : STRING
+    sentiment_label : STRING
+    annotation_source : STRING
+    split : STRING
+    is_validated : BOOL
+    annotated_at : TIMESTAMP
+  }
+
+  entity "int_video_product_mentions" as int_video_product_mentions {
+    * video_id : STRING <<FK>>
+    * product_id : STRING <<FK>>
+    --
+    role : STRING
+    match_source : STRING
+    confidence_score : FLOAT64
+    _dbt_processed_at : TIMESTAMP
+  }
+
+  entity "int_sentence_product_targets" as int_sentence_product_targets {
+    * sentence_id : STRING <<FK>>
+    --
+    video_id : STRING <<FK>>
+    product_id : STRING <<FK>>
+    target_source : STRING
+    target_confidence : FLOAT64
+    target_sentiment_label : STRING
+    resolution_status : STRING
+    _dbt_processed_at : TIMESTAMP
+  }
+
+  entity "int_product_resolution_candidates" as int_product_resolution_candidates {
+    * candidate_id : STRING
+    --
+    source_type : STRING
+    source_id : STRING
+    candidate_text : STRING
+    status : STRING
+    resolved_product_id : STRING <<FK>>
+    created_at : TIMESTAMP
+  }
+}
+
+' LAYER 4: MARTS TABLES
+package "Layer 4: Marts" {
+  entity "dim_products" as dim_products {
+    * product_id : STRING
+    --
+    product_name : STRING
+    brand : STRING
+    category : STRING
+    release_year : INT64
+    is_active : BOOL
+    created_at : TIMESTAMP
+  }
+
+  entity "fact_product_mentions" as fact_product_mentions {
+    * mention_id : STRING
+    --
+    product_id : STRING <<FK>>
+    video_id : STRING <<FK>>
+    channel_id : STRING <<FK>>
+    comment_id : STRING <<FK>>
+    sentence_id : STRING <<FK>>
+    aspect_label : STRING
+    sentiment_label : STRING
+    confidence_score : FLOAT64
+    mention_date : DATE
+  }
+
+  entity "agg_daily_product_ranking" as agg_daily_product_ranking {
+    * ranking_id : STRING
+    --
+    product_id : STRING <<FK>>
+    ranking_date : DATE
+    category : STRING
+    bayesian_score : FLOAT64
+    controversy_index : FLOAT64
+    controversy_label : STRING
+    total_mentions : INT64
+    positive_count : INT64
+    negative_count : INT64
+    neutral_count : INT64
+    rank_position : INT64
+  }
+
+  entity "causal_events" as causal_events {
+    * event_id : STRING
+    --
+    product_id : STRING <<FK>>
+    change_point_date : DATE
+    event_video_id : STRING <<FK>>
+    temporal_proximity : FLOAT64
+    attribution_score : FLOAT64
+    sentiment_direction : STRING
+    explanation_text : STRING
+  }
+}
+
+' Relationships
+product_config ||--o{ product_aliases : "1:N"
+product_config ||--o| product_details : "1:1"
+
+channel_config ||--o{ raw_videos : "1:N"
+channel_config ||--o{ stg_youtube_videos : "1:N"
+raw_videos ||--o{ raw_comments : "1:N"
+stg_youtube_videos ||--o{ stg_youtube_comments : "1:N"
+stg_youtube_videos ||--o| video_crawl_state : "1:1"
+
+keyword_config ||--o{ video_crawl_state : "1:N"
+
+raw_videos ||--o{ int_comment_sentences : "1:N"
+raw_comments ||--o{ int_comment_sentences : "1:N"
+int_comment_sentences ||--o| finetune_dataset : "1:1"
+int_comment_sentences ||--o{ int_sentiment_results : "1:N"
+int_comment_sentences ||--o{ int_sentence_product_targets : "1:N"
+
+dim_products ||--o{ fact_product_mentions : "1:N"
+dim_products ||--o{ int_video_product_mentions : "1:N"
+stg_youtube_videos ||--o{ fact_product_mentions : "1:N"
+stg_youtube_comments ||--o{ fact_product_mentions : "1:N"
+
+dim_products ||--o{ agg_daily_product_ranking : "1:N"
+dim_products ||--o{ causal_events : "1:N"
+
+@enduml

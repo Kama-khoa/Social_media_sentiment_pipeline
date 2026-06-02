@@ -87,7 +87,18 @@ class AttributionResponse(BaseModel):
     events: list["CausalEventSummary"]
 
 
+class ProductCommentItem(BaseModel):
+    comment_id: str
+    author: str
+    text: str
+    aspect_label: str
+    sentiment_label: Literal["POSITIVE", "NEGATIVE", "NEUTRAL"]
+    confidence_score: float
+    published_at: Optional[datetime]
+
+
 class SearchResultItem(BaseModel):
+    rank: int
     product_id: str
     product_name: str
     brand: str
@@ -95,6 +106,8 @@ class SearchResultItem(BaseModel):
     bayesian_score: float
     controversy_label: str
     total_mentions: int
+    positive_pct: float
+    negative_pct: float
 
 
 class SearchResponse(BaseModel):
@@ -241,6 +254,11 @@ class QuickStat(BaseModel):
     active_keywords: int
 
 
+class DailyMentionStat(BaseModel):
+    mention_date: date
+    mention_count: int
+
+
 class AttentionItem(BaseModel):
     level: Literal["warning", "info"]
     message: str
@@ -249,6 +267,7 @@ class AttentionItem(BaseModel):
 class AdminDashboardResponse(BaseModel):
     pipeline_status: PipelineStatus
     quick_stats: QuickStat
+    mention_series: list[DailyMentionStat]
     recent_dag_runs: list[DagRunSummary]
     attention_items: list[AttentionItem]
     as_of_date: date

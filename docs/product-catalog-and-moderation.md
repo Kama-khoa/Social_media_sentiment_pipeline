@@ -128,13 +128,10 @@ catalog khỏi dữ liệu sai, spam và thay đổi không có audit.
 conda activate etl-py313
 python schema/migrate_product_catalog.py
 
-cd transform
-dbt run --profiles-dir . --full-refresh
-dbt test --profiles-dir .
+python scripts/dbt/dbt_runner.py run --profiles-dir . --full-refresh
+python scripts/dbt/dbt_runner.py test --profiles-dir .
 
-cd ..
-python -m nlp.product_target_resolver --limit 100
+python -m nlp.product_target_resolver --limit 100 --batch-size 10
 
-cd transform
-dbt run --profiles-dir . --select int_video_product_mentions int_sentence_product_targets fact_product_mentions agg_daily_product_ranking
+python scripts/dbt/dbt_runner.py run --profiles-dir . --select int_video_product_mentions int_sentence_product_targets fact_product_mentions agg_daily_product_ranking
 ```

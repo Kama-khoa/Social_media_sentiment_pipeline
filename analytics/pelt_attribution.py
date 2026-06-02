@@ -16,6 +16,7 @@ import pandas as pd
 import ruptures as rpt
 
 from elt.config import load_config
+from nlp.gemini_gateway import GeminiGateway
 from pipeline_progress import progress_bar
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)-7s | %(name)s | %(message)s")
@@ -34,12 +35,22 @@ class PELTAttribution:
         self.marts_dataset = f"{self.dataset}_marts"
         self.bq_client = bq_client or bigquery.Client(project=self.project_id)
         self._genai_client = genai_client
+        self._gemini_gateway = None
 
     @property
     def genai_client(self):
         if self._genai_client is None:
             self._genai_client = genai.Client(api_key=self.config.gemini_api_key)
         return self._genai_client
+
+    @property
+    def gemini_gateway(self):
+        if self._gemini_gateway is None:
+            self._gemini_gateway = GeminiGateway(
+                api_key=self.config.gemini_api_key,
+                client=self.genai_client,
+            )
+        return self._gemini_gateway
 
     def fetch_sentiment_timeseries(self) -> pd.DataFrame:
         query = f"""
@@ -290,8 +301,7 @@ class PELTAttribution:
         Dùng ngôn ngữ dè dặt như "có thể", "tương quan", "được ghi nhận", "cho thấy".
         """
         try:
-            response = self.genai_client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
-            return response.text.strip()
+            return self.gemini_gateway.generate(prompt).strip()
         except Exception as exc:
             logger.error("Error calling Gemini: %s", exc)
             return f"Biến động cảm xúc {direction_vi} có thể tương quan với video review '{video['title']}'."
@@ -314,7 +324,11 @@ class PELTAttribution:
             "attribution_score": float(video["attribution_score"]),
             "sentiment_direction": direction,
             "explanation_text": explanation,
-            "generated_by": "gemini-2.5-flash",
+            "generated_by": (
+                self._gemini_gateway.last_model
+                if self._gemini_gateway and self._gemini_gateway.last_model
+                else "gemini"
+            ),
             "detected_at": datetime.now(timezone.utc).isoformat(),
         }
         table_id = f"{self.project_id}.{self.marts_dataset}.causal_events"

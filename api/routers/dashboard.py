@@ -13,6 +13,7 @@ from api.schemas.response_schemas import (
     AttentionItem,
     CategoryStat,
     CausalEventSummary,
+    DailyMentionStat,
     DagRunSummary,
     PipelineStatus,
     QuickStat,
@@ -27,7 +28,6 @@ _CATEGORY_SLUG = {
     "Điện thoại": "dien_thoai",
     "Laptop": "laptop",
     "Tai nghe": "tai_nghe",
-    "Smarthome": "smarthome",
 }
 
 _DAG_IDS = ["youtube_daily_extraction_dag", "sentiment_analysis_dag", "analytics_dag"]
@@ -202,6 +202,27 @@ def _get_quota_today(project: str, dataset: str) -> tuple[int, int]:
     return 0, 10000
 
 
+def _get_mention_series(project: str, marts: str) -> list[DailyMentionStat]:
+    try:
+        rows = query_to_list(f"""
+            SELECT mention_date, COUNT(*) AS mention_count
+            FROM `{project}.{marts}.fact_product_mentions`
+            WHERE mention_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 14 DAY)
+            GROUP BY mention_date
+            ORDER BY mention_date
+        """)
+        return [
+            DailyMentionStat(
+                mention_date=row["mention_date"],
+                mention_count=int(row["mention_count"] or 0),
+            )
+            for row in rows
+        ]
+    except Exception:
+        logger.warning("Could not fetch mention series from BQ")
+        return []
+
+
 def _get_last_nlp_run(project: str, dataset: str) -> str | None:
     try:
         rows = query_to_list(f"""
@@ -301,6 +322,7 @@ async def admin_dashboard(current_user: AppUser = Depends(require_admin)):
     quota_used, quota_limit = _get_quota_today(project, dataset)
     last_nlp_run_id = _get_last_nlp_run(project, dataset)
     quick_stats = _get_quick_stats(project, dataset, marts)
+    mention_series = _get_mention_series(project, marts)
     attention_items = _build_attention_items(project, dataset, marts)
 
     pipeline_status = PipelineStatus(
@@ -315,6 +337,7 @@ async def admin_dashboard(current_user: AppUser = Depends(require_admin)):
     return AdminDashboardResponse(
         pipeline_status=pipeline_status,
         quick_stats=quick_stats,
+        mention_series=mention_series,
         recent_dag_runs=dag_runs,
         attention_items=attention_items,
         as_of_date=date.today(),

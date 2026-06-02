@@ -14,7 +14,7 @@ interface AuthContextValue {
   user: AuthUser | null;
   token: string | null;
   isLoading: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<AuthUser>;
   logout: () => void;
 }
 
@@ -47,7 +47,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     sessionStorage.setItem("access_token", res.access_token);
     setToken(res.access_token);
     const me = await api.auth.me();
-    setUser({ id: me.id, email: me.email, display_name: me.display_name, role: me.role as "user" | "admin" });
+    const userObj = { id: me.id, email: me.email, display_name: me.display_name, role: me.role as "user" | "admin" };
+    setUser(userObj);
+    return userObj;
   }, []);
 
   const logout = useCallback(() => {

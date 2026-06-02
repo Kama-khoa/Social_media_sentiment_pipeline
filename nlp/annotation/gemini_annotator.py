@@ -26,13 +26,16 @@ logger = logging.getLogger(__name__)
 # Verify your actual limits at: https://aistudio.google.com/rate-limit
 _FREE_TIER_LIMITS: dict[str, dict[str, int]] = {
     "gemini-3.1-flash-lite": {"rpm": 15,  "rpd": 500, "tpm": 250000},
+    "gemini-3.5-flash": {"rpm": 5,  "rpd": 20, "tpm": 250000},
     "gemini-3-flash": {"rpm": 5,  "rpd": 20, "tpm": 250000},
     "gemini-2.5-flash-lite": {"rpm": 10,  "rpd": 20,  "tpm":   250000},
     "gemini-2.5-flash":      {"rpm": 5,  "rpd": 20, "tpm": 250000},
+    "Gemma 4 26B": {"rpm": 15, "rpd": 1500, "tpm": 250000},
+    "Gemma 4 31B": {"rpm": 15, "rpd": 1500, "tpm": 250000},
 }
 
 # Sử dụng 75% RPM limit để có buffer cho drift thời gian
-_SAFETY_FACTOR = 0.75
+_SAFETY_FACTOR = 0.95
 
 # Sau khi nhận 429, block model này trong 70s trước khi thử lại
 _COOLDOWN_AFTER_429: float = 70.0
@@ -102,9 +105,12 @@ class _DailyBudget:
 class GeminiAnnotator:
     _MODELS_TO_TRY = [
         "gemini-3.1-flash-lite",  # 15 RPM, 500 RPD — ưu tiên cao nhất
+        "gemini-3.5-flash",       # 5 RPM, 20 RPD
         "gemini-3-flash",       # 5 RPM, 20 RPD
         "gemini-2.5-flash",       # 5 RPM, 20 RPD
         "gemini-2.5-flash-lite",       # 10 RPM, 20 RPD
+        "Gemma 4 26B", # 15 RPM, 1500 RPD
+        "Gemma 4 31B", # 15 RPM, 1500 RPD
     ]
 
     _VALID_ASPECTS = set(ASPECT_LABELS + ["NONE"])

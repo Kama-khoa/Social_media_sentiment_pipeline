@@ -1,0 +1,127 @@
+<?xml version="1.0" ?>
+<mxGraphModel>
+  <root>
+    <mxCell id="0"/>
+    <mxCell id="1" parent="0"/>
+    <mxCell id="channel_config" value="&lt;b&gt;channel_config&lt;/b&gt;&lt;hr&gt;* channel_id : STRING&lt;br&gt;channel_name : STRING&lt;br&gt;channel_url : STRING&lt;br&gt;channel_handle : STRING&lt;br&gt;subscriber_count : INT64&lt;br&gt;is_active : BOOL&lt;br&gt;is_historically_scanned : BOOL&lt;br&gt;historical_scan_completed_at : TIMESTAMP&lt;br&gt;created_at : TIMESTAMP&lt;br&gt;last_updated_at : TIMESTAMP" style="rounded=1;whiteSpace=wrap;html=1;align=left;spacingLeft=10;verticalAlign=top;spacingTop=5;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+      <mxGeometry x="50" y="50" width="250" height="190" as="geometry"/>
+    </mxCell>
+    <mxCell id="keyword_config" value="&lt;b&gt;keyword_config&lt;/b&gt;&lt;hr&gt;* keyword_id : STRING&lt;br&gt;keyword_text : STRING&lt;br&gt;search_cluster : STRING&lt;br&gt;is_active : BOOL&lt;br&gt;created_at : TIMESTAMP" style="rounded=1;whiteSpace=wrap;html=1;align=left;spacingLeft=10;verticalAlign=top;spacingTop=5;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+      <mxGeometry x="350" y="50" width="250" height="115" as="geometry"/>
+    </mxCell>
+    <mxCell id="product_config" value="&lt;b&gt;product_config&lt;/b&gt;&lt;hr&gt;* product_id : STRING&lt;br&gt;product_name : STRING&lt;br&gt;brand : STRING&lt;br&gt;category : STRING&lt;br&gt;release_year : INT64&lt;br&gt;is_active : BOOL&lt;br&gt;created_at : TIMESTAMP&lt;br&gt;updated_at : TIMESTAMP" style="rounded=1;whiteSpace=wrap;html=1;align=left;spacingLeft=10;verticalAlign=top;spacingTop=5;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+      <mxGeometry x="650" y="50" width="250" height="160" as="geometry"/>
+    </mxCell>
+    <mxCell id="product_aliases" value="&lt;b&gt;product_aliases&lt;/b&gt;&lt;hr&gt;* alias_id : STRING&lt;br&gt;product_id : STRING &lt;&lt;FK&gt;&gt;&lt;br&gt;alias_text : STRING&lt;br&gt;alias_type : STRING&lt;br&gt;is_active : BOOL&lt;br&gt;created_at : TIMESTAMP" style="rounded=1;whiteSpace=wrap;html=1;align=left;spacingLeft=10;verticalAlign=top;spacingTop=5;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+      <mxGeometry x="950" y="50" width="250" height="130" as="geometry"/>
+    </mxCell>
+    <mxCell id="product_details" value="&lt;b&gt;product_details&lt;/b&gt;&lt;hr&gt;* product_id : STRING &lt;&lt;FK&gt;&gt;&lt;br&gt;specs : JSON&lt;br&gt;description : STRING&lt;br&gt;official_url : STRING&lt;br&gt;image_url : STRING&lt;br&gt;updated_at : TIMESTAMP&lt;br&gt;updated_by : STRING" style="rounded=1;whiteSpace=wrap;html=1;align=left;spacingLeft=10;verticalAlign=top;spacingTop=5;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+      <mxGeometry x="1250" y="50" width="250" height="145" as="geometry"/>
+    </mxCell>
+    <mxCell id="video_crawl_state" value="&lt;b&gt;video_crawl_state&lt;/b&gt;&lt;hr&gt;* video_id : STRING &lt;&lt;FK&gt;&gt;&lt;br&gt;channel_id : STRING &lt;&lt;FK&gt;&gt;&lt;br&gt;keyword_id : STRING &lt;&lt;FK&gt;&gt;&lt;br&gt;search_mode : STRING&lt;br&gt;published_at : TIMESTAMP&lt;br&gt;maturity_stage : STRING&lt;br&gt;comment_count : INT64&lt;br&gt;total_comments_crawled : INT64&lt;br&gt;is_comment_complete : BOOL&lt;br&gt;crawl_status : STRING&lt;br&gt;updated_at : TIMESTAMP" style="rounded=1;whiteSpace=wrap;html=1;align=left;spacingLeft=10;verticalAlign=top;spacingTop=5;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+      <mxGeometry x="50" y="450" width="250" height="205" as="geometry"/>
+    </mxCell>
+    <mxCell id="raw_videos" value="&lt;b&gt;raw_videos&lt;/b&gt;&lt;hr&gt;* video_id : STRING&lt;br&gt;channel_id : STRING &lt;&lt;FK&gt;&gt;&lt;br&gt;title : STRING&lt;br&gt;description : STRING&lt;br&gt;view_count : INT64&lt;br&gt;like_count : INT64&lt;br&gt;comment_count : INT64&lt;br&gt;duration_seconds : INT64&lt;br&gt;tags : STRING[]&lt;br&gt;thumbnail_url : STRING&lt;br&gt;published_at : TIMESTAMP&lt;br&gt;search_mode : STRING&lt;br&gt;keyword_matched : STRING&lt;br&gt;gcs_partition_date : STRING&lt;br&gt;crawled_at : TIMESTAMP" style="rounded=1;whiteSpace=wrap;html=1;align=left;spacingLeft=10;verticalAlign=top;spacingTop=5;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+      <mxGeometry x="350" y="450" width="250" height="265" as="geometry"/>
+    </mxCell>
+    <mxCell id="raw_comments" value="&lt;b&gt;raw_comments&lt;/b&gt;&lt;hr&gt;* comment_id : STRING&lt;br&gt;video_id : STRING &lt;&lt;FK&gt;&gt;&lt;br&gt;channel_id : STRING &lt;&lt;FK&gt;&gt;&lt;br&gt;parent_comment_id : STRING&lt;br&gt;author_channel_id : STRING&lt;br&gt;author_display_name : STRING&lt;br&gt;text_original : STRING&lt;br&gt;text_display : STRING&lt;br&gt;like_count : INT64&lt;br&gt;reply_count : INT64&lt;br&gt;is_reply : BOOL&lt;br&gt;crawl_type : STRING&lt;br&gt;published_at : TIMESTAMP&lt;br&gt;updated_at : TIMESTAMP&lt;br&gt;crawled_at : TIMESTAMP&lt;br&gt;gcs_partition_date : STRING" style="rounded=1;whiteSpace=wrap;html=1;align=left;spacingLeft=10;verticalAlign=top;spacingTop=5;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+      <mxGeometry x="650" y="450" width="250" height="280" as="geometry"/>
+    </mxCell>
+    <mxCell id="raw_sentiment_results" value="&lt;b&gt;raw_sentiment_results&lt;/b&gt;&lt;hr&gt;* result_id : STRING&lt;br&gt;sentence_id : STRING&lt;br&gt;comment_id : STRING &lt;&lt;FK&gt;&gt;&lt;br&gt;video_id : STRING &lt;&lt;FK&gt;&gt;&lt;br&gt;aspect_label : STRING&lt;br&gt;segment_text : STRING&lt;br&gt;sentiment_label : STRING&lt;br&gt;confidence_score : FLOAT64&lt;br&gt;inference_model : STRING&lt;br&gt;dag_run_id : STRING&lt;br&gt;processed_at : TIMESTAMP" style="rounded=1;whiteSpace=wrap;html=1;align=left;spacingLeft=10;verticalAlign=top;spacingTop=5;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+      <mxGeometry x="950" y="450" width="250" height="205" as="geometry"/>
+    </mxCell>
+    <mxCell id="stg_youtube_videos" value="&lt;b&gt;stg_youtube_videos&lt;/b&gt;&lt;hr&gt;* video_id : STRING&lt;br&gt;channel_id : STRING &lt;&lt;FK&gt;&gt;&lt;br&gt;title : STRING&lt;br&gt;description : STRING&lt;br&gt;keyword_matched : STRING&lt;br&gt;view_count : INT64&lt;br&gt;like_count : INT64&lt;br&gt;comment_count : INT64&lt;br&gt;data_quality_score : FLOAT64&lt;br&gt;published_at : TIMESTAMP" style="rounded=1;whiteSpace=wrap;html=1;align=left;spacingLeft=10;verticalAlign=top;spacingTop=5;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+      <mxGeometry x="1250" y="450" width="250" height="190" as="geometry"/>
+    </mxCell>
+    <mxCell id="stg_youtube_comments" value="&lt;b&gt;stg_youtube_comments&lt;/b&gt;&lt;hr&gt;* comment_id : STRING&lt;br&gt;video_id : STRING &lt;&lt;FK&gt;&gt;&lt;br&gt;channel_id : STRING&lt;br&gt;parent_comment_id : STRING&lt;br&gt;author_channel_id : STRING&lt;br&gt;text_original : STRING&lt;br&gt;like_count : INT64&lt;br&gt;reply_count : INT64&lt;br&gt;is_reply : BOOL&lt;br&gt;data_quality_score : FLOAT64&lt;br&gt;published_at : TIMESTAMP" style="rounded=1;whiteSpace=wrap;html=1;align=left;spacingLeft=10;verticalAlign=top;spacingTop=5;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+      <mxGeometry x="50" y="850" width="250" height="205" as="geometry"/>
+    </mxCell>
+    <mxCell id="int_comment_sentences" value="&lt;b&gt;int_comment_sentences&lt;/b&gt;&lt;hr&gt;* sentence_id : STRING&lt;br&gt;comment_id : STRING &lt;&lt;FK&gt;&gt;&lt;br&gt;video_id : STRING &lt;&lt;FK&gt;&gt;&lt;br&gt;channel_id : STRING &lt;&lt;FK&gt;&gt;&lt;br&gt;sentence_index : INT64&lt;br&gt;sentence_text : STRING&lt;br&gt;sentence_text_normalized : STRING&lt;br&gt;is_vietnamese : BOOL&lt;br&gt;word_count : INT64&lt;br&gt;data_quality_score : FLOAT64&lt;br&gt;published_at : TIMESTAMP&lt;br&gt;_dbt_processed_at : TIMESTAMP" style="rounded=1;whiteSpace=wrap;html=1;align=left;spacingLeft=10;verticalAlign=top;spacingTop=5;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+      <mxGeometry x="350" y="850" width="250" height="220" as="geometry"/>
+    </mxCell>
+    <mxCell id="int_sentiment_results" value="&lt;b&gt;int_sentiment_results&lt;/b&gt;&lt;hr&gt;* result_id : STRING&lt;br&gt;sentence_id : STRING &lt;&lt;FK&gt;&gt;&lt;br&gt;comment_id : STRING &lt;&lt;FK&gt;&gt;&lt;br&gt;video_id : STRING &lt;&lt;FK&gt;&gt;&lt;br&gt;aspect_label : STRING&lt;br&gt;segment_text : STRING&lt;br&gt;sentiment_label : STRING&lt;br&gt;confidence_score : FLOAT64&lt;br&gt;inference_model : STRING&lt;br&gt;dag_run_id : STRING&lt;br&gt;processed_at : TIMESTAMP" style="rounded=1;whiteSpace=wrap;html=1;align=left;spacingLeft=10;verticalAlign=top;spacingTop=5;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+      <mxGeometry x="650" y="850" width="250" height="205" as="geometry"/>
+    </mxCell>
+    <mxCell id="finetune_dataset" value="&lt;b&gt;finetune_dataset&lt;/b&gt;&lt;hr&gt;* sample_id : STRING&lt;br&gt;sentence_id : STRING &lt;&lt;FK&gt;&gt;&lt;br&gt;sentence_text : STRING&lt;br&gt;tokens_json : STRING&lt;br&gt;bio_tags_json : STRING&lt;br&gt;aspect_labels_json : STRING&lt;br&gt;sentiment_label : STRING&lt;br&gt;annotation_source : STRING&lt;br&gt;split : STRING&lt;br&gt;is_validated : BOOL&lt;br&gt;annotated_at : TIMESTAMP" style="rounded=1;whiteSpace=wrap;html=1;align=left;spacingLeft=10;verticalAlign=top;spacingTop=5;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+      <mxGeometry x="950" y="850" width="250" height="205" as="geometry"/>
+    </mxCell>
+    <mxCell id="int_video_product_mentions" value="&lt;b&gt;int_video_product_mentions&lt;/b&gt;&lt;hr&gt;* video_id : STRING &lt;&lt;FK&gt;&gt;&lt;br&gt;* product_id : STRING &lt;&lt;FK&gt;&gt;&lt;br&gt;role : STRING&lt;br&gt;match_source : STRING&lt;br&gt;confidence_score : FLOAT64&lt;br&gt;_dbt_processed_at : TIMESTAMP" style="rounded=1;whiteSpace=wrap;html=1;align=left;spacingLeft=10;verticalAlign=top;spacingTop=5;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+      <mxGeometry x="1250" y="850" width="250" height="130" as="geometry"/>
+    </mxCell>
+    <mxCell id="int_sentence_product_targets" value="&lt;b&gt;int_sentence_product_targets&lt;/b&gt;&lt;hr&gt;* sentence_id : STRING &lt;&lt;FK&gt;&gt;&lt;br&gt;video_id : STRING &lt;&lt;FK&gt;&gt;&lt;br&gt;product_id : STRING &lt;&lt;FK&gt;&gt;&lt;br&gt;target_source : STRING&lt;br&gt;target_confidence : FLOAT64&lt;br&gt;target_sentiment_label : STRING&lt;br&gt;resolution_status : STRING&lt;br&gt;_dbt_processed_at : TIMESTAMP" style="rounded=1;whiteSpace=wrap;html=1;align=left;spacingLeft=10;verticalAlign=top;spacingTop=5;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+      <mxGeometry x="50" y="1250" width="250" height="160" as="geometry"/>
+    </mxCell>
+    <mxCell id="int_product_resolution_candidates" value="&lt;b&gt;int_product_resolution_candidates&lt;/b&gt;&lt;hr&gt;* candidate_id : STRING&lt;br&gt;source_type : STRING&lt;br&gt;source_id : STRING&lt;br&gt;candidate_text : STRING&lt;br&gt;status : STRING&lt;br&gt;resolved_product_id : STRING &lt;&lt;FK&gt;&gt;&lt;br&gt;created_at : TIMESTAMP" style="rounded=1;whiteSpace=wrap;html=1;align=left;spacingLeft=10;verticalAlign=top;spacingTop=5;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+      <mxGeometry x="350" y="1250" width="250" height="145" as="geometry"/>
+    </mxCell>
+    <mxCell id="dim_products" value="&lt;b&gt;dim_products&lt;/b&gt;&lt;hr&gt;* product_id : STRING&lt;br&gt;product_name : STRING&lt;br&gt;brand : STRING&lt;br&gt;category : STRING&lt;br&gt;release_year : INT64&lt;br&gt;is_active : BOOL&lt;br&gt;created_at : TIMESTAMP" style="rounded=1;whiteSpace=wrap;html=1;align=left;spacingLeft=10;verticalAlign=top;spacingTop=5;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+      <mxGeometry x="650" y="1250" width="250" height="145" as="geometry"/>
+    </mxCell>
+    <mxCell id="fact_product_mentions" value="&lt;b&gt;fact_product_mentions&lt;/b&gt;&lt;hr&gt;* mention_id : STRING&lt;br&gt;product_id : STRING &lt;&lt;FK&gt;&gt;&lt;br&gt;video_id : STRING &lt;&lt;FK&gt;&gt;&lt;br&gt;channel_id : STRING &lt;&lt;FK&gt;&gt;&lt;br&gt;comment_id : STRING &lt;&lt;FK&gt;&gt;&lt;br&gt;sentence_id : STRING &lt;&lt;FK&gt;&gt;&lt;br&gt;aspect_label : STRING&lt;br&gt;sentiment_label : STRING&lt;br&gt;confidence_score : FLOAT64&lt;br&gt;mention_date : DATE" style="rounded=1;whiteSpace=wrap;html=1;align=left;spacingLeft=10;verticalAlign=top;spacingTop=5;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+      <mxGeometry x="950" y="1250" width="250" height="190" as="geometry"/>
+    </mxCell>
+    <mxCell id="agg_daily_product_ranking" value="&lt;b&gt;agg_daily_product_ranking&lt;/b&gt;&lt;hr&gt;* ranking_id : STRING&lt;br&gt;product_id : STRING &lt;&lt;FK&gt;&gt;&lt;br&gt;ranking_date : DATE&lt;br&gt;category : STRING&lt;br&gt;bayesian_score : FLOAT64&lt;br&gt;controversy_index : FLOAT64&lt;br&gt;controversy_label : STRING&lt;br&gt;total_mentions : INT64&lt;br&gt;positive_count : INT64&lt;br&gt;negative_count : INT64&lt;br&gt;neutral_count : INT64&lt;br&gt;rank_position : INT64" style="rounded=1;whiteSpace=wrap;html=1;align=left;spacingLeft=10;verticalAlign=top;spacingTop=5;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+      <mxGeometry x="1250" y="1250" width="250" height="220" as="geometry"/>
+    </mxCell>
+    <mxCell id="causal_events" value="&lt;b&gt;causal_events&lt;/b&gt;&lt;hr&gt;* event_id : STRING&lt;br&gt;product_id : STRING &lt;&lt;FK&gt;&gt;&lt;br&gt;change_point_date : DATE&lt;br&gt;event_video_id : STRING &lt;&lt;FK&gt;&gt;&lt;br&gt;temporal_proximity : FLOAT64&lt;br&gt;attribution_score : FLOAT64&lt;br&gt;sentiment_direction : STRING&lt;br&gt;explanation_text : STRING" style="rounded=1;whiteSpace=wrap;html=1;align=left;spacingLeft=10;verticalAlign=top;spacingTop=5;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+      <mxGeometry x="50" y="1650" width="250" height="160" as="geometry"/>
+    </mxCell>
+    <mxCell id="edge_1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=ERmany;endFill=0;startArrow=ERone;startFill=0;" edge="1" parent="1" source="product_config" target="product_aliases">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="edge_2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=ERone;endFill=0;startArrow=ERone;startFill=0;" edge="1" parent="1" source="product_config" target="product_details">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="edge_3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=ERmany;endFill=0;startArrow=ERone;startFill=0;" edge="1" parent="1" source="channel_config" target="raw_videos">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="edge_4" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=ERmany;endFill=0;startArrow=ERone;startFill=0;" edge="1" parent="1" source="channel_config" target="stg_youtube_videos">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="edge_5" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=ERmany;endFill=0;startArrow=ERone;startFill=0;" edge="1" parent="1" source="raw_videos" target="raw_comments">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="edge_6" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=ERmany;endFill=0;startArrow=ERone;startFill=0;" edge="1" parent="1" source="stg_youtube_videos" target="stg_youtube_comments">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="edge_7" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=ERone;endFill=0;startArrow=ERone;startFill=0;" edge="1" parent="1" source="stg_youtube_videos" target="video_crawl_state">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="edge_8" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=ERmany;endFill=0;startArrow=ERone;startFill=0;" edge="1" parent="1" source="keyword_config" target="video_crawl_state">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="edge_9" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=ERmany;endFill=0;startArrow=ERone;startFill=0;" edge="1" parent="1" source="raw_videos" target="int_comment_sentences">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="edge_10" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=ERmany;endFill=0;startArrow=ERone;startFill=0;" edge="1" parent="1" source="raw_comments" target="int_comment_sentences">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="edge_11" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=ERone;endFill=0;startArrow=ERone;startFill=0;" edge="1" parent="1" source="int_comment_sentences" target="finetune_dataset">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="edge_12" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=ERmany;endFill=0;startArrow=ERone;startFill=0;" edge="1" parent="1" source="int_comment_sentences" target="int_sentiment_results">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="edge_13" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=ERmany;endFill=0;startArrow=ERone;startFill=0;" edge="1" parent="1" source="int_comment_sentences" target="int_sentence_product_targets">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="edge_14" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=ERmany;endFill=0;startArrow=ERone;startFill=0;" edge="1" parent="1" source="dim_products" target="fact_product_mentions">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="edge_15" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=ERmany;endFill=0;startArrow=ERone;startFill=0;" edge="1" parent="1" source="dim_products" target="int_video_product_mentions">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="edge_16" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=ERmany;endFill=0;startArrow=ERone;startFill=0;" edge="1" parent="1" source="stg_youtube_videos" target="fact_product_mentions">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="edge_17" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=ERmany;endFill=0;startArrow=ERone;startFill=0;" edge="1" parent="1" source="stg_youtube_comments" target="fact_product_mentions">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="edge_18" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=ERmany;endFill=0;startArrow=ERone;startFill=0;" edge="1" parent="1" source="dim_products" target="agg_daily_product_ranking">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="edge_19" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=ERmany;endFill=0;startArrow=ERone;startFill=0;" edge="1" parent="1" source="dim_products" target="causal_events">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+  </root>
+</mxGraphModel>

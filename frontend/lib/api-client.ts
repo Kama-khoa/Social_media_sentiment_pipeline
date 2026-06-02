@@ -11,6 +11,7 @@ import type {
   VideoProductMapping,
   PipelineHealthData,
   ProductDetail,
+  ProductComment,
   SearchResponse,
   TopProduct,
   UserDashboardData,
@@ -69,6 +70,8 @@ export const api = {
       request<ProductDetail>(`/products/${productId}/aspects`),
     attribution: (productId: string) =>
       request<AttributionData>(`/products/${productId}/attribution`),
+    comments: (productId: string, limit = 30) =>
+      request<ProductComment[]>(`/products/${productId}/comments?limit=${limit}`),
     submitDetails: (productId: string, data: { proposed_specs?: Record<string, unknown>; proposed_description?: string }) =>
       request<{ request_id: string; status: string }>(`/products/${productId}/details/requests`, {
         method: "POST",

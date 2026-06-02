@@ -18,8 +18,9 @@ Xây dựng pipeline NLP hybrid để phân tích cảm xúc theo khía cạnh (
 | `inference/phobert_classifier.py` | `PhoBERTClassifier` class — load weights PhoBERT local, predict sentiment score + confidence |
 | `inference/velectra_extractor.py` | `VELECTRAExtractor` class — load weights vELECTRA local, extract aspect spans từ câu |
 | `inference/confidence_router.py` | `ConfidenceRouter` class — điều phối: nếu local confidence < 0.70 → gom batch fallback sang Gemini Flash |
+| `gemini_gateway.py` | Gateway dùng chung — route fallback model, sleep theo free-tier RPM, theo dõi RPD và cooldown khi gặp 429/503 |
 | `runner.py` | Batch inference runner — đọc `int_comment_sentences`, chạy vELECTRA + PhoBERT + confidence routing, checkpoint BigQuery theo batch vào `raw_sentiment_results` |
-| `product_target_resolver.py` | Resolver target sản phẩm — dùng alias trước, LLM fallback cho video hoặc câu so sánh chưa rõ target, ghi override để dbt rebuild mapping |
+| `product_target_resolver.py` | Resolver target sản phẩm — gửi candidate theo batch, dùng Gemini gateway sau alias match, ghi override để dbt rebuild mapping |
 
 ---
 
@@ -165,8 +166,8 @@ python -m nlp.runner --limit 100 --dag-run-id manual-nlp-100-t070
 cd transform
 python -m dotenv -f ..\.env run -- dbt run --profiles-dir . --select int_sentiment_results int_video_product_mentions int_sentence_product_targets int_product_resolution_candidates fact_product_mentions
 
-# Optional LLM fallback for unresolved videos and multi-product sentences
-python -m nlp.product_target_resolver --limit 100
+# Optional batched LLM fallback for unresolved videos and multi-product sentences
+python -m nlp.product_target_resolver --limit 100 --batch-size 10
 ```
 
 - **Không dùng chung một cấu hình Tokenizer/Preprocessing** cho cả hai model:

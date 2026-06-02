@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="vi" data-theme="light">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>TechChoice — Phân tích cảm xúc sản phẩm công nghệ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="styles.css" />
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="data.js"></script>
+<style>
+  /* actor switcher */
+  .actor-bar {
+    position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%);
+    z-index: 200; display: flex; align-items: center; gap: 6px;
+    background: var(--surface); border: 1px solid var(--border-strong);
+    border-radius: 99px; padding: 6px; box-shadow: var(--shadow-lg);
+  }
+  .actor-bar .lbl { font-size: 11px; font-weight: 700; letter-spacing: .05em; color: var(--text-3); padding: 0 8px 0 12px; text-transform: uppercase; }
+  .actor-bar button {
+    border: none; cursor: pointer; padding: 8px 15px; border-radius: 99px;
+    font-family: var(--font-ui); font-weight: 600; font-size: 13px; color: var(--text-2);
+    background: transparent; transition: all .15s; display: flex; align-items: center; gap: 7px;
+  }
+  .actor-bar button.on { background: var(--primary); color: var(--on-primary); box-shadow: 0 4px 12px -4px var(--ring); }
+  .actor-bar button:not(.on):hover { background: var(--surface-3); color: var(--text); }
+  @media (max-width: 560px){ .actor-bar .lbl{ display:none; } .actor-bar button{ padding: 8px 12px; } }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel" src="components.jsx"></script>
+<script type="text/babel" src="guest-user.jsx"></script>
+<script type="text/babel" src="product-detail.jsx"></script>
+<script type="text/babel" src="admin.jsx"></script>
+
+<script type="text/babel">
+const { useState, useEffect } = React;
+
+const SESSIONS = {
+  guest: null,
+  user: { email: "user@example.com", name: "Người dùng", role: "user" },
+  admin: { email: "admin@example.com", name: "Quản trị viên", role: "admin" },
+};
+
+function ActorBar({ actor, setActor }) {
+  const items = [
+    { id: "guest", label: "Khách", icon: "user" },
+    { id: "user", label: "Người dùng", icon: "heart" },
+    { id: "admin", label: "Quản trị", icon: "shield" },
+  ];
+  return (
+    <div className="actor-bar">
+      <span className="lbl">Vai trò</span>
+      {items.map(i => (
+        <button key={i.id} className={actor === i.id ? "on" : ""} onClick={() => setActor(i.id)}>
+          <Icon name={i.icon} size={15} />{i.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function Root() {
+  const [theme, setTheme] = useState(() => localStorage.getItem("tc_theme") || "light");
+  const [actor, setActor] = useState(() => localStorage.getItem("tc_actor") || "guest");
+  const [session, setSession] = useState(() => SESSIONS[localStorage.getItem("tc_actor") || "guest"]);
+  const [view, setView] = useState(() => (localStorage.getItem("tc_actor") === "admin" ? "admin" : "public"));
+
+  useEffect(() => { document.documentElement.setAttribute("data-theme", theme); localStorage.setItem("tc_theme", theme); }, [theme]);
+  const toggleTheme = () => setTheme(t => t === "light" ? "dark" : "light");
+
+  // Actor switch (demo control)
+  const chooseActor = (a) => {
+    setActor(a); localStorage.setItem("tc_actor", a);
+    setSession(SESSIONS[a]);
+    setView(a === "admin" ? "admin" : "public");
+    window.scrollTo({ top: 0 });
+  };
+
+  // Keep actor label in sync if user logs in/out inside public app
+  const updateSession = (s) => {
+    setSession(s);
+    const a = !s ? "guest" : s.role === "admin" ? "admin" : "user";
+    setActor(a); localStorage.setItem("tc_actor", a);
+  };
+
+  return (
+    <>
+      {view === "admin" && session
+        ? <AdminApp session={session} theme={theme} toggleTheme={toggleTheme}
+            onLogout={() => chooseActor("guest")} onExit={() => setView("public")} />
+        : <PublicApp session={session} setSession={updateSession} theme={theme} toggleTheme={toggleTheme}
+            onGoAdmin={() => setView("admin")} />}
+      <ActorBar actor={actor} setActor={chooseActor} />
+    </>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<Root />);
+</script>
+</body>
+</html>
