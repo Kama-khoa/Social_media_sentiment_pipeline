@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from api.database import init_db
-from api.routers import auth, dashboard, products, search, admin, pipeline
+from api.routers import auth, dashboard, products, search, admin, pipeline, product_catalog
 
 app = FastAPI(title="Sentiment Intelligence Platform API", version="0.1.0")
 
@@ -30,4 +30,5 @@ app.include_router(dashboard.router)
 app.include_router(products.router)
 app.include_router(search.router)
 app.include_router(admin.router)
+app.include_router(product_catalog.router)
 app.include_router(pipeline.router)

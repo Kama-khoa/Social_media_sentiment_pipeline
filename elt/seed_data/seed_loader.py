@@ -32,6 +32,7 @@ _GEMINI_URL = (
 _CSV_DIR = Path(__file__).parent
 _SEED_CHANNELS_CSV = _CSV_DIR / "seed_channels.csv"
 _SEED_KEYWORDS_CSV = _CSV_DIR / "seed_keywords.csv"
+_SEED_PRODUCTS_CSV = _CSV_DIR / "seed_products.csv"
 
 
 def _get_bq_client() -> bigquery.Client:
@@ -52,6 +53,7 @@ def _parse_handle(raw: str) -> str:
 
 def _slugify(text: str) -> str:
     text = text.lower().strip()
+    text = text.replace("+", " plus ")
     text = re.sub(r"[^\w\s-]", "", text)
     text = re.sub(r"[\s_]+", "-", text)
     text = re.sub(r"-+", "-", text)
@@ -199,6 +201,200 @@ def _merge_keywords_to_bq(client: bigquery.Client, rows: list[dict]) -> int:
     return len(rows)
 
 
+def _merge_products_to_bq(client: bigquery.Client, product_rows: list[dict], alias_rows: list[dict]) -> int:
+    if not product_rows:
+        return 0
+
+    product_tmp = f"{_PROJECT_ID}.{_DATASET}._tmp_seed_products_{uuid.uuid4().hex[:8]}"
+    product_schema = [
+        bigquery.SchemaField("product_id", "STRING"),
+        bigquery.SchemaField("product_name", "STRING"),
+        bigquery.SchemaField("brand", "STRING"),
+        bigquery.SchemaField("category", "STRING"),
+        bigquery.SchemaField("release_year", "INT64"),
+        bigquery.SchemaField("is_active", "BOOL"),
+        bigquery.SchemaField("created_at", "TIMESTAMP"),
+        bigquery.SchemaField("updated_at", "TIMESTAMP"),
+    ]
+    client.load_table_from_json(
+        product_rows, product_tmp,
+        job_config=bigquery.LoadJobConfig(schema=product_schema, write_disposition="WRITE_TRUNCATE"),
+    ).result()
+    client.query(f"""
+        MERGE `{_PROJECT_ID}.{_DATASET}.product_config` AS target
+        USING `{product_tmp}` AS source
+        ON target.product_id = source.product_id
+        WHEN MATCHED THEN UPDATE SET
+            target.product_name = source.product_name,
+            target.brand = source.brand,
+            target.category = source.category,
+            target.updated_at = source.updated_at
+        WHEN NOT MATCHED THEN INSERT ROW
+    """).result()
+    client.delete_table(product_tmp, not_found_ok=True)
+
+    alias_tmp = f"{_PROJECT_ID}.{_DATASET}._tmp_seed_product_aliases_{uuid.uuid4().hex[:8]}"
+    alias_schema = [
+        bigquery.SchemaField("alias_id", "STRING"),
+        bigquery.SchemaField("product_id", "STRING"),
+        bigquery.SchemaField("alias_text", "STRING"),
+        bigquery.SchemaField("alias_type", "STRING"),
+        bigquery.SchemaField("is_active", "BOOL"),
+        bigquery.SchemaField("created_at", "TIMESTAMP"),
+    ]
+    client.load_table_from_json(
+        alias_rows, alias_tmp,
+        job_config=bigquery.LoadJobConfig(schema=alias_schema, write_disposition="WRITE_TRUNCATE"),
+    ).result()
+    client.query(f"""
+        MERGE `{_PROJECT_ID}.{_DATASET}.product_aliases` AS target
+        USING `{alias_tmp}` AS source
+        ON target.alias_id = source.alias_id
+        WHEN MATCHED THEN UPDATE SET target.is_active = source.is_active
+        WHEN NOT MATCHED THEN INSERT ROW
+    """).result()
+    client.delete_table(alias_tmp, not_found_ok=True)
+    return len(product_rows)
+
+
+def sync_products(client: bigquery.Client) -> dict:
+    df = pd.read_csv(_SEED_PRODUCTS_CSV, dtype=str)
+    df.columns = df.columns.str.strip()
+    required_columns = {"product_name", "brand", "category"}
+    missing = required_columns - set(df.columns)
+    if missing:
+        raise ValueError(f"seed_products.csv missing columns: {', '.join(sorted(missing))}")
+    for optional_column in ("product_id", "release_year", "aliases"):
+        if optional_column not in df.columns:
+            df[optional_column] = None
+    df = df.dropna(subset=["product_name"])
+    df = df[df["product_name"].str.strip() != ""]
+    resolved_ids = df.apply(
+        lambda row: (
+            row["product_id"].strip()
+            if pd.notna(row["product_id"]) and row["product_id"].strip()
+            else _slugify(row["product_name"])
+        ),
+        axis=1,
+    )
+    duplicate_ids = sorted(set(resolved_ids[resolved_ids.duplicated()].tolist()))
+    if duplicate_ids:
+        raise ValueError(f"seed_products.csv duplicate product_id values: {', '.join(duplicate_ids)}")
+
+    now = _now_iso()
+    products = []
+    aliases: dict[tuple[str, str], tuple[str, str, str]] = {}
+    for _, row in df.iterrows():
+        product_name = row["product_name"].strip()
+        product_id = resolved_ids.loc[row.name]
+        release_year = (
+            int(row["release_year"])
+            if pd.notna(row["release_year"]) and row["release_year"].strip()
+            else None
+        )
+        products.append({
+            "product_id": product_id,
+            "product_name": product_name,
+            "brand": row["brand"].strip() if pd.notna(row["brand"]) else None,
+            "category": row["category"].strip() if pd.notna(row["category"]) else None,
+            "release_year": release_year,
+            "is_active": True,
+            "created_at": now,
+            "updated_at": now,
+        })
+        aliases[(product_id, product_name.casefold())] = (product_id, product_name, "official")
+        if pd.notna(row["aliases"]):
+            for alias in row["aliases"].split("|"):
+                if alias.strip():
+                    normalized_alias = alias.strip()
+                    aliases.setdefault(
+                        (product_id, normalized_alias.casefold()),
+                        (product_id, normalized_alias, "common_name"),
+                    )
+    alias_rows = [
+        {
+            "alias_id": _slugify(f"{product_id}-{alias_text}"),
+            "product_id": product_id,
+            "alias_text": alias_text,
+            "alias_type": alias_type,
+            "is_active": True,
+            "created_at": now,
+        }
+        for product_id, alias_text, alias_type in sorted(aliases.values())
+    ]
+    synced = _merge_products_to_bq(client, products, alias_rows)
+    return {"products": synced, "aliases": len(alias_rows)}
+
+
+def sync_product_spec_templates(client: bigquery.Client) -> int:
+    common: list[tuple[str, str, str, str | None]] = []
+    templates = {
+        "Điện thoại": [
+            ("screen_size_inches", "Kích thước màn hình", "number", "inch"),
+            ("screen_technology", "Công nghệ màn hình", "string", None),
+            ("ram_gb", "RAM", "number", "GB"),
+            ("storage_gb", "Bộ nhớ", "number", "GB"),
+            ("battery_mah", "Dung lượng pin", "number", "mAh"),
+            ("chipset", "Chipset", "string", None),
+        ],
+        "Laptop": [
+            ("screen_size_inches", "Kích thước màn hình", "number", "inch"),
+            ("ram_gb", "RAM", "number", "GB"),
+            ("storage_gb", "Bộ nhớ", "number", "GB"),
+            ("processor", "Bộ xử lý", "string", None),
+            ("graphics", "Đồ họa", "string", None),
+        ],
+        "Tai nghe": [
+            ("battery_hours", "Thời lượng pin", "number", "giờ"),
+            ("connection", "Kết nối", "string", None),
+            ("noise_cancellation", "Chống ồn chủ động", "boolean", None),
+        ],
+    }
+    now = _now_iso()
+    rows = [
+        {
+            "category": category,
+            "spec_key": spec_key,
+            "display_label": label,
+            "value_type": value_type,
+            "unit": unit,
+            "is_active": True,
+            "created_at": now,
+            "updated_at": now,
+        }
+        for category, items in templates.items()
+        for spec_key, label, value_type, unit in common + items
+    ]
+    tmp_table = f"{_PROJECT_ID}.{_DATASET}._tmp_seed_product_templates_{uuid.uuid4().hex[:8]}"
+    schema = [
+        bigquery.SchemaField("category", "STRING"),
+        bigquery.SchemaField("spec_key", "STRING"),
+        bigquery.SchemaField("display_label", "STRING"),
+        bigquery.SchemaField("value_type", "STRING"),
+        bigquery.SchemaField("unit", "STRING"),
+        bigquery.SchemaField("is_active", "BOOL"),
+        bigquery.SchemaField("created_at", "TIMESTAMP"),
+        bigquery.SchemaField("updated_at", "TIMESTAMP"),
+    ]
+    client.load_table_from_json(
+        rows, tmp_table,
+        job_config=bigquery.LoadJobConfig(schema=schema, write_disposition="WRITE_TRUNCATE"),
+    ).result()
+    client.query(f"""
+        MERGE `{_PROJECT_ID}.{_DATASET}.product_spec_templates` AS target
+        USING `{tmp_table}` AS source
+        ON target.category = source.category AND target.spec_key = source.spec_key
+        WHEN MATCHED THEN UPDATE SET
+            target.display_label = source.display_label,
+            target.value_type = source.value_type,
+            target.unit = source.unit,
+            target.updated_at = source.updated_at
+        WHEN NOT MATCHED THEN INSERT ROW
+    """).result()
+    client.delete_table(tmp_table, not_found_ok=True)
+    return len(rows)
+
+
 def seed_channels(client: bigquery.Client) -> int:
     df = pd.read_csv(_SEED_CHANNELS_CSV, dtype=str)
     df.columns = df.columns.str.strip()
@@ -317,7 +513,13 @@ def run() -> None:
     keyword_count = seed_keywords(client)
     print(f"  Done: {keyword_count} keywords upserted.\n")
 
-    print(f"Seed complete: {channel_count} channels, {keyword_count} keywords.")
+    print("=== Seeding canonical products ===")
+    product_result = sync_products(client)
+    print(f"  Done: {product_result['products']} products, {product_result['aliases']} aliases upserted.\n")
+    template_count = sync_product_spec_templates(client)
+    print(f"  Done: {template_count} product specification templates upserted.\n")
+
+    print(f"Seed complete: {channel_count} channels, {keyword_count} keywords, {product_result['products']} products.")
 
 
 if __name__ == "__main__":

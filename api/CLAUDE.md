@@ -14,13 +14,14 @@ Phase 5 MVP đã triển khai xong các thành phần cốt lõi:
 | `dependencies.py` | Hoàn thành | `get_current_user`, `require_admin` |
 | `seed_admin.py` | Hoàn thành | Tạo 2 tài khoản demo khi setup lần đầu |
 | `routers/auth.py` | Hoàn thành | `/auth/register`, `/login`, `/logout`, `/me` |
-| `routers/dashboard.py` | Hoàn thành (mock data) | `/dashboard/user`, `/dashboard/admin` |
+| `routers/dashboard.py` | Hoàn thành | `/dashboard/user`, `/dashboard/admin` |
 | `schemas/request_schemas.py` | Hoàn thành | `RegisterRequest`, `LoginRequest` |
 | `schemas/response_schemas.py` | Hoàn thành | Tất cả response types |
-| `routers/products.py` | Chưa tạo | Cần implement khi BQ marts có data |
-| `routers/search.py` | Chưa tạo | Cần implement sau analytics |
-| `routers/admin.py` | Chưa tạo | CRUD channel/keyword → BigQuery |
-| `routers/pipeline.py` | Chưa tạo | Airflow REST API proxy |
+| `routers/products.py` | Hoàn thành | Ranking, chi tiết, aspect và attribution |
+| `routers/search.py` | Hoàn thành | Tìm kiếm catalog sản phẩm |
+| `routers/admin.py` | Hoàn thành | CRUD channel/keyword → BigQuery |
+| `routers/pipeline.py` | Hoàn thành | Airflow REST API proxy |
+| `routers/product_catalog.py` | Hoàn thành | CRUD catalog, alias, template, candidate, mapping video và duyệt phiếu chỉnh sửa |
 
 ---
 
@@ -89,7 +90,12 @@ api/
 ├── routers/
 │   ├── __init__.py
 │   ├── auth.py           ← /auth/* endpoints
-│   └── dashboard.py      ← /dashboard/user, /dashboard/admin (mock data)
+│   ├── dashboard.py      ← /dashboard/user, /dashboard/admin
+│   ├── products.py       ← analytics và chi tiết sản phẩm
+│   ├── search.py         ← tìm kiếm catalog
+│   ├── admin.py          ← CRUD keyword/channel
+│   ├── pipeline.py       ← proxy Airflow REST API
+│   └── product_catalog.py ← quản lý catalog và duyệt phiếu chỉnh sửa
 └── schemas/
     ├── __init__.py
     ├── request_schemas.py
@@ -271,20 +277,31 @@ Mọi endpoint `/admin/*` phải dùng `Depends(require_admin)`. Frontend ẩn m
 
 ---
 
-## Mock Data — dashboard.py
+## Product Catalog API
 
-`routers/dashboard.py` hiện trả hardcoded mock data. Khi chuyển sang data thật:
+Ranking đọc `dim_products` để trả tên sản phẩm chuẩn. Trang chi tiết trả thêm `details` và `specs` từ `product_details`.
 
-1. **User dashboard** → query `agg_daily_product_ranking` và `causal_events` từ BigQuery.
-2. **Admin dashboard** → gọi Airflow `/health`, `/api/v1/dags/{dag_id}/dagRuns` và query `quota_daily_summary` từ BigQuery.
+User đăng nhập chỉ được gửi phiếu đề xuất:
 
-Thứ tự implement tiếp theo:
 ```
-routers/products.py   ← GET /products/top/{category}, /products/{id}/aspects, /products/{id}/attribution
-routers/search.py     ← GET /search?q=&category=
-routers/admin.py      ← CRUD keyword_config và channel_config trong BigQuery
-routers/pipeline.py   ← Proxy Airflow REST API
+POST /products/{product_id}/details/requests
 ```
+
+Admin quản lý catalog và duyệt dữ liệu:
+
+```
+GET|POST|PUT|DELETE /admin/products
+GET|POST|DELETE     /admin/products/aliases
+GET|POST|DELETE     /admin/products/templates
+GET                 /admin/products/detail-requests
+POST                /admin/products/detail-requests/{request_id}/review
+GET|PUT              /admin/products/video-mappings
+GET|POST             /admin/products/resolution-candidates
+```
+
+Khi duyệt phiếu, API validate key và kiểu dữ liệu theo template category, sau đó merge các field được gửi vào `product_details`. Field cũ không bị xóa nếu phiếu không cung cấp giá trị thay thế.
+
+Thiết kế đầy đủ: [`../docs/product-catalog-and-moderation.md`](../docs/product-catalog-and-moderation.md).
 
 ---
 

@@ -20,7 +20,9 @@ Transform được thực hiện hoàn toàn bởi dbt trong folder `transform/`
 | `datacontext/models/comment_dto.py` | `CommentDTO` dataclass — cấu trúc dữ liệu comment |
 | `datacontext/models/channel_dto.py` | `ChannelDTO` dataclass — cấu trúc dữ liệu kênh |
 | `datacontext/models/keyword_dto.py` | `KeywordDTO` dataclass — cấu trúc dữ liệu keyword |
-| `seed_data/seed_loader.py` | Script chạy thủ công — đọc 2 file CSV và load vào BQ tables `channel_config` + `keyword_config` |
+| `seed_data/seed_loader.py` | Đồng bộ `seed_channels.csv`, `seed_keywords.csv`, `seed_products.csv` và template specs vào BigQuery |
+| `seed_data/seed_products.csv` | Catalog chuẩn độc lập, không suy luận từ keyword |
+| `seed_data/generate_seed_products.py` | Sinh lại 500 sản phẩm mẫu development/demo |
 | `extract/base_extractor.py` | `BaseExtractor` abstract class — định nghĩa interface chuẩn |
 | `extract/video_extractor.py` | `VideoExtractor` class — triển khai Phase A (search.list per channel) và Phase B (yt-dlp historical) |
 | `extract/comment_extractor.py` | `CommentExtractor` class — crawl comments với `crawl_batch`, `crawl_batch_with_retry`, `run_backlog` |
@@ -147,5 +149,5 @@ Convention này là bắt buộc — BigQuery External Table (layer_1) dùng pat
 
 - File trong folder này chạy với **Conda env: etl-py313** (Python 3.13) — không import bất cứ thứ gì từ `airflow/`
 - Mỗi script trong `extract/` có thể chạy thủ công để test: `conda run -n etl-py313 python -m elt.main --mode full`
-- `seed_loader.py` chỉ chạy 1 lần khi setup, hoặc khi cần thêm kênh/keyword mới
+- `seed_loader.py` chạy khi setup hoặc khi cần thêm kênh, keyword, sản phẩm hay alias mới
 - DAG trong `airflow/` sẽ gọi vào các script này — không ngược lại

@@ -1,5 +1,20 @@
 # Progress Report & Updated Plan
 
+## Cập Nhật 2026-06-02 — Product Catalog và Moderation
+
+Catalog sản phẩm đã được tách khỏi `keyword_config`. Keyword chỉ dùng để tìm video; ranking và phân tích dùng `product_id` chuẩn từ `product_config`.
+
+| Hạng mục | Trạng thái | Ghi chú |
+|---|---|---|
+| Seed catalog độc lập | Hoàn thành | `elt/seed_data/seed_products.csv`, 500 sản phẩm mẫu thuộc điện thoại, laptop và tai nghe |
+| Catalog và specs | Hoàn thành nền tảng | `product_config`, `product_aliases`, `product_details`, `product_spec_templates` |
+| Sentiment target resolver | Hoàn thành nền tảng | Alias-first, LLM fallback, mapping video và sentence target |
+| Candidate resolution | Hoàn thành nền tảng | Sản phẩm chưa biết chờ Admin xử lý trước khi tham gia ranking |
+| Phiếu chỉnh sửa thông tin | Hoàn thành nền tảng | User gửi đề xuất, Admin duyệt trước khi merge vào `product_details` |
+| API và UI quản trị | Hoàn thành nền tảng | CRUD catalog, alias/template, candidate, video mapping và review request |
+
+Use case chi tiết, schema và lệnh migration: [`product-catalog-and-moderation.md`](product-catalog-and-moderation.md).
+
 ## Cập Nhật 2026-05-30
 
 ### Trạng Thái Phase

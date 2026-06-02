@@ -19,6 +19,7 @@ Xây dựng pipeline NLP hybrid để phân tích cảm xúc theo khía cạnh (
 | `inference/velectra_extractor.py` | `VELECTRAExtractor` class — load weights vELECTRA local, extract aspect spans từ câu |
 | `inference/confidence_router.py` | `ConfidenceRouter` class — điều phối: nếu local confidence < 0.70 → gom batch fallback sang Gemini Flash |
 | `runner.py` | Batch inference runner — đọc `int_comment_sentences`, chạy vELECTRA + PhoBERT + confidence routing, checkpoint BigQuery theo batch vào `raw_sentiment_results` |
+| `product_target_resolver.py` | Resolver target sản phẩm — dùng alias trước, LLM fallback cho video hoặc câu so sánh chưa rõ target, ghi override để dbt rebuild mapping |
 
 ---
 
@@ -87,6 +88,23 @@ inference/phobert_classifier.py
         kết quả Gemini → raw_sentiment_results → int_sentiment_results
 ```
 
+### Giai đoạn 4: Resolve product target
+
+```
+title + description video
+    │ match alias trước, LLM fallback khi chưa rõ
+    ▼
+int_video_product_mentions
+    │ primary cho review đơn; nhiều secondary cho video so sánh
+    ▼
+int_sentence_product_targets
+    ├── comment nêu model → explicit_comment
+    ├── comment ngầm trong review đơn → inherited_video_primary
+    └── comment ngầm trong video so sánh → loại khỏi KPI
+    ▼
+fact_product_mentions → agg_daily_product_ranking
+```
+
 ---
 
 ## 6 Aspect Labels
@@ -137,7 +155,7 @@ NLP phase đã hoàn chỉnh ở mức vận hành:
 - `ConfidenceRouter` đọc `nlp.confidence_threshold` và `nlp.gemini_batch_size` từ `config/pipeline_config.yaml`; Gemini fallback chỉ lazy-load khi cần và gom batch toàn bộ câu confidence thấp trong mỗi lần chạy runner.
 - Debug `scratch/local_confidence_debug_500_t070.jsonl`: 500 sentences, fallback tổng `6.0%`, fallback aspect thật `15.8%`.
 - `nlp.runner` hỗ trợ batch inference từ BigQuery, debug confidence, dry-run JSONL, reprocess, và checkpoint BigQuery MERGE/upsert theo `nlp.bq_write_batch_size`. Batch ghi lỗi được retry theo exponential backoff rồi lưu payload tại `logs/nlp_failed_batches/<dag_run_id>.jsonl` để xử lý sau run.
-- dbt promote kết quả qua `int_sentiment_results`, sau đó `fact_product_mentions`.
+- dbt promote kết quả qua `int_sentiment_results`, resolve target sản phẩm qua `int_video_product_mentions` và `int_sentence_product_targets`, sau đó build `fact_product_mentions`.
 
 Lệnh kiểm tra nhanh:
 
@@ -145,7 +163,10 @@ Lệnh kiểm tra nhanh:
 python -m nlp.runner --limit 100 --debug-local-confidence --output-jsonl scratch\local_confidence_debug_check.jsonl
 python -m nlp.runner --limit 100 --dag-run-id manual-nlp-100-t070
 cd transform
-python -m dotenv -f ..\.env run -- dbt run --profiles-dir . --select int_sentiment_results fact_product_mentions
+python -m dotenv -f ..\.env run -- dbt run --profiles-dir . --select int_sentiment_results int_video_product_mentions int_sentence_product_targets int_product_resolution_candidates fact_product_mentions
+
+# Optional LLM fallback for unresolved videos and multi-product sentences
+python -m nlp.product_target_resolver --limit 100
 ```
 
 - **Không dùng chung một cấu hình Tokenizer/Preprocessing** cho cả hai model:

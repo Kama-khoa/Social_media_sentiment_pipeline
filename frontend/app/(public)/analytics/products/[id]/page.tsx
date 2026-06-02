@@ -37,6 +37,8 @@ export default function ProductDetailPage() {
   const [data, setData] = useState<ProductDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [specProposal, setSpecProposal] = useState("{}");
+  const [proposalStatus, setProposalStatus] = useState<string | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -73,6 +75,21 @@ export default function ProductDetailPage() {
     data.aspects.length > 0
       ? data.aspects.reduce((s, a) => s + a.negative_pct, 0) / data.aspects.length
       : 0;
+  const specs = data.details?.specs ?? {};
+  const templateByKey = Object.fromEntries(data.spec_templates.map((item) => [item.spec_key, item]));
+
+  async function submitProposal() {
+    setProposalStatus(null);
+    try {
+      const proposed_specs = JSON.parse(specProposal) as Record<string, unknown>;
+      await api.products.submitDetails(id, { proposed_specs });
+      setProposalStatus("Đề xuất đã được gửi và đang chờ admin duyệt.");
+      setSpecProposal("{}");
+    } catch (err) {
+      const message = err instanceof SyntaxError ? "JSON không hợp lệ." : "Không thể gửi đề xuất. Hãy đăng nhập và kiểm tra lại các trường.";
+      setProposalStatus(message);
+    }
+  }
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8 space-y-6">
@@ -121,6 +138,53 @@ export default function ProductDetailPage() {
           Phân tích theo khía cạnh
         </h2>
         <AspectRadarChart aspects={data.aspects} />
+      </div>
+
+      {/* Product specifications */}
+      <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-6 space-y-4">
+        <h2 className="text-sm font-semibold text-slate-300 uppercase tracking-wider">
+          Thông số kỹ thuật
+        </h2>
+        {data.details?.description && <p className="text-sm text-slate-400">{data.details.description}</p>}
+        {Object.keys(specs).length === 0 ? (
+          <p className="text-sm text-slate-500">Chưa có thông số kỹ thuật. Người dùng có thể gửi đề xuất bổ sung.</p>
+        ) : (
+          <dl className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {Object.entries(specs).map(([key, value]) => (
+              <div key={key} className="rounded-lg border border-slate-700 bg-slate-900/30 px-3 py-2">
+                <dt className="text-xs text-slate-500">{templateByKey[key]?.display_label ?? key}</dt>
+                <dd className="text-sm text-slate-200 mt-1">{String(value)}{templateByKey[key]?.unit ? ` ${templateByKey[key].unit}` : ""}</dd>
+              </div>
+            ))}
+          </dl>
+        )}
+        {data.details?.official_url && (
+          <a href={data.details.official_url} target="_blank" rel="noreferrer" className="text-sm text-cyan-400 hover:text-cyan-300">
+            Trang sản phẩm chính thức →
+          </a>
+        )}
+      </div>
+
+      {/* Moderated specification contribution */}
+      <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-6 space-y-3">
+        <h2 className="text-sm font-semibold text-slate-300 uppercase tracking-wider">
+          Đề xuất bổ sung thông số
+        </h2>
+        <p className="text-xs text-slate-500">Nhập JSON theo các trường thông số được hỗ trợ. Đề xuất chỉ được công bố sau khi admin duyệt.</p>
+        {data.spec_templates.length > 0 && (
+          <p className="text-xs text-slate-500">
+            Key hợp lệ: {data.spec_templates.map((item) => item.spec_key).join(", ")}
+          </p>
+        )}
+        <textarea
+          value={specProposal}
+          onChange={(event) => setSpecProposal(event.target.value)}
+          className="w-full min-h-28 rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-200 font-mono"
+        />
+        <button onClick={submitProposal} className="px-4 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-medium">
+          Gửi đề xuất
+        </button>
+        {proposalStatus && <p className="text-sm text-slate-400">{proposalStatus}</p>}
       </div>
 
       {/* Aspect breakdown table */}

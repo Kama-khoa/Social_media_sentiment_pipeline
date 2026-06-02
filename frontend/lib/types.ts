@@ -49,7 +49,17 @@ export interface ProductDetail {
   controversy_label: string;
   total_mentions: number;
   aspects: AspectSentiment[];
+  details: ProductDetails | null;
+  spec_templates: ProductSpecTemplateItem[];
   as_of_date: string;
+}
+
+export interface ProductDetails {
+  specs: Record<string, unknown> | null;
+  description: string | null;
+  official_url: string | null;
+  image_url: string | null;
+  updated_at: string | null;
 }
 
 export interface CausalEventSummary {
@@ -158,6 +168,65 @@ export interface KeywordConfigItem {
   is_active: boolean;
   created_at: string;
   last_updated_at: string | null;
+}
+
+export interface ProductConfigItem {
+  product_id: string;
+  product_name: string;
+  brand: string | null;
+  category: string | null;
+  release_year: number | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProductAliasItem {
+  alias_id: string;
+  product_id: string;
+  alias_text: string;
+  alias_type: string;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface ProductSpecTemplateItem {
+  category: string;
+  spec_key: string;
+  display_label: string;
+  value_type: "string" | "number" | "boolean";
+  unit: string | null;
+  is_active: boolean;
+}
+
+export interface ProductDetailChangeRequestItem {
+  request_id: string;
+  product_id: string;
+  proposed_specs: Record<string, unknown> | null;
+  proposed_description: string | null;
+  proposed_official_url: string | null;
+  proposed_image_url: string | null;
+  submitted_by: string;
+  status: "pending" | "approved" | "rejected";
+  created_at: string;
+}
+
+export interface ProductResolutionCandidate {
+  candidate_id: string;
+  source_type: "video" | "sentence";
+  source_id: string;
+  candidate_text: string;
+  status: string;
+  resolved_product_id: string | null;
+  created_at: string;
+}
+
+export interface VideoProductMapping {
+  video_id: string;
+  product_id: string;
+  role: "primary" | "secondary";
+  match_source: string;
+  confidence_score: number;
 }
 
 // ── Pipeline Health ───────────────────────────────────────────────────────────

@@ -16,14 +16,14 @@ Phase 5 MVP — các trang dashboard đã triển khai xong, sẵn sàng chạy 
 | `components/Providers.tsx` | Hoàn thành | Client wrapper cho `AuthProvider` |
 | `components/layout/Sidebar.tsx` | Hoàn thành | Nav cố định 224px, menu Admin ẩn với user thường |
 | `components/layout/Header.tsx` | Hoàn thành | Top bar cố định, avatar, nút logout |
-| `components/dashboard/UserDashboard.tsx` | Hoàn thành (mock) | Category stats, top products table, causal events |
-| `components/dashboard/AdminDashboard.tsx` | Hoàn thành (mock) | Pipeline status, DAG runs, quick stats, attention items |
+| `components/dashboard/UserDashboard.tsx` | Hoàn thành | Category stats, top products table, causal events |
+| `components/dashboard/AdminDashboard.tsx` | Hoàn thành | Pipeline status, DAG runs, quick stats, attention items |
 | `components/shared/ControversyBadge.tsx` | Hoàn thành | Badge high/medium/low controversy |
 | `lib/api-client.ts` | Hoàn thành | Fetch wrapper với Bearer token từ sessionStorage |
 | `lib/auth-context.tsx` | Hoàn thành | React Context: user, token, login(), logout() |
 | `lib/types.ts` | Hoàn thành | TypeScript interfaces cho toàn bộ API response |
-| `app/(app)/analytics/**` | Chưa tạo | Search, top products, product detail, attribution |
-| `app/(app)/admin/**` | Chưa tạo | CRUD channel/keyword, pipeline health |
+| `app/(public)/analytics/**` | Hoàn thành | Search, top products, product detail, attribution |
+| `app/(app)/admin/**` | Hoàn thành | CRUD channel/keyword, pipeline health và quản lý catalog |
 
 ---
 
@@ -108,8 +108,9 @@ frontend/
 │   └── (app)/              ← Route group: có sidebar + header, cần auth
 │       ├── layout.tsx      ← Route guard + Sidebar + Header
 │       ├── dashboard/page.tsx
-│       ├── analytics/      ← TODO: search, top-products, products/[id]
-│       └── admin/          ← TODO: channels, keywords, pipeline-health
+│       └── admin/          ← channels, keywords, pipeline-health, products
+│   └── (public)/
+│       └── analytics/      ← search, top-products, products/[id]
 ├── components/
 │   ├── Providers.tsx       ← "use client" wrapper cho AuthProvider
 │   ├── layout/
@@ -310,14 +311,26 @@ Sidebar (w-56, fixed left)
 ├── Logo: "SentimentIQ"
 ├── Nav User (mọi role):
 │   ├── Dashboard → /dashboard
-│   ├── Tìm kiếm → /analytics/search (TODO)
-│   └── Bảng xếp hạng → /analytics/top-products (TODO)
+│   ├── Tìm kiếm → /analytics/search
+│   └── Bảng xếp hạng → /analytics/top-products
 ├── Nav Admin (chỉ role=admin):
-│   ├── Kênh YouTube → /admin/channels (TODO)
-│   ├── Từ khóa → /admin/keywords (TODO)
-│   └── Vận hành Pipeline → /admin/pipeline-health (TODO)
+│   ├── Kênh YouTube → /admin/channels
+│   ├── Từ khóa → /admin/keywords
+│   ├── Sản phẩm → /admin/products
+│   └── Vận hành Pipeline → /admin/pipeline-health
 └── Bottom: Avatar + display_name + role + logout
 ```
+
+---
+
+## Product Catalog và Phiếu Chỉnh sửa
+
+- Trang chi tiết sản phẩm hiển thị tên chuẩn, hãng, danh mục, mô tả và `specs`.
+- User đăng nhập có thể gửi đề xuất cập nhật thông tin. Form chỉ dùng key specs có trong template category.
+- Admin quản lý sản phẩm, alias, template specs, candidate chưa nhận diện và mapping video.
+- Admin duyệt hoặc từ chối phiếu; frontend không ghi trực tiếp vào `product_details`.
+
+Thiết kế đầy đủ: [`../docs/product-catalog-and-moderation.md`](../docs/product-catalog-and-moderation.md).
 
 ---
 

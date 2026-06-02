@@ -52,6 +52,8 @@ def create_fact_product_mentions(client: bigquery.Client) -> None:
         bigquery.SchemaField("aspect_label", "STRING", mode="REQUIRED"),
         bigquery.SchemaField("sentiment_label", "STRING", mode="REQUIRED"),
         bigquery.SchemaField("confidence_score", "FLOAT64", mode="REQUIRED"),
+        bigquery.SchemaField("target_source", "STRING", mode="REQUIRED"),
+        bigquery.SchemaField("target_confidence", "FLOAT64", mode="REQUIRED"),
         bigquery.SchemaField("mention_date", "DATE", mode="REQUIRED"),
         bigquery.SchemaField("_dbt_processed_at", "TIMESTAMP", mode="REQUIRED"),
     ]

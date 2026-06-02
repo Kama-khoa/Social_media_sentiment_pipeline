@@ -134,7 +134,7 @@ def run() -> None:
     create_raw_videos_external(client)
     create_raw_comments_external(client)
     create_raw_sentiment_results(client)
-    print("\nLayer 1 — 2/2 external tables created.")
+    print("\nLayer 1 — 3/3 raw tables created.")
 
 
 if __name__ == "__main__":

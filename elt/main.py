@@ -18,7 +18,7 @@ from elt.repositories.channel_repository import ChannelRepository
 from elt.repositories.crawl_state_repository import CrawlStateRepository
 from elt.repositories.keyword_repository import KeywordRepository
 from elt.repositories.quota_repository import QuotaRepository
-from elt.seed_data.seed_loader import sync_channels, sync_keywords
+from elt.seed_data.seed_loader import sync_channels, sync_keywords, sync_product_spec_templates, sync_products
 
 load_dotenv()
 
@@ -102,6 +102,13 @@ def _sync_seed_data(bq_client: bigquery.Client) -> None:
 
     kw_result = sync_keywords(bq_client)
     logger.info("Seed sync: %d keywords synced (CSV: %d)", kw_result["synced"], kw_result["csv_total"])
+
+    product_result = sync_products(bq_client)
+    logger.info(
+        "Seed sync: %d canonical products and %d aliases synced",
+        product_result["products"], product_result["aliases"],
+    )
+    logger.info("Seed sync: %d product specification templates synced", sync_product_spec_templates(bq_client))
 
 
 def run_videos(config, repos: dict, gcs_client: GCSClient, dag_run_id: str, execution_date: str):

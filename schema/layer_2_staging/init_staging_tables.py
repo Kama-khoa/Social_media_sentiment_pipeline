@@ -22,6 +22,7 @@ def create_stg_youtube_videos(client: bigquery.Client) -> None:
         bigquery.SchemaField("channel_id", "STRING", mode="REQUIRED"),
         bigquery.SchemaField("title", "STRING", mode="REQUIRED"),
         bigquery.SchemaField("description", "STRING", mode="NULLABLE"),
+        bigquery.SchemaField("keyword_matched", "STRING", mode="NULLABLE"),
         bigquery.SchemaField("view_count", "INT64", mode="NULLABLE"),
         bigquery.SchemaField("like_count", "INT64", mode="NULLABLE"),
         bigquery.SchemaField("comment_count", "INT64", mode="NULLABLE"),

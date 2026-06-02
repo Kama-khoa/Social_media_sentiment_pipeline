@@ -162,14 +162,14 @@ Tuân thủ convention này để BigQuery External Table partition đúng.
 
 ---
 
-## BigQuery Schema — 12 bảng
+## BigQuery Schema — 28 bảng
 
 | Layer | Bảng |
 |---|---|
-| Layer 0 Config | `keyword_config`, `channel_config`, `video_crawl_state`, `quota_daily_summary`, `quota_operation_log` |
+| Layer 0 Config | `keyword_config`, `channel_config`, `video_crawl_state`, `quota_daily_summary`, `quota_operation_log`, `product_config`, `product_aliases`, `product_details`, `product_spec_templates`, `product_resolution_candidates`, `product_detail_change_requests`, `video_product_overrides`, `sentence_product_target_overrides` |
 | Layer 1 Raw | `raw_videos`, `raw_comments` (External Tables → GCS), `raw_sentiment_results` |
 | Layer 2 Staging | `stg_youtube_videos`, `stg_youtube_comments` |
-| Layer 3 Intermediate | `int_comment_sentences`, `int_sentiment_results` |
+| Layer 3 Intermediate | `int_comment_sentences`, `int_sentiment_results`, `int_video_product_mentions`, `int_sentence_product_targets`, `int_product_resolution_candidates` |
 | Layer 4 Marts | `dim_products`, `fact_product_mentions`, `agg_daily_product_ranking` |
 
 ---
@@ -224,8 +224,8 @@ nhiều ứng dụng độc lập.
 
 | Actor | Quyền chính |
 |---|---|
-| Guest/User | Đăng ký, đăng nhập, đăng xuất, tìm kiếm/lọc dữ liệu, xem các trang phân tích |
-| Admin | Kế thừa quyền Guest/User; CRUD từ khóa tìm kiếm và kênh tìm kiếm |
+| Guest/User | Đăng ký, đăng nhập, đăng xuất, tìm kiếm/lọc dữ liệu, xem phân tích và gửi phiếu đề xuất chỉnh sửa thông tin sản phẩm |
+| Admin | Kế thừa quyền Guest/User; CRUD từ khóa, kênh, sản phẩm, alias, template specs; duyệt phiếu chỉnh sửa và xử lý candidate sản phẩm chưa nhận diện |
 
 Quy tắc bắt buộc:
 
@@ -233,8 +233,10 @@ Quy tắc bắt buộc:
 2. Mật khẩu phải được hash; JWT secret đọc từ `.env`; không lưu plaintext password hoặc token trong source code.
 3. MVP lưu `app_users` bằng SQLAlchemy + SQLite local; không dùng BigQuery làm transactional user store.
 4. Redis cache TTL 300 giây chỉ áp dụng cho endpoint đọc analytics; không cache endpoint auth.
-5. CRUD Admin ghi trực tiếp BigQuery `keyword_config` và `channel_config`. Trigger ELT backfill tự động là phần mở rộng sau MVP.
+5. CRUD Admin ghi trực tiếp BigQuery cho cấu hình crawl và catalog. User chỉ ghi `product_detail_change_requests`; chỉ Admin được duyệt và merge dữ liệu vào `product_details`.
 6. Trang Admin Pipeline Health gọi FastAPI `/admin/pipeline/*`; frontend không gọi Airflow trực tiếp.
+
+Chi tiết catalog, resolver target và luồng duyệt phiếu: [`docs/product-catalog-and-moderation.md`](docs/product-catalog-and-moderation.md).
 
 ---
 
@@ -264,7 +266,11 @@ Lệnh vận hành thủ công khuyến nghị:
 ```powershell
 python -m nlp.runner --limit 500 --dag-run-id manual-nlp-500-t070
 cd transform
-python -m dotenv -f ..\.env run -- dbt run --profiles-dir . --select int_sentiment_results fact_product_mentions
+python -m dotenv -f ..\.env run -- dbt run --profiles-dir . --select int_sentiment_results int_video_product_mentions int_sentence_product_targets int_product_resolution_candidates fact_product_mentions
+
+# Resolve ambiguous product targets before the final fact rebuild
+conda activate etl-py313
+python -m nlp.product_target_resolver --limit 100
 ```
 
 Khi cần chạy lại bằng model/threshold mới:

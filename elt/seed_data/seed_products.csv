@@ -1,0 +1,501 @@
+﻿product_id,product_name,brand,category,release_year,aliases
+iphone-17,iPhone 17,Apple,Điện thoại,2025,iphone 17
+iphone-17-air,iPhone 17 Air,Apple,Điện thoại,2025,iphone 17 air
+iphone-17-pro,iPhone 17 Pro,Apple,Điện thoại,2025,iphone 17 pro
+iphone-17-pro-max,iPhone 17 Pro Max,Apple,Điện thoại,2025,iphone 17 pro max
+iphone-16,iPhone 16,Apple,Điện thoại,2024,iphone 16
+iphone-16-plus,iPhone 16 Plus,Apple,Điện thoại,2024,iphone 16 plus
+iphone-16-pro,iPhone 16 Pro,Apple,Điện thoại,2024,iphone 16 pro
+iphone-16-pro-max,iPhone 16 Pro Max,Apple,Điện thoại,2024,iphone 16 pro max
+iphone-16e,iPhone 16e,Apple,Điện thoại,2024,iphone 16e
+iphone-15,iPhone 15,Apple,Điện thoại,2023,iphone 15
+iphone-15-plus,iPhone 15 Plus,Apple,Điện thoại,2023,iphone 15 plus
+iphone-15-pro,iPhone 15 Pro,Apple,Điện thoại,2023,iphone 15 pro
+iphone-15-pro-max,iPhone 15 Pro Max,Apple,Điện thoại,2023,iphone 15 pro max
+iphone-14,iPhone 14,Apple,Điện thoại,2022,iphone 14
+iphone-14-plus,iPhone 14 Plus,Apple,Điện thoại,2022,iphone 14 plus
+iphone-14-pro,iPhone 14 Pro,Apple,Điện thoại,2022,iphone 14 pro
+iphone-14-pro-max,iPhone 14 Pro Max,Apple,Điện thoại,2022,iphone 14 pro max
+iphone-13,iPhone 13,Apple,Điện thoại,2021,iphone 13
+iphone-13-mini,iPhone 13 mini,Apple,Điện thoại,2021,iphone 13 mini
+iphone-13-pro,iPhone 13 Pro,Apple,Điện thoại,2021,iphone 13 pro
+iphone-13-pro-max,iPhone 13 Pro Max,Apple,Điện thoại,2021,iphone 13 pro max
+iphone-12,iPhone 12,Apple,Điện thoại,2020,iphone 12
+iphone-12-mini,iPhone 12 mini,Apple,Điện thoại,2020,iphone 12 mini
+iphone-12-pro,iPhone 12 Pro,Apple,Điện thoại,2020,iphone 12 pro
+iphone-12-pro-max,iPhone 12 Pro Max,Apple,Điện thoại,2020,iphone 12 pro max
+samsung-galaxy-s26,Samsung Galaxy S26,Samsung,Điện thoại,2026,Galaxy S26|samsung galaxy s26
+samsung-galaxy-s26-plus,Samsung Galaxy S26+,Samsung,Điện thoại,2026,Galaxy S26+|samsung galaxy s26+
+samsung-galaxy-s26-ultra,Samsung Galaxy S26 Ultra,Samsung,Điện thoại,2026,Galaxy S26 Ultra|samsung galaxy s26 ultra
+samsung-galaxy-s26-fe,Samsung Galaxy S26 FE,Samsung,Điện thoại,2026,Galaxy S26 FE|samsung galaxy s26 fe
+samsung-galaxy-s25,Samsung Galaxy S25,Samsung,Điện thoại,2025,Galaxy S25|samsung galaxy s25
+samsung-galaxy-s25-plus,Samsung Galaxy S25+,Samsung,Điện thoại,2025,Galaxy S25+|samsung galaxy s25+
+samsung-galaxy-s25-ultra,Samsung Galaxy S25 Ultra,Samsung,Điện thoại,2025,Galaxy S25 Ultra|samsung galaxy s25 ultra
+samsung-galaxy-s25-fe,Samsung Galaxy S25 FE,Samsung,Điện thoại,2025,Galaxy S25 FE|samsung galaxy s25 fe
+samsung-galaxy-s24,Samsung Galaxy S24,Samsung,Điện thoại,2024,Galaxy S24|samsung galaxy s24
+samsung-galaxy-s24-plus,Samsung Galaxy S24+,Samsung,Điện thoại,2024,Galaxy S24+|samsung galaxy s24+
+samsung-galaxy-s24-ultra,Samsung Galaxy S24 Ultra,Samsung,Điện thoại,2024,Galaxy S24 Ultra|samsung galaxy s24 ultra
+samsung-galaxy-s24-fe,Samsung Galaxy S24 FE,Samsung,Điện thoại,2024,Galaxy S24 FE|samsung galaxy s24 fe
+samsung-galaxy-s23,Samsung Galaxy S23,Samsung,Điện thoại,2023,Galaxy S23|samsung galaxy s23
+samsung-galaxy-s23-plus,Samsung Galaxy S23+,Samsung,Điện thoại,2023,Galaxy S23+|samsung galaxy s23+
+samsung-galaxy-s23-ultra,Samsung Galaxy S23 Ultra,Samsung,Điện thoại,2023,Galaxy S23 Ultra|samsung galaxy s23 ultra
+samsung-galaxy-s23-fe,Samsung Galaxy S23 FE,Samsung,Điện thoại,2023,Galaxy S23 FE|samsung galaxy s23 fe
+samsung-galaxy-s22,Samsung Galaxy S22,Samsung,Điện thoại,2022,Galaxy S22|samsung galaxy s22
+samsung-galaxy-s22-plus,Samsung Galaxy S22+,Samsung,Điện thoại,2022,Galaxy S22+|samsung galaxy s22+
+samsung-galaxy-s22-ultra,Samsung Galaxy S22 Ultra,Samsung,Điện thoại,2022,Galaxy S22 Ultra|samsung galaxy s22 ultra
+samsung-galaxy-s22-fe,Samsung Galaxy S22 FE,Samsung,Điện thoại,2022,Galaxy S22 FE|samsung galaxy s22 fe
+samsung-galaxy-s21,Samsung Galaxy S21,Samsung,Điện thoại,2021,Galaxy S21|samsung galaxy s21
+samsung-galaxy-s21-plus,Samsung Galaxy S21+,Samsung,Điện thoại,2021,Galaxy S21+|samsung galaxy s21+
+samsung-galaxy-s21-ultra,Samsung Galaxy S21 Ultra,Samsung,Điện thoại,2021,Galaxy S21 Ultra|samsung galaxy s21 ultra
+samsung-galaxy-s21-fe,Samsung Galaxy S21 FE,Samsung,Điện thoại,2021,Galaxy S21 FE|samsung galaxy s21 fe
+samsung-galaxy-s20,Samsung Galaxy S20,Samsung,Điện thoại,2020,Galaxy S20|samsung galaxy s20
+samsung-galaxy-s20-plus,Samsung Galaxy S20+,Samsung,Điện thoại,2020,Galaxy S20+|samsung galaxy s20+
+samsung-galaxy-s20-ultra,Samsung Galaxy S20 Ultra,Samsung,Điện thoại,2020,Galaxy S20 Ultra|samsung galaxy s20 ultra
+samsung-galaxy-s20-fe,Samsung Galaxy S20 FE,Samsung,Điện thoại,2020,Galaxy S20 FE|samsung galaxy s20 fe
+samsung-galaxy-z-fold7,Samsung Galaxy Z Fold7,Samsung,Điện thoại,2025,Galaxy Z Fold7|samsung galaxy z fold7
+samsung-galaxy-z-flip7,Samsung Galaxy Z Flip7,Samsung,Điện thoại,2025,Galaxy Z Flip7|samsung galaxy z flip7
+samsung-galaxy-z-fold6,Samsung Galaxy Z Fold6,Samsung,Điện thoại,2024,Galaxy Z Fold6|samsung galaxy z fold6
+samsung-galaxy-z-flip6,Samsung Galaxy Z Flip6,Samsung,Điện thoại,2024,Galaxy Z Flip6|samsung galaxy z flip6
+samsung-galaxy-z-fold5,Samsung Galaxy Z Fold5,Samsung,Điện thoại,2023,Galaxy Z Fold5|samsung galaxy z fold5
+samsung-galaxy-z-flip5,Samsung Galaxy Z Flip5,Samsung,Điện thoại,2023,Galaxy Z Flip5|samsung galaxy z flip5
+samsung-galaxy-z-fold4,Samsung Galaxy Z Fold4,Samsung,Điện thoại,2022,Galaxy Z Fold4|samsung galaxy z fold4
+samsung-galaxy-z-flip4,Samsung Galaxy Z Flip4,Samsung,Điện thoại,2022,Galaxy Z Flip4|samsung galaxy z flip4
+samsung-galaxy-a06,Samsung Galaxy A06,Samsung,Điện thoại,2025,Galaxy A06|samsung galaxy a06
+samsung-galaxy-a16,Samsung Galaxy A16,Samsung,Điện thoại,2025,Galaxy A16|samsung galaxy a16
+samsung-galaxy-a26,Samsung Galaxy A26,Samsung,Điện thoại,2025,Galaxy A26|samsung galaxy a26
+samsung-galaxy-a36,Samsung Galaxy A36,Samsung,Điện thoại,2025,Galaxy A36|samsung galaxy a36
+samsung-galaxy-a56,Samsung Galaxy A56,Samsung,Điện thoại,2025,Galaxy A56|samsung galaxy a56
+samsung-galaxy-a05s,Samsung Galaxy A05s,Samsung,Điện thoại,2025,Galaxy A05s|samsung galaxy a05s
+samsung-galaxy-a15,Samsung Galaxy A15,Samsung,Điện thoại,2025,Galaxy A15|samsung galaxy a15
+samsung-galaxy-a25,Samsung Galaxy A25,Samsung,Điện thoại,2025,Galaxy A25|samsung galaxy a25
+samsung-galaxy-a35,Samsung Galaxy A35,Samsung,Điện thoại,2025,Galaxy A35|samsung galaxy a35
+samsung-galaxy-a55,Samsung Galaxy A55,Samsung,Điện thoại,2025,Galaxy A55|samsung galaxy a55
+samsung-galaxy-a14,Samsung Galaxy A14,Samsung,Điện thoại,2025,Galaxy A14|samsung galaxy a14
+samsung-galaxy-a24,Samsung Galaxy A24,Samsung,Điện thoại,2025,Galaxy A24|samsung galaxy a24
+samsung-galaxy-a34,Samsung Galaxy A34,Samsung,Điện thoại,2025,Galaxy A34|samsung galaxy a34
+samsung-galaxy-a54,Samsung Galaxy A54,Samsung,Điện thoại,2025,Galaxy A54|samsung galaxy a54
+samsung-galaxy-m15,Samsung Galaxy M15,Samsung,Điện thoại,2025,Galaxy M15|samsung galaxy m15
+samsung-galaxy-m35,Samsung Galaxy M35,Samsung,Điện thoại,2025,Galaxy M35|samsung galaxy m35
+samsung-galaxy-m55,Samsung Galaxy M55,Samsung,Điện thoại,2025,Galaxy M55|samsung galaxy m55
+xiaomi-15,Xiaomi 15,Xiaomi,Điện thoại,2025,15|xiaomi 15
+xiaomi-15-pro,Xiaomi 15 Pro,Xiaomi,Điện thoại,2025,15 Pro|xiaomi 15 pro
+xiaomi-15-ultra,Xiaomi 15 Ultra,Xiaomi,Điện thoại,2025,15 Ultra|xiaomi 15 ultra
+xiaomi-15-lite,Xiaomi 15 Lite,Xiaomi,Điện thoại,2025,15 Lite|xiaomi 15 lite
+xiaomi-15t,Xiaomi 15T,Xiaomi,Điện thoại,2025,15T|xiaomi 15t
+xiaomi-15t-pro,Xiaomi 15T Pro,Xiaomi,Điện thoại,2025,15T Pro|xiaomi 15t pro
+xiaomi-14,Xiaomi 14,Xiaomi,Điện thoại,2024,14|xiaomi 14
+xiaomi-14-pro,Xiaomi 14 Pro,Xiaomi,Điện thoại,2024,14 Pro|xiaomi 14 pro
+xiaomi-14-ultra,Xiaomi 14 Ultra,Xiaomi,Điện thoại,2024,14 Ultra|xiaomi 14 ultra
+xiaomi-14-lite,Xiaomi 14 Lite,Xiaomi,Điện thoại,2024,14 Lite|xiaomi 14 lite
+xiaomi-14t,Xiaomi 14T,Xiaomi,Điện thoại,2024,14T|xiaomi 14t
+xiaomi-14t-pro,Xiaomi 14T Pro,Xiaomi,Điện thoại,2024,14T Pro|xiaomi 14t pro
+xiaomi-13,Xiaomi 13,Xiaomi,Điện thoại,2023,13|xiaomi 13
+xiaomi-13-pro,Xiaomi 13 Pro,Xiaomi,Điện thoại,2023,13 Pro|xiaomi 13 pro
+xiaomi-13-ultra,Xiaomi 13 Ultra,Xiaomi,Điện thoại,2023,13 Ultra|xiaomi 13 ultra
+xiaomi-13-lite,Xiaomi 13 Lite,Xiaomi,Điện thoại,2023,13 Lite|xiaomi 13 lite
+xiaomi-13t,Xiaomi 13T,Xiaomi,Điện thoại,2023,13T|xiaomi 13t
+xiaomi-13t-pro,Xiaomi 13T Pro,Xiaomi,Điện thoại,2023,13T Pro|xiaomi 13t pro
+xiaomi-12,Xiaomi 12,Xiaomi,Điện thoại,2022,12|xiaomi 12
+xiaomi-12-pro,Xiaomi 12 Pro,Xiaomi,Điện thoại,2022,12 Pro|xiaomi 12 pro
+xiaomi-12-ultra,Xiaomi 12 Ultra,Xiaomi,Điện thoại,2022,12 Ultra|xiaomi 12 ultra
+xiaomi-12-lite,Xiaomi 12 Lite,Xiaomi,Điện thoại,2022,12 Lite|xiaomi 12 lite
+xiaomi-12t,Xiaomi 12T,Xiaomi,Điện thoại,2022,12T|xiaomi 12t
+xiaomi-12t-pro,Xiaomi 12T Pro,Xiaomi,Điện thoại,2022,12T Pro|xiaomi 12t pro
+xiaomi-11,Xiaomi 11,Xiaomi,Điện thoại,2021,11|xiaomi 11
+xiaomi-11-pro,Xiaomi 11 Pro,Xiaomi,Điện thoại,2021,11 Pro|xiaomi 11 pro
+xiaomi-11-ultra,Xiaomi 11 Ultra,Xiaomi,Điện thoại,2021,11 Ultra|xiaomi 11 ultra
+xiaomi-11-lite,Xiaomi 11 Lite,Xiaomi,Điện thoại,2021,11 Lite|xiaomi 11 lite
+xiaomi-11t,Xiaomi 11T,Xiaomi,Điện thoại,2021,11T|xiaomi 11t
+xiaomi-11t-pro,Xiaomi 11T Pro,Xiaomi,Điện thoại,2021,11T Pro|xiaomi 11t pro
+redmi-note-14,Redmi Note 14,Xiaomi,Điện thoại,2025,redmi note 14
+redmi-note-14-pro,Redmi Note 14 Pro,Xiaomi,Điện thoại,2025,redmi note 14 pro
+redmi-note-14-pro-plus,Redmi Note 14 Pro+,Xiaomi,Điện thoại,2025,redmi note 14 pro+
+redmi-note-14-5g,Redmi Note 14 5G,Xiaomi,Điện thoại,2025,redmi note 14 5g
+redmi-note-13,Redmi Note 13,Xiaomi,Điện thoại,2025,redmi note 13
+redmi-note-13-pro,Redmi Note 13 Pro,Xiaomi,Điện thoại,2025,redmi note 13 pro
+redmi-note-13-pro-plus,Redmi Note 13 Pro+,Xiaomi,Điện thoại,2025,redmi note 13 pro+
+redmi-note-13-5g,Redmi Note 13 5G,Xiaomi,Điện thoại,2025,redmi note 13 5g
+redmi-note-12,Redmi Note 12,Xiaomi,Điện thoại,2025,redmi note 12
+redmi-note-12-pro,Redmi Note 12 Pro,Xiaomi,Điện thoại,2025,redmi note 12 pro
+redmi-note-12-pro-plus,Redmi Note 12 Pro+,Xiaomi,Điện thoại,2025,redmi note 12 pro+
+redmi-note-12-5g,Redmi Note 12 5G,Xiaomi,Điện thoại,2025,redmi note 12 5g
+redmi-note-11,Redmi Note 11,Xiaomi,Điện thoại,2025,redmi note 11
+redmi-note-11-pro,Redmi Note 11 Pro,Xiaomi,Điện thoại,2025,redmi note 11 pro
+redmi-note-11-pro-plus,Redmi Note 11 Pro+,Xiaomi,Điện thoại,2025,redmi note 11 pro+
+redmi-note-11-5g,Redmi Note 11 5G,Xiaomi,Điện thoại,2025,redmi note 11 5g
+redmi-note-10,Redmi Note 10,Xiaomi,Điện thoại,2025,redmi note 10
+redmi-note-10-pro,Redmi Note 10 Pro,Xiaomi,Điện thoại,2025,redmi note 10 pro
+redmi-note-10-pro-plus,Redmi Note 10 Pro+,Xiaomi,Điện thoại,2025,redmi note 10 pro+
+redmi-note-10-5g,Redmi Note 10 5G,Xiaomi,Điện thoại,2025,redmi note 10 5g
+poco-f7,POCO F7,POCO,Điện thoại,2025,F7|poco f7
+poco-f7-pro,POCO F7 Pro,POCO,Điện thoại,2025,F7 Pro|poco f7 pro
+poco-x7,POCO X7,POCO,Điện thoại,2025,X7|poco x7
+poco-x7-pro,POCO X7 Pro,POCO,Điện thoại,2025,X7 Pro|poco x7 pro
+poco-m7,POCO M7,POCO,Điện thoại,2025,M7|poco m7
+poco-m7-pro,POCO M7 Pro,POCO,Điện thoại,2025,M7 Pro|poco m7 pro
+poco-f6,POCO F6,POCO,Điện thoại,2025,F6|poco f6
+poco-f6-pro,POCO F6 Pro,POCO,Điện thoại,2025,F6 Pro|poco f6 pro
+poco-x6,POCO X6,POCO,Điện thoại,2025,X6|poco x6
+poco-x6-pro,POCO X6 Pro,POCO,Điện thoại,2025,X6 Pro|poco x6 pro
+poco-m6,POCO M6,POCO,Điện thoại,2025,M6|poco m6
+poco-m6-pro,POCO M6 Pro,POCO,Điện thoại,2025,M6 Pro|poco m6 pro
+oppo-find-x8,OPPO Find X8,OPPO,Điện thoại,2025,Find X8|oppo find x8
+oppo-find-x8-pro,OPPO Find X8 Pro,OPPO,Điện thoại,2025,Find X8 Pro|oppo find x8 pro
+oppo-find-x8-ultra,OPPO Find X8 Ultra,OPPO,Điện thoại,2025,Find X8 Ultra|oppo find x8 ultra
+oppo-find-x7,OPPO Find X7,OPPO,Điện thoại,2025,Find X7|oppo find x7
+oppo-find-x7-pro,OPPO Find X7 Pro,OPPO,Điện thoại,2025,Find X7 Pro|oppo find x7 pro
+oppo-find-x7-ultra,OPPO Find X7 Ultra,OPPO,Điện thoại,2025,Find X7 Ultra|oppo find x7 ultra
+oppo-find-x6,OPPO Find X6,OPPO,Điện thoại,2025,Find X6|oppo find x6
+oppo-find-x6-pro,OPPO Find X6 Pro,OPPO,Điện thoại,2025,Find X6 Pro|oppo find x6 pro
+oppo-find-x6-ultra,OPPO Find X6 Ultra,OPPO,Điện thoại,2025,Find X6 Ultra|oppo find x6 ultra
+oppo-find-x5,OPPO Find X5,OPPO,Điện thoại,2025,Find X5|oppo find x5
+oppo-find-x5-pro,OPPO Find X5 Pro,OPPO,Điện thoại,2025,Find X5 Pro|oppo find x5 pro
+oppo-find-x5-ultra,OPPO Find X5 Ultra,OPPO,Điện thoại,2025,Find X5 Ultra|oppo find x5 ultra
+oppo-find-x3,OPPO Find X3,OPPO,Điện thoại,2025,Find X3|oppo find x3
+oppo-find-x3-pro,OPPO Find X3 Pro,OPPO,Điện thoại,2025,Find X3 Pro|oppo find x3 pro
+oppo-find-x3-ultra,OPPO Find X3 Ultra,OPPO,Điện thoại,2025,Find X3 Ultra|oppo find x3 ultra
+oppo-reno-14,OPPO Reno 14,OPPO,Điện thoại,2025,Reno 14|oppo reno 14
+oppo-reno-14-pro,OPPO Reno 14 Pro,OPPO,Điện thoại,2025,Reno 14 Pro|oppo reno 14 pro
+oppo-reno-14-pro-plus,OPPO Reno 14 Pro+,OPPO,Điện thoại,2025,Reno 14 Pro+|oppo reno 14 pro+
+oppo-reno-13,OPPO Reno 13,OPPO,Điện thoại,2025,Reno 13|oppo reno 13
+oppo-reno-13-pro,OPPO Reno 13 Pro,OPPO,Điện thoại,2025,Reno 13 Pro|oppo reno 13 pro
+oppo-reno-13-pro-plus,OPPO Reno 13 Pro+,OPPO,Điện thoại,2025,Reno 13 Pro+|oppo reno 13 pro+
+oppo-reno-12,OPPO Reno 12,OPPO,Điện thoại,2025,Reno 12|oppo reno 12
+oppo-reno-12-pro,OPPO Reno 12 Pro,OPPO,Điện thoại,2025,Reno 12 Pro|oppo reno 12 pro
+oppo-reno-12-pro-plus,OPPO Reno 12 Pro+,OPPO,Điện thoại,2025,Reno 12 Pro+|oppo reno 12 pro+
+oppo-reno-11,OPPO Reno 11,OPPO,Điện thoại,2025,Reno 11|oppo reno 11
+oppo-reno-11-pro,OPPO Reno 11 Pro,OPPO,Điện thoại,2025,Reno 11 Pro|oppo reno 11 pro
+oppo-reno-11-pro-plus,OPPO Reno 11 Pro+,OPPO,Điện thoại,2025,Reno 11 Pro+|oppo reno 11 pro+
+oppo-reno-10,OPPO Reno 10,OPPO,Điện thoại,2025,Reno 10|oppo reno 10
+oppo-reno-10-pro,OPPO Reno 10 Pro,OPPO,Điện thoại,2025,Reno 10 Pro|oppo reno 10 pro
+oppo-reno-10-pro-plus,OPPO Reno 10 Pro+,OPPO,Điện thoại,2025,Reno 10 Pro+|oppo reno 10 pro+
+oppo-reno-8,OPPO Reno 8,OPPO,Điện thoại,2025,Reno 8|oppo reno 8
+oppo-reno-8-pro,OPPO Reno 8 Pro,OPPO,Điện thoại,2025,Reno 8 Pro|oppo reno 8 pro
+oppo-reno-8-pro-plus,OPPO Reno 8 Pro+,OPPO,Điện thoại,2025,Reno 8 Pro+|oppo reno 8 pro+
+vivo-x200,vivo X200,vivo,Điện thoại,2025,X200|vivo x200
+vivo-x200-pro,vivo X200 Pro,vivo,Điện thoại,2025,X200 Pro|vivo x200 pro
+vivo-x200-ultra,vivo X200 Ultra,vivo,Điện thoại,2025,X200 Ultra|vivo x200 ultra
+vivo-x100,vivo X100,vivo,Điện thoại,2025,X100|vivo x100
+vivo-x100-pro,vivo X100 Pro,vivo,Điện thoại,2025,X100 Pro|vivo x100 pro
+vivo-x100-ultra,vivo X100 Ultra,vivo,Điện thoại,2025,X100 Ultra|vivo x100 ultra
+vivo-x90,vivo X90,vivo,Điện thoại,2025,X90|vivo x90
+vivo-x90-pro,vivo X90 Pro,vivo,Điện thoại,2025,X90 Pro|vivo x90 pro
+vivo-x90-ultra,vivo X90 Ultra,vivo,Điện thoại,2025,X90 Ultra|vivo x90 ultra
+vivo-x80,vivo X80,vivo,Điện thoại,2025,X80|vivo x80
+vivo-x80-pro,vivo X80 Pro,vivo,Điện thoại,2025,X80 Pro|vivo x80 pro
+vivo-x80-ultra,vivo X80 Ultra,vivo,Điện thoại,2025,X80 Ultra|vivo x80 ultra
+vivo-v50,vivo V50,vivo,Điện thoại,2025,V50|vivo v50
+vivo-v50-pro,vivo V50 Pro,vivo,Điện thoại,2025,V50 Pro|vivo v50 pro
+vivo-v40,vivo V40,vivo,Điện thoại,2025,V40|vivo v40
+vivo-v40-pro,vivo V40 Pro,vivo,Điện thoại,2025,V40 Pro|vivo v40 pro
+vivo-v30,vivo V30,vivo,Điện thoại,2025,V30|vivo v30
+vivo-v30-pro,vivo V30 Pro,vivo,Điện thoại,2025,V30 Pro|vivo v30 pro
+vivo-v29,vivo V29,vivo,Điện thoại,2025,V29|vivo v29
+vivo-v29-pro,vivo V29 Pro,vivo,Điện thoại,2025,V29 Pro|vivo v29 pro
+vivo-v27,vivo V27,vivo,Điện thoại,2025,V27|vivo v27
+vivo-v27-pro,vivo V27 Pro,vivo,Điện thoại,2025,V27 Pro|vivo v27 pro
+oneplus-13,OnePlus 13,OnePlus,Điện thoại,2025,13|oneplus 13
+oneplus-13r,OnePlus 13R,OnePlus,Điện thoại,2025,13R|oneplus 13r
+oneplus-13-pro,OnePlus 13 Pro,OnePlus,Điện thoại,2025,13 Pro|oneplus 13 pro
+oneplus-12,OnePlus 12,OnePlus,Điện thoại,2025,12|oneplus 12
+oneplus-12r,OnePlus 12R,OnePlus,Điện thoại,2025,12R|oneplus 12r
+oneplus-12-pro,OnePlus 12 Pro,OnePlus,Điện thoại,2025,12 Pro|oneplus 12 pro
+oneplus-11,OnePlus 11,OnePlus,Điện thoại,2025,11|oneplus 11
+oneplus-11r,OnePlus 11R,OnePlus,Điện thoại,2025,11R|oneplus 11r
+oneplus-11-pro,OnePlus 11 Pro,OnePlus,Điện thoại,2025,11 Pro|oneplus 11 pro
+oneplus-10,OnePlus 10,OnePlus,Điện thoại,2025,10|oneplus 10
+oneplus-10r,OnePlus 10R,OnePlus,Điện thoại,2025,10R|oneplus 10r
+oneplus-10-pro,OnePlus 10 Pro,OnePlus,Điện thoại,2025,10 Pro|oneplus 10 pro
+oneplus-9,OnePlus 9,OnePlus,Điện thoại,2025,9|oneplus 9
+oneplus-9r,OnePlus 9R,OnePlus,Điện thoại,2025,9R|oneplus 9r
+oneplus-9-pro,OnePlus 9 Pro,OnePlus,Điện thoại,2025,9 Pro|oneplus 9 pro
+google-pixel-9,Google Pixel 9,Google,Điện thoại,2025,Pixel 9|google pixel 9
+google-pixel-9-pro,Google Pixel 9 Pro,Google,Điện thoại,2025,Pixel 9 Pro|google pixel 9 pro
+google-pixel-9-pro-xl,Google Pixel 9 Pro XL,Google,Điện thoại,2025,Pixel 9 Pro XL|google pixel 9 pro xl
+google-pixel-9a,Google Pixel 9a,Google,Điện thoại,2025,Pixel 9a|google pixel 9a
+google-pixel-8,Google Pixel 8,Google,Điện thoại,2025,Pixel 8|google pixel 8
+google-pixel-8-pro,Google Pixel 8 Pro,Google,Điện thoại,2025,Pixel 8 Pro|google pixel 8 pro
+google-pixel-8-pro-xl,Google Pixel 8 Pro XL,Google,Điện thoại,2025,Pixel 8 Pro XL|google pixel 8 pro xl
+google-pixel-8a,Google Pixel 8a,Google,Điện thoại,2025,Pixel 8a|google pixel 8a
+google-pixel-7,Google Pixel 7,Google,Điện thoại,2025,Pixel 7|google pixel 7
+google-pixel-7-pro,Google Pixel 7 Pro,Google,Điện thoại,2025,Pixel 7 Pro|google pixel 7 pro
+google-pixel-7-pro-xl,Google Pixel 7 Pro XL,Google,Điện thoại,2025,Pixel 7 Pro XL|google pixel 7 pro xl
+google-pixel-7a,Google Pixel 7a,Google,Điện thoại,2025,Pixel 7a|google pixel 7a
+google-pixel-6,Google Pixel 6,Google,Điện thoại,2025,Pixel 6|google pixel 6
+google-pixel-6-pro,Google Pixel 6 Pro,Google,Điện thoại,2025,Pixel 6 Pro|google pixel 6 pro
+google-pixel-6-pro-xl,Google Pixel 6 Pro XL,Google,Điện thoại,2025,Pixel 6 Pro XL|google pixel 6 pro xl
+google-pixel-6a,Google Pixel 6a,Google,Điện thoại,2025,Pixel 6a|google pixel 6a
+honor-magic7,HONOR Magic7,HONOR,Điện thoại,2025,Magic7|honor magic7
+honor-magic7-pro,HONOR Magic7 Pro,HONOR,Điện thoại,2025,Magic7 Pro|honor magic7 pro
+honor-magic7-lite,HONOR Magic7 Lite,HONOR,Điện thoại,2025,Magic7 Lite|honor magic7 lite
+honor-magic6,HONOR Magic6,HONOR,Điện thoại,2025,Magic6|honor magic6
+honor-magic6-pro,HONOR Magic6 Pro,HONOR,Điện thoại,2025,Magic6 Pro|honor magic6 pro
+honor-magic6-lite,HONOR Magic6 Lite,HONOR,Điện thoại,2025,Magic6 Lite|honor magic6 lite
+honor-magic5,HONOR Magic5,HONOR,Điện thoại,2025,Magic5|honor magic5
+honor-magic5-pro,HONOR Magic5 Pro,HONOR,Điện thoại,2025,Magic5 Pro|honor magic5 pro
+honor-magic5-lite,HONOR Magic5 Lite,HONOR,Điện thoại,2025,Magic5 Lite|honor magic5 lite
+nothing-phone-3,Nothing Phone (3),Nothing,Điện thoại,2025,Phone (3)|nothing phone (3)
+nothing-phone-3a,Nothing Phone (3a),Nothing,Điện thoại,2025,Phone (3a)|nothing phone (3a)
+nothing-phone-3a-pro,Nothing Phone (3a) Pro,Nothing,Điện thoại,2025,Phone (3a) Pro|nothing phone (3a) pro
+nothing-phone-2,Nothing Phone (2),Nothing,Điện thoại,2025,Phone (2)|nothing phone (2)
+nothing-phone-2a,Nothing Phone (2a),Nothing,Điện thoại,2025,Phone (2a)|nothing phone (2a)
+nothing-phone-2a-plus,Nothing Phone (2a) Plus,Nothing,Điện thoại,2025,Phone (2a) Plus|nothing phone (2a) plus
+nothing-cmf-phone-1,Nothing CMF Phone 1,Nothing,Điện thoại,2025,CMF Phone 1|nothing cmf phone 1
+nothing-cmf-phone-2-pro,Nothing CMF Phone 2 Pro,Nothing,Điện thoại,2025,CMF Phone 2 Pro|nothing cmf phone 2 pro
+motorola-edge-60-pro,Motorola Edge 60 Pro,Motorola,Điện thoại,2025,Edge 60 Pro|motorola edge 60 pro
+motorola-edge-60-fusion,Motorola Edge 60 Fusion,Motorola,Điện thoại,2025,Edge 60 Fusion|motorola edge 60 fusion
+motorola-edge-50-pro,Motorola Edge 50 Pro,Motorola,Điện thoại,2025,Edge 50 Pro|motorola edge 50 pro
+motorola-edge-50-fusion,Motorola Edge 50 Fusion,Motorola,Điện thoại,2025,Edge 50 Fusion|motorola edge 50 fusion
+motorola-razr-60-ultra,Motorola Razr 60 Ultra,Motorola,Điện thoại,2025,Razr 60 Ultra|motorola razr 60 ultra
+motorola-razr-60,Motorola Razr 60,Motorola,Điện thoại,2025,Razr 60|motorola razr 60
+motorola-razr-50-ultra,Motorola Razr 50 Ultra,Motorola,Điện thoại,2025,Razr 50 Ultra|motorola razr 50 ultra
+macbook-air-13-m4,MacBook Air 13 M4,Apple,Laptop,2025,macbook air 13 m4
+macbook-air-15-m4,MacBook Air 15 M4,Apple,Laptop,2025,macbook air 15 m4
+macbook-pro-14-m4,MacBook Pro 14 M4,Apple,Laptop,2025,macbook pro 14 m4
+macbook-pro-14-m4-pro,MacBook Pro 14 M4 Pro,Apple,Laptop,2025,macbook pro 14 m4 pro
+macbook-pro-14-m4-max,MacBook Pro 14 M4 Max,Apple,Laptop,2025,macbook pro 14 m4 max
+macbook-pro-16-m4-pro,MacBook Pro 16 M4 Pro,Apple,Laptop,2025,macbook pro 16 m4 pro
+macbook-pro-16-m4-max,MacBook Pro 16 M4 Max,Apple,Laptop,2025,macbook pro 16 m4 max
+macbook-air-13-m3,MacBook Air 13 M3,Apple,Laptop,2024,macbook air 13 m3
+macbook-air-15-m3,MacBook Air 15 M3,Apple,Laptop,2024,macbook air 15 m3
+macbook-pro-14-m3,MacBook Pro 14 M3,Apple,Laptop,2024,macbook pro 14 m3
+macbook-pro-14-m3-pro,MacBook Pro 14 M3 Pro,Apple,Laptop,2024,macbook pro 14 m3 pro
+macbook-pro-16-m3-pro,MacBook Pro 16 M3 Pro,Apple,Laptop,2024,macbook pro 16 m3 pro
+dell-xps-13,Dell XPS 13,Dell,Laptop,2025,XPS 13|dell xps 13
+dell-xps-13-2024,Dell XPS 13 2024,Dell,Laptop,2024,XPS 13 2024|dell xps 13 2024
+dell-xps-14,Dell XPS 14,Dell,Laptop,2025,XPS 14|dell xps 14
+dell-xps-14-2024,Dell XPS 14 2024,Dell,Laptop,2024,XPS 14 2024|dell xps 14 2024
+dell-xps-16,Dell XPS 16,Dell,Laptop,2025,XPS 16|dell xps 16
+dell-xps-16-2024,Dell XPS 16 2024,Dell,Laptop,2024,XPS 16 2024|dell xps 16 2024
+dell-inspiron-14,Dell Inspiron 14,Dell,Laptop,2025,Inspiron 14|dell inspiron 14
+dell-inspiron-14-2024,Dell Inspiron 14 2024,Dell,Laptop,2024,Inspiron 14 2024|dell inspiron 14 2024
+dell-inspiron-16,Dell Inspiron 16,Dell,Laptop,2025,Inspiron 16|dell inspiron 16
+dell-inspiron-16-2024,Dell Inspiron 16 2024,Dell,Laptop,2024,Inspiron 16 2024|dell inspiron 16 2024
+dell-latitude-5450,Dell Latitude 5450,Dell,Laptop,2025,Latitude 5450|dell latitude 5450
+dell-latitude-5450-2024,Dell Latitude 5450 2024,Dell,Laptop,2024,Latitude 5450 2024|dell latitude 5450 2024
+dell-latitude-7450,Dell Latitude 7450,Dell,Laptop,2025,Latitude 7450|dell latitude 7450
+dell-latitude-7450-2024,Dell Latitude 7450 2024,Dell,Laptop,2024,Latitude 7450 2024|dell latitude 7450 2024
+dell-precision-3590,Dell Precision 3590,Dell,Laptop,2025,Precision 3590|dell precision 3590
+dell-precision-3590-2024,Dell Precision 3590 2024,Dell,Laptop,2024,Precision 3590 2024|dell precision 3590 2024
+dell-alienware-m16-r2,Dell Alienware m16 R2,Dell,Laptop,2025,Alienware m16 R2|dell alienware m16 r2
+dell-alienware-m16-r2-2024,Dell Alienware m16 R2 2024,Dell,Laptop,2024,Alienware m16 R2 2024|dell alienware m16 r2 2024
+dell-alienware-x16-r2,Dell Alienware x16 R2,Dell,Laptop,2025,Alienware x16 R2|dell alienware x16 r2
+dell-alienware-x16-r2-2024,Dell Alienware x16 R2 2024,Dell,Laptop,2024,Alienware x16 R2 2024|dell alienware x16 r2 2024
+dell-g15-5530,Dell G15 5530,Dell,Laptop,2025,G15 5530|dell g15 5530
+dell-g15-5530-2024,Dell G15 5530 2024,Dell,Laptop,2024,G15 5530 2024|dell g15 5530 2024
+hp-spectre-x360-14,HP Spectre x360 14,HP,Laptop,2025,Spectre x360 14|hp spectre x360 14
+hp-spectre-x360-14-2024,HP Spectre x360 14 2024,HP,Laptop,2024,Spectre x360 14 2024|hp spectre x360 14 2024
+hp-spectre-x360-16,HP Spectre x360 16,HP,Laptop,2025,Spectre x360 16|hp spectre x360 16
+hp-spectre-x360-16-2024,HP Spectre x360 16 2024,HP,Laptop,2024,Spectre x360 16 2024|hp spectre x360 16 2024
+hp-omnibook-ultra-flip-14,HP OmniBook Ultra Flip 14,HP,Laptop,2025,OmniBook Ultra Flip 14|hp omnibook ultra flip 14
+hp-omnibook-ultra-flip-14-2024,HP OmniBook Ultra Flip 14 2024,HP,Laptop,2024,OmniBook Ultra Flip 14 2024|hp omnibook ultra flip 14 2024
+hp-omnibook-x-14,HP OmniBook X 14,HP,Laptop,2025,OmniBook X 14|hp omnibook x 14
+hp-omnibook-x-14-2024,HP OmniBook X 14 2024,HP,Laptop,2024,OmniBook X 14 2024|hp omnibook x 14 2024
+hp-pavilion-plus-14,HP Pavilion Plus 14,HP,Laptop,2025,Pavilion Plus 14|hp pavilion plus 14
+hp-pavilion-plus-14-2024,HP Pavilion Plus 14 2024,HP,Laptop,2024,Pavilion Plus 14 2024|hp pavilion plus 14 2024
+hp-envy-x360-14,HP Envy x360 14,HP,Laptop,2025,Envy x360 14|hp envy x360 14
+hp-envy-x360-14-2024,HP Envy x360 14 2024,HP,Laptop,2024,Envy x360 14 2024|hp envy x360 14 2024
+hp-victus-15,HP Victus 15,HP,Laptop,2025,Victus 15|hp victus 15
+hp-victus-15-2024,HP Victus 15 2024,HP,Laptop,2024,Victus 15 2024|hp victus 15 2024
+hp-victus-16,HP Victus 16,HP,Laptop,2025,Victus 16|hp victus 16
+hp-victus-16-2024,HP Victus 16 2024,HP,Laptop,2024,Victus 16 2024|hp victus 16 2024
+hp-omen-16,HP OMEN 16,HP,Laptop,2025,OMEN 16|hp omen 16
+hp-omen-16-2024,HP OMEN 16 2024,HP,Laptop,2024,OMEN 16 2024|hp omen 16 2024
+hp-omen-transcend-14,HP OMEN Transcend 14,HP,Laptop,2025,OMEN Transcend 14|hp omen transcend 14
+hp-omen-transcend-14-2024,HP OMEN Transcend 14 2024,HP,Laptop,2024,OMEN Transcend 14 2024|hp omen transcend 14 2024
+hp-elitebook-840-g11,HP EliteBook 840 G11,HP,Laptop,2025,EliteBook 840 G11|hp elitebook 840 g11
+hp-elitebook-840-g11-2024,HP EliteBook 840 G11 2024,HP,Laptop,2024,EliteBook 840 G11 2024|hp elitebook 840 g11 2024
+lenovo-thinkpad-x1-carbon-gen-13,Lenovo ThinkPad X1 Carbon Gen 13,Lenovo,Laptop,2025,ThinkPad X1 Carbon Gen 13|lenovo thinkpad x1 carbon gen 13
+lenovo-thinkpad-x1-carbon-gen-13-2024,Lenovo ThinkPad X1 Carbon Gen 13 2024,Lenovo,Laptop,2024,ThinkPad X1 Carbon Gen 13 2024|lenovo thinkpad x1 carbon gen 13 2024
+lenovo-thinkpad-x1-yoga-gen-9,Lenovo ThinkPad X1 Yoga Gen 9,Lenovo,Laptop,2025,ThinkPad X1 Yoga Gen 9|lenovo thinkpad x1 yoga gen 9
+lenovo-thinkpad-x1-yoga-gen-9-2024,Lenovo ThinkPad X1 Yoga Gen 9 2024,Lenovo,Laptop,2024,ThinkPad X1 Yoga Gen 9 2024|lenovo thinkpad x1 yoga gen 9 2024
+lenovo-thinkpad-t14-gen-5,Lenovo ThinkPad T14 Gen 5,Lenovo,Laptop,2025,ThinkPad T14 Gen 5|lenovo thinkpad t14 gen 5
+lenovo-thinkpad-t14-gen-5-2024,Lenovo ThinkPad T14 Gen 5 2024,Lenovo,Laptop,2024,ThinkPad T14 Gen 5 2024|lenovo thinkpad t14 gen 5 2024
+lenovo-thinkbook-14-gen-7,Lenovo ThinkBook 14 Gen 7,Lenovo,Laptop,2025,ThinkBook 14 Gen 7|lenovo thinkbook 14 gen 7
+lenovo-thinkbook-14-gen-7-2024,Lenovo ThinkBook 14 Gen 7 2024,Lenovo,Laptop,2024,ThinkBook 14 Gen 7 2024|lenovo thinkbook 14 gen 7 2024
+lenovo-yoga-slim-7i,Lenovo Yoga Slim 7i,Lenovo,Laptop,2025,Yoga Slim 7i|lenovo yoga slim 7i
+lenovo-yoga-slim-7i-2024,Lenovo Yoga Slim 7i 2024,Lenovo,Laptop,2024,Yoga Slim 7i 2024|lenovo yoga slim 7i 2024
+lenovo-yoga-pro-9i,Lenovo Yoga Pro 9i,Lenovo,Laptop,2025,Yoga Pro 9i|lenovo yoga pro 9i
+lenovo-yoga-pro-9i-2024,Lenovo Yoga Pro 9i 2024,Lenovo,Laptop,2024,Yoga Pro 9i 2024|lenovo yoga pro 9i 2024
+lenovo-ideapad-slim-5,Lenovo IdeaPad Slim 5,Lenovo,Laptop,2025,IdeaPad Slim 5|lenovo ideapad slim 5
+lenovo-ideapad-slim-5-2024,Lenovo IdeaPad Slim 5 2024,Lenovo,Laptop,2024,IdeaPad Slim 5 2024|lenovo ideapad slim 5 2024
+lenovo-ideapad-pro-5,Lenovo IdeaPad Pro 5,Lenovo,Laptop,2025,IdeaPad Pro 5|lenovo ideapad pro 5
+lenovo-ideapad-pro-5-2024,Lenovo IdeaPad Pro 5 2024,Lenovo,Laptop,2024,IdeaPad Pro 5 2024|lenovo ideapad pro 5 2024
+lenovo-legion-5i,Lenovo Legion 5i,Lenovo,Laptop,2025,Legion 5i|lenovo legion 5i
+lenovo-legion-5i-2024,Lenovo Legion 5i 2024,Lenovo,Laptop,2024,Legion 5i 2024|lenovo legion 5i 2024
+lenovo-legion-7i,Lenovo Legion 7i,Lenovo,Laptop,2025,Legion 7i|lenovo legion 7i
+lenovo-legion-7i-2024,Lenovo Legion 7i 2024,Lenovo,Laptop,2024,Legion 7i 2024|lenovo legion 7i 2024
+lenovo-legion-pro-5i,Lenovo Legion Pro 5i,Lenovo,Laptop,2025,Legion Pro 5i|lenovo legion pro 5i
+lenovo-legion-pro-5i-2024,Lenovo Legion Pro 5i 2024,Lenovo,Laptop,2024,Legion Pro 5i 2024|lenovo legion pro 5i 2024
+lenovo-loq-15,Lenovo LOQ 15,Lenovo,Laptop,2025,LOQ 15|lenovo loq 15
+lenovo-loq-15-2024,Lenovo LOQ 15 2024,Lenovo,Laptop,2024,LOQ 15 2024|lenovo loq 15 2024
+asus-zenbook-14-oled,ASUS Zenbook 14 OLED,ASUS,Laptop,2025,Zenbook 14 OLED|asus zenbook 14 oled
+asus-zenbook-14-oled-2024,ASUS Zenbook 14 OLED 2024,ASUS,Laptop,2024,Zenbook 14 OLED 2024|asus zenbook 14 oled 2024
+asus-zenbook-s-14-oled,ASUS Zenbook S 14 OLED,ASUS,Laptop,2025,Zenbook S 14 OLED|asus zenbook s 14 oled
+asus-zenbook-s-14-oled-2024,ASUS Zenbook S 14 OLED 2024,ASUS,Laptop,2024,Zenbook S 14 OLED 2024|asus zenbook s 14 oled 2024
+asus-vivobook-s-14-oled,ASUS Vivobook S 14 OLED,ASUS,Laptop,2025,Vivobook S 14 OLED|asus vivobook s 14 oled
+asus-vivobook-s-14-oled-2024,ASUS Vivobook S 14 OLED 2024,ASUS,Laptop,2024,Vivobook S 14 OLED 2024|asus vivobook s 14 oled 2024
+asus-vivobook-15,ASUS Vivobook 15,ASUS,Laptop,2025,Vivobook 15|asus vivobook 15
+asus-vivobook-15-2024,ASUS Vivobook 15 2024,ASUS,Laptop,2024,Vivobook 15 2024|asus vivobook 15 2024
+asus-rog-zephyrus-g14,ASUS ROG Zephyrus G14,ASUS,Laptop,2025,ROG Zephyrus G14|asus rog zephyrus g14
+asus-rog-zephyrus-g14-2024,ASUS ROG Zephyrus G14 2024,ASUS,Laptop,2024,ROG Zephyrus G14 2024|asus rog zephyrus g14 2024
+asus-rog-zephyrus-g16,ASUS ROG Zephyrus G16,ASUS,Laptop,2025,ROG Zephyrus G16|asus rog zephyrus g16
+asus-rog-zephyrus-g16-2024,ASUS ROG Zephyrus G16 2024,ASUS,Laptop,2024,ROG Zephyrus G16 2024|asus rog zephyrus g16 2024
+asus-rog-strix-g16,ASUS ROG Strix G16,ASUS,Laptop,2025,ROG Strix G16|asus rog strix g16
+asus-rog-strix-g16-2024,ASUS ROG Strix G16 2024,ASUS,Laptop,2024,ROG Strix G16 2024|asus rog strix g16 2024
+asus-rog-strix-scar-18,ASUS ROG Strix Scar 18,ASUS,Laptop,2025,ROG Strix Scar 18|asus rog strix scar 18
+asus-rog-strix-scar-18-2024,ASUS ROG Strix Scar 18 2024,ASUS,Laptop,2024,ROG Strix Scar 18 2024|asus rog strix scar 18 2024
+asus-tuf-gaming-a15,ASUS TUF Gaming A15,ASUS,Laptop,2025,TUF Gaming A15|asus tuf gaming a15
+asus-tuf-gaming-a15-2024,ASUS TUF Gaming A15 2024,ASUS,Laptop,2024,TUF Gaming A15 2024|asus tuf gaming a15 2024
+asus-tuf-gaming-f16,ASUS TUF Gaming F16,ASUS,Laptop,2025,TUF Gaming F16|asus tuf gaming f16
+asus-tuf-gaming-f16-2024,ASUS TUF Gaming F16 2024,ASUS,Laptop,2024,TUF Gaming F16 2024|asus tuf gaming f16 2024
+asus-proart-p16,ASUS ProArt P16,ASUS,Laptop,2025,ProArt P16|asus proart p16
+asus-proart-p16-2024,ASUS ProArt P16 2024,ASUS,Laptop,2024,ProArt P16 2024|asus proart p16 2024
+acer-swift-go-14,Acer Swift Go 14,Acer,Laptop,2025,Swift Go 14|acer swift go 14
+acer-swift-go-14-2024,Acer Swift Go 14 2024,Acer,Laptop,2024,Swift Go 14 2024|acer swift go 14 2024
+acer-swift-x-14,Acer Swift X 14,Acer,Laptop,2025,Swift X 14|acer swift x 14
+acer-swift-x-14-2024,Acer Swift X 14 2024,Acer,Laptop,2024,Swift X 14 2024|acer swift x 14 2024
+acer-aspire-5,Acer Aspire 5,Acer,Laptop,2025,Aspire 5|acer aspire 5
+acer-aspire-5-2024,Acer Aspire 5 2024,Acer,Laptop,2024,Aspire 5 2024|acer aspire 5 2024
+acer-aspire-7,Acer Aspire 7,Acer,Laptop,2025,Aspire 7|acer aspire 7
+acer-aspire-7-2024,Acer Aspire 7 2024,Acer,Laptop,2024,Aspire 7 2024|acer aspire 7 2024
+acer-predator-helios-neo-16,Acer Predator Helios Neo 16,Acer,Laptop,2025,Predator Helios Neo 16|acer predator helios neo 16
+acer-predator-helios-neo-16-2024,Acer Predator Helios Neo 16 2024,Acer,Laptop,2024,Predator Helios Neo 16 2024|acer predator helios neo 16 2024
+acer-predator-helios-18,Acer Predator Helios 18,Acer,Laptop,2025,Predator Helios 18|acer predator helios 18
+acer-predator-helios-18-2024,Acer Predator Helios 18 2024,Acer,Laptop,2024,Predator Helios 18 2024|acer predator helios 18 2024
+acer-nitro-v-15,Acer Nitro V 15,Acer,Laptop,2025,Nitro V 15|acer nitro v 15
+acer-nitro-v-15-2024,Acer Nitro V 15 2024,Acer,Laptop,2024,Nitro V 15 2024|acer nitro v 15 2024
+acer-nitro-16,Acer Nitro 16,Acer,Laptop,2025,Nitro 16|acer nitro 16
+acer-nitro-16-2024,Acer Nitro 16 2024,Acer,Laptop,2024,Nitro 16 2024|acer nitro 16 2024
+acer-travelmate-p4,Acer TravelMate P4,Acer,Laptop,2025,TravelMate P4|acer travelmate p4
+acer-travelmate-p4-2024,Acer TravelMate P4 2024,Acer,Laptop,2024,TravelMate P4 2024|acer travelmate p4 2024
+msi-stealth-16-ai-studio,MSI Stealth 16 AI Studio,MSI,Laptop,2025,Stealth 16 AI Studio|msi stealth 16 ai studio
+msi-stealth-16-ai-studio-2024,MSI Stealth 16 AI Studio 2024,MSI,Laptop,2024,Stealth 16 AI Studio 2024|msi stealth 16 ai studio 2024
+msi-stealth-14-ai-studio,MSI Stealth 14 AI Studio,MSI,Laptop,2025,Stealth 14 AI Studio|msi stealth 14 ai studio
+msi-stealth-14-ai-studio-2024,MSI Stealth 14 AI Studio 2024,MSI,Laptop,2024,Stealth 14 AI Studio 2024|msi stealth 14 ai studio 2024
+msi-raider-18-hx,MSI Raider 18 HX,MSI,Laptop,2025,Raider 18 HX|msi raider 18 hx
+msi-raider-18-hx-2024,MSI Raider 18 HX 2024,MSI,Laptop,2024,Raider 18 HX 2024|msi raider 18 hx 2024
+msi-vector-16-hx,MSI Vector 16 HX,MSI,Laptop,2025,Vector 16 HX|msi vector 16 hx
+msi-vector-16-hx-2024,MSI Vector 16 HX 2024,MSI,Laptop,2024,Vector 16 HX 2024|msi vector 16 hx 2024
+msi-katana-15,MSI Katana 15,MSI,Laptop,2025,Katana 15|msi katana 15
+msi-katana-15-2024,MSI Katana 15 2024,MSI,Laptop,2024,Katana 15 2024|msi katana 15 2024
+msi-cyborg-15,MSI Cyborg 15,MSI,Laptop,2025,Cyborg 15|msi cyborg 15
+msi-cyborg-15-2024,MSI Cyborg 15 2024,MSI,Laptop,2024,Cyborg 15 2024|msi cyborg 15 2024
+msi-prestige-14-ai-evo,MSI Prestige 14 AI Evo,MSI,Laptop,2025,Prestige 14 AI Evo|msi prestige 14 ai evo
+msi-prestige-14-ai-evo-2024,MSI Prestige 14 AI Evo 2024,MSI,Laptop,2024,Prestige 14 AI Evo 2024|msi prestige 14 ai evo 2024
+msi-modern-14,MSI Modern 14,MSI,Laptop,2025,Modern 14|msi modern 14
+msi-modern-14-2024,MSI Modern 14 2024,MSI,Laptop,2024,Modern 14 2024|msi modern 14 2024
+msi-creator-z17-hx-studio,MSI Creator Z17 HX Studio,MSI,Laptop,2025,Creator Z17 HX Studio|msi creator z17 hx studio
+msi-creator-z17-hx-studio-2024,MSI Creator Z17 HX Studio 2024,MSI,Laptop,2024,Creator Z17 HX Studio 2024|msi creator z17 hx studio 2024
+razer-blade-14,Razer Blade 14,Razer,Laptop,2025,Blade 14|razer blade 14
+razer-blade-14-2024,Razer Blade 14 2024,Razer,Laptop,2024,Blade 14 2024|razer blade 14 2024
+razer-blade-15,Razer Blade 15,Razer,Laptop,2025,Blade 15|razer blade 15
+razer-blade-15-2024,Razer Blade 15 2024,Razer,Laptop,2024,Blade 15 2024|razer blade 15 2024
+razer-blade-16,Razer Blade 16,Razer,Laptop,2025,Blade 16|razer blade 16
+razer-blade-16-2024,Razer Blade 16 2024,Razer,Laptop,2024,Blade 16 2024|razer blade 16 2024
+razer-blade-18,Razer Blade 18,Razer,Laptop,2025,Blade 18|razer blade 18
+razer-blade-18-2024,Razer Blade 18 2024,Razer,Laptop,2024,Blade 18 2024|razer blade 18 2024
+microsoft-surface-laptop-7-13-8,Microsoft Surface Laptop 7 13.8,Microsoft,Laptop,2025,Surface Laptop 7 13.8|microsoft surface laptop 7 13.8
+microsoft-surface-laptop-7-13-8-2024,Microsoft Surface Laptop 7 13.8 2024,Microsoft,Laptop,2024,Surface Laptop 7 13.8 2024|microsoft surface laptop 7 13.8 2024
+microsoft-surface-laptop-7-15,Microsoft Surface Laptop 7 15,Microsoft,Laptop,2025,Surface Laptop 7 15|microsoft surface laptop 7 15
+microsoft-surface-laptop-7-15-2024,Microsoft Surface Laptop 7 15 2024,Microsoft,Laptop,2024,Surface Laptop 7 15 2024|microsoft surface laptop 7 15 2024
+apple-airpods-4,Apple AirPods 4,Apple,Tai nghe,2025,AirPods 4|apple airpods 4
+apple-airpods-4-anc,Apple AirPods 4 ANC,Apple,Tai nghe,2025,AirPods 4 ANC|apple airpods 4 anc
+apple-airpods-pro-2,Apple AirPods Pro 2,Apple,Tai nghe,2025,AirPods Pro 2|apple airpods pro 2
+apple-airpods-max-usb-c,Apple AirPods Max USB-C,Apple,Tai nghe,2025,AirPods Max USB-C|apple airpods max usb-c
+samsung-galaxy-buds4-pro,Samsung Galaxy Buds4 Pro,Samsung,Tai nghe,2025,Galaxy Buds4 Pro|samsung galaxy buds4 pro
+samsung-galaxy-buds4,Samsung Galaxy Buds4,Samsung,Tai nghe,2025,Galaxy Buds4|samsung galaxy buds4
+samsung-galaxy-buds3-pro,Samsung Galaxy Buds3 Pro,Samsung,Tai nghe,2025,Galaxy Buds3 Pro|samsung galaxy buds3 pro
+samsung-galaxy-buds3,Samsung Galaxy Buds3,Samsung,Tai nghe,2025,Galaxy Buds3|samsung galaxy buds3
+samsung-galaxy-buds-fe,Samsung Galaxy Buds FE,Samsung,Tai nghe,2025,Galaxy Buds FE|samsung galaxy buds fe
+sony-wh-1000xm6,Sony WH-1000XM6,Sony,Tai nghe,2025,WH-1000XM6|sony wh-1000xm6
+sony-wf-1000xm6,Sony WF-1000XM6,Sony,Tai nghe,2025,WF-1000XM6|sony wf-1000xm6
+sony-wh-1000xm5,Sony WH-1000XM5,Sony,Tai nghe,2025,WH-1000XM5|sony wh-1000xm5
+sony-wf-1000xm5,Sony WF-1000XM5,Sony,Tai nghe,2025,WF-1000XM5|sony wf-1000xm5
+sony-ult-wear-wh-ult900n,Sony ULT WEAR WH-ULT900N,Sony,Tai nghe,2025,ULT WEAR WH-ULT900N|sony ult wear wh-ult900n
+sony-linkbuds-fit,Sony LinkBuds Fit,Sony,Tai nghe,2025,LinkBuds Fit|sony linkbuds fit
+sony-linkbuds-open,Sony LinkBuds Open,Sony,Tai nghe,2025,LinkBuds Open|sony linkbuds open
+bose-quietcomfort-ultra-headphones,Bose QuietComfort Ultra Headphones,Bose,Tai nghe,2025,QuietComfort Ultra Headphones|bose quietcomfort ultra headphones
+bose-quietcomfort-headphones,Bose QuietComfort Headphones,Bose,Tai nghe,2025,QuietComfort Headphones|bose quietcomfort headphones
+bose-quietcomfort-ultra-earbuds,Bose QuietComfort Ultra Earbuds,Bose,Tai nghe,2025,QuietComfort Ultra Earbuds|bose quietcomfort ultra earbuds
+bose-quietcomfort-earbuds,Bose QuietComfort Earbuds,Bose,Tai nghe,2025,QuietComfort Earbuds|bose quietcomfort earbuds
+sennheiser-momentum-4-wireless,Sennheiser Momentum 4 Wireless,Sennheiser,Tai nghe,2025,Momentum 4 Wireless|sennheiser momentum 4 wireless
+sennheiser-momentum-true-wireless-4,Sennheiser Momentum True Wireless 4,Sennheiser,Tai nghe,2025,Momentum True Wireless 4|sennheiser momentum true wireless 4
+sennheiser-accentum-plus-wireless,Sennheiser Accentum Plus Wireless,Sennheiser,Tai nghe,2025,Accentum Plus Wireless|sennheiser accentum plus wireless
+sennheiser-accentum-wireless,Sennheiser Accentum Wireless,Sennheiser,Tai nghe,2025,Accentum Wireless|sennheiser accentum wireless
+sennheiser-hd-660s2,Sennheiser HD 660S2,Sennheiser,Tai nghe,2025,HD 660S2|sennheiser hd 660s2
+jbl-tour-pro-3,JBL Tour Pro 3,JBL,Tai nghe,2025,Tour Pro 3|jbl tour pro 3
+jbl-live-beam-3,JBL Live Beam 3,JBL,Tai nghe,2025,Live Beam 3|jbl live beam 3
+jbl-live-buds-3,JBL Live Buds 3,JBL,Tai nghe,2025,Live Buds 3|jbl live buds 3
+jbl-tune-beam-2,JBL Tune Beam 2,JBL,Tai nghe,2025,Tune Beam 2|jbl tune beam 2
+jbl-tune-770nc,JBL Tune 770NC,JBL,Tai nghe,2025,Tune 770NC|jbl tune 770nc
+jbl-quantum-tws-air,JBL Quantum TWS Air,JBL,Tai nghe,2025,Quantum TWS Air|jbl quantum tws air
+jabra-elite-10-gen-2,Jabra Elite 10 Gen 2,Jabra,Tai nghe,2025,Elite 10 Gen 2|jabra elite 10 gen 2
+jabra-elite-8-active-gen-2,Jabra Elite 8 Active Gen 2,Jabra,Tai nghe,2025,Elite 8 Active Gen 2|jabra elite 8 active gen 2
+jabra-elite-10,Jabra Elite 10,Jabra,Tai nghe,2025,Elite 10|jabra elite 10
+jabra-elite-8-active,Jabra Elite 8 Active,Jabra,Tai nghe,2025,Elite 8 Active|jabra elite 8 active
+jabra-elite-4-active,Jabra Elite 4 Active,Jabra,Tai nghe,2025,Elite 4 Active|jabra elite 4 active
+nothing-ear,Nothing Ear,Nothing,Tai nghe,2025,Ear|nothing ear
+nothing-ear-a,Nothing Ear (a),Nothing,Tai nghe,2025,Ear (a)|nothing ear (a)
+nothing-ear-2,Nothing Ear (2),Nothing,Tai nghe,2025,Ear (2)|nothing ear (2)
+nothing-cmf-buds-pro-2,Nothing CMF Buds Pro 2,Nothing,Tai nghe,2025,CMF Buds Pro 2|nothing cmf buds pro 2
+nothing-cmf-buds-2-plus,Nothing CMF Buds 2 Plus,Nothing,Tai nghe,2025,CMF Buds 2 Plus|nothing cmf buds 2 plus
+xiaomi-buds-5-pro,Xiaomi Buds 5 Pro,Xiaomi,Tai nghe,2025,Buds 5 Pro|xiaomi buds 5 pro
+xiaomi-buds-5,Xiaomi Buds 5,Xiaomi,Tai nghe,2025,Buds 5|xiaomi buds 5
+xiaomi-redmi-buds-6-pro,Xiaomi Redmi Buds 6 Pro,Xiaomi,Tai nghe,2025,Redmi Buds 6 Pro|xiaomi redmi buds 6 pro
+xiaomi-redmi-buds-6,Xiaomi Redmi Buds 6,Xiaomi,Tai nghe,2025,Redmi Buds 6|xiaomi redmi buds 6
+xiaomi-redmi-buds-5-pro,Xiaomi Redmi Buds 5 Pro,Xiaomi,Tai nghe,2025,Redmi Buds 5 Pro|xiaomi redmi buds 5 pro
+anker-soundcore-liberty-4-pro,Anker Soundcore Liberty 4 Pro,Anker,Tai nghe,2025,Soundcore Liberty 4 Pro|anker soundcore liberty 4 pro
+anker-soundcore-liberty-4-nc,Anker Soundcore Liberty 4 NC,Anker,Tai nghe,2025,Soundcore Liberty 4 NC|anker soundcore liberty 4 nc
+anker-soundcore-space-one-pro,Anker Soundcore Space One Pro,Anker,Tai nghe,2025,Soundcore Space One Pro|anker soundcore space one pro
+anker-soundcore-space-one,Anker Soundcore Space One,Anker,Tai nghe,2025,Soundcore Space One|anker soundcore space one
+anker-soundcore-aerofit-pro,Anker Soundcore AeroFit Pro,Anker,Tai nghe,2025,Soundcore AeroFit Pro|anker soundcore aerofit pro
+beats-studio-pro,Beats Studio Pro,Beats,Tai nghe,2025,Studio Pro|beats studio pro
+beats-solo-4,Beats Solo 4,Beats,Tai nghe,2025,Solo 4|beats solo 4
+beats-fit-pro,Beats Fit Pro,Beats,Tai nghe,2025,Fit Pro|beats fit pro
+beats-studio-buds-plus,Beats Studio Buds +,Beats,Tai nghe,2025,Studio Buds +|beats studio buds +
+beats-powerbeats-pro-2,Beats Powerbeats Pro 2,Beats,Tai nghe,2025,Powerbeats Pro 2|beats powerbeats pro 2
+marshall-major-v,Marshall Major V,Marshall,Tai nghe,2025,Major V|marshall major v
+marshall-monitor-iii-anc,Marshall Monitor III ANC,Marshall,Tai nghe,2025,Monitor III ANC|marshall monitor iii anc
+marshall-motif-ii-anc,Marshall Motif II ANC,Marshall,Tai nghe,2025,Motif II ANC|marshall motif ii anc
+marshall-minor-iv,Marshall Minor IV,Marshall,Tai nghe,2025,Minor IV|marshall minor iv
+audio-technica-ath-m50xbt2,Audio-Technica ATH-M50xBT2,Audio-Technica,Tai nghe,2025,ATH-M50xBT2|audio-technica ath-m50xbt2
+audio-technica-ath-twx9,Audio-Technica ATH-TWX9,Audio-Technica,Tai nghe,2025,ATH-TWX9|audio-technica ath-twx9
+audio-technica-ath-cks50tw2,Audio-Technica ATH-CKS50TW2,Audio-Technica,Tai nghe,2025,ATH-CKS50TW2|audio-technica ath-cks50tw2
+audio-technica-ath-s300bt,Audio-Technica ATH-S300BT,Audio-Technica,Tai nghe,2025,ATH-S300BT|audio-technica ath-s300bt
+bowers-wilkins-px8,Bowers & Wilkins Px8,Bowers & Wilkins,Tai nghe,2025,Px8|bowers & wilkins px8
+bowers-wilkins-px7-s3,Bowers & Wilkins Px7 S3,Bowers & Wilkins,Tai nghe,2025,Px7 S3|bowers & wilkins px7 s3
+bowers-wilkins-pi8,Bowers & Wilkins Pi8,Bowers & Wilkins,Tai nghe,2025,Pi8|bowers & wilkins pi8
+bowers-wilkins-pi6,Bowers & Wilkins Pi6,Bowers & Wilkins,Tai nghe,2025,Pi6|bowers & wilkins pi6
+technics-eah-az100,Technics EAH-AZ100,Technics,Tai nghe,2025,EAH-AZ100|technics eah-az100
+technics-eah-az80,Technics EAH-AZ80,Technics,Tai nghe,2025,EAH-AZ80|technics eah-az80
+technics-eah-a800,Technics EAH-A800,Technics,Tai nghe,2025,EAH-A800|technics eah-a800
+shure-aonic-50-gen-2,Shure AONIC 50 Gen 2,Shure,Tai nghe,2025,AONIC 50 Gen 2|shure aonic 50 gen 2
+shure-se215,Shure SE215,Shure,Tai nghe,2025,SE215|shure se215
+shure-se846-gen-2,Shure SE846 Gen 2,Shure,Tai nghe,2025,SE846 Gen 2|shure se846 gen 2
+edifier-neobuds-pro-2,Edifier NeoBuds Pro 2,Edifier,Tai nghe,2025,NeoBuds Pro 2|edifier neobuds pro 2
+edifier-w830nb,Edifier W830NB,Edifier,Tai nghe,2025,W830NB|edifier w830nb
+edifier-wh950nb,Edifier WH950NB,Edifier,Tai nghe,2025,WH950NB|edifier wh950nb
+edifier-stax-spirit-s5,Edifier Stax Spirit S5,Edifier,Tai nghe,2025,Stax Spirit S5|edifier stax spirit s5
+huawei-freebuds-pro-4,Huawei FreeBuds Pro 4,Huawei,Tai nghe,2025,FreeBuds Pro 4|huawei freebuds pro 4
+huawei-freebuds-6,Huawei FreeBuds 6,Huawei,Tai nghe,2025,FreeBuds 6|huawei freebuds 6
+huawei-freeclip,Huawei FreeClip,Huawei,Tai nghe,2025,FreeClip|huawei freeclip
+huawei-freebuds-se-3,Huawei FreeBuds SE 3,Huawei,Tai nghe,2025,FreeBuds SE 3|huawei freebuds se 3
+oppo-enco-x3,OPPO Enco X3,OPPO,Tai nghe,2025,Enco X3|oppo enco x3
+oppo-enco-air4-pro,OPPO Enco Air4 Pro,OPPO,Tai nghe,2025,Enco Air4 Pro|oppo enco air4 pro
+oppo-enco-buds3-pro,OPPO Enco Buds3 Pro,OPPO,Tai nghe,2025,Enco Buds3 Pro|oppo enco buds3 pro
+oppo-enco-free4,OPPO Enco Free4,OPPO,Tai nghe,2025,Enco Free4|oppo enco free4
+realme-buds-air7-pro,realme Buds Air7 Pro,realme,Tai nghe,2025,Buds Air7 Pro|realme buds air7 pro
+realme-buds-air7,realme Buds Air7,realme,Tai nghe,2025,Buds Air7|realme buds air7
+realme-buds-t310,realme Buds T310,realme,Tai nghe,2025,Buds T310|realme buds t310
+realme-buds-wireless-5-anc,realme Buds Wireless 5 ANC,realme,Tai nghe,2025,Buds Wireless 5 ANC|realme buds wireless 5 anc
+oneplus-buds-pro-3,OnePlus Buds Pro 3,OnePlus,Tai nghe,2025,Buds Pro 3|oneplus buds pro 3
+oneplus-buds-4,OnePlus Buds 4,OnePlus,Tai nghe,2025,Buds 4|oneplus buds 4
+oneplus-nord-buds-3-pro,OnePlus Nord Buds 3 Pro,OnePlus,Tai nghe,2025,Nord Buds 3 Pro|oneplus nord buds 3 pro
+oneplus-nord-buds-3,OnePlus Nord Buds 3,OnePlus,Tai nghe,2025,Nord Buds 3|oneplus nord buds 3
+google-pixel-buds-pro-2,Google Pixel Buds Pro 2,Google,Tai nghe,2025,Pixel Buds Pro 2|google pixel buds pro 2
+google-pixel-buds-a-series,Google Pixel Buds A-Series,Google,Tai nghe,2025,Pixel Buds A-Series|google pixel buds a-series
+logitech-g-pro-x-2-lightspeed,Logitech G PRO X 2 LIGHTSPEED,Logitech,Tai nghe,2025,G PRO X 2 LIGHTSPEED|logitech g pro x 2 lightspeed
+logitech-g733-lightspeed,Logitech G733 LIGHTSPEED,Logitech,Tai nghe,2025,G733 LIGHTSPEED|logitech g733 lightspeed
+logitech-zone-wireless-2,Logitech Zone Wireless 2,Logitech,Tai nghe,2025,Zone Wireless 2|logitech zone wireless 2
+razer-blackshark-v2-pro,Razer BlackShark V2 Pro,Razer,Tai nghe,2025,BlackShark V2 Pro|razer blackshark v2 pro

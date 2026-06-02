@@ -185,6 +185,15 @@ conda activate etl-py313
 python -m schema.run_all
 ```
 
+Khi nâng cấp database cũ sang catalog sản phẩm chuẩn, chạy thêm:
+
+```bash
+conda activate etl-py313
+python -m schema.migrate_product_catalog
+```
+
+Catalog được seed độc lập từ `elt/seed_data/seed_products.csv`. `keyword_config` chỉ còn dùng để tìm video, không còn là nguồn cho `dim_products`.
+
 ### Bước 1: Thu thập Dữ liệu (Giai đoạn Ingestion)
 Script ELT sẽ lo việc thu thập metadata và comments, tự động lưu thành định dạng **NDJSON** đẩy lên GCS, sau đó lưu trạng thái vào BigQuery.
 ```bash
@@ -208,7 +217,11 @@ Chạy pipeline AI hybrid. Mô hình PhoBERT và vELECTRA đã được train v�
 conda activate etl-py313
 python -m nlp.runner --limit 500 --dag-run-id manual-nlp-500-t070
 cd transform
-python -m dotenv -f ..\.env run -- dbt run --profiles-dir . --select int_sentiment_results fact_product_mentions
+python -m dotenv -f ..\.env run -- dbt run --profiles-dir . --select int_sentiment_results int_video_product_mentions int_sentence_product_targets int_product_resolution_candidates fact_product_mentions
+
+# Resolve ambiguous comparison sentences and unmapped videos, then rebuild target facts
+conda activate etl-py313
+python -m nlp.product_target_resolver --limit 100
 ```
 
 ### Bước 4: Analytics Engine (Ranking & Causality)
@@ -255,6 +268,16 @@ npm run dev
 ### Giai đoạn 4 & 5: API & Web App
 - **Web app load chậm (> 2 giây)**: Đảm bảo Redis caching (TTL=300s) đang hoạt động. Test bằng cách tắt Redis, nếu API báo lỗi connection refused, hãy khởi động lại Redis server.
 - **Ranking không hợp lý**: Kiểm tra lại công thức Bayesian Ranking trong bảng `agg_daily_product_ranking` (BigQuery/dbt), đảm bảo `C` (prior strength) không quá nhỏ hoặc quá lớn.
+
+---
+
+## 📦 Product Catalog và Duyệt chỉnh sửa
+
+Ranking và phân tích được tổng hợp theo `product_id` chuẩn từ `product_config`. Alias như `s25 ultra` hoặc `galaxy s25u` được chuẩn hóa về cùng một sản phẩm trước khi sentiment tham gia KPI.
+
+Người dùng đăng nhập có thể gửi phiếu đề xuất specs, mô tả, URL chính thức và ảnh sản phẩm. Phiếu được lưu tại `product_detail_change_requests`; Admin phải duyệt trước khi dữ liệu được merge vào `product_details`.
+
+Xem schema, resolver target, API và use case chi tiết tại [`docs/product-catalog-and-moderation.md`](docs/product-catalog-and-moderation.md).
 
 ---
 *Developed by Khoa Trần (2026)*

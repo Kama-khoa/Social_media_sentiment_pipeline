@@ -45,7 +45,9 @@ with DAG(
         task_id='promote_nlp_results',
         bash_command=(
             'cd /opt/airflow/transform && '
-            'dbt run --profiles-dir . --select int_sentiment_results fact_product_mentions'
+            'dbt run --profiles-dir . --select int_sentiment_results int_video_product_mentions int_sentence_product_targets int_product_resolution_candidates && '
+            'cd /opt/airflow && python -m nlp.product_target_resolver --limit 100 && '
+            'cd /opt/airflow/transform && dbt run --profiles-dir . --select int_video_product_mentions int_sentence_product_targets fact_product_mentions'
         ),
     )
 

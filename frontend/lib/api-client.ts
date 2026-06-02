@@ -3,6 +3,12 @@ import type {
   AttributionData,
   ChannelConfigItem,
   KeywordConfigItem,
+  ProductAliasItem,
+  ProductConfigItem,
+  ProductDetailChangeRequestItem,
+  ProductSpecTemplateItem,
+  ProductResolutionCandidate,
+  VideoProductMapping,
   PipelineHealthData,
   ProductDetail,
   SearchResponse,
@@ -63,6 +69,11 @@ export const api = {
       request<ProductDetail>(`/products/${productId}/aspects`),
     attribution: (productId: string) =>
       request<AttributionData>(`/products/${productId}/attribution`),
+    submitDetails: (productId: string, data: { proposed_specs?: Record<string, unknown>; proposed_description?: string }) =>
+      request<{ request_id: string; status: string }>(`/products/${productId}/details/requests`, {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
   },
 
   search: (q: string, category = "", limit = 20) =>
@@ -84,6 +95,35 @@ export const api = {
       update: (id: string, data: { keyword_text?: string; search_cluster?: string }) =>
         request<KeywordConfigItem>(`/admin/keywords/${id}`, { method: "PUT", body: JSON.stringify(data) }),
       remove: (id: string) => request<void>(`/admin/keywords/${id}`, { method: "DELETE" }),
+    },
+    products: {
+      list: () => request<ProductConfigItem[]>("/admin/products"),
+      create: (data: { product_id?: string; product_name: string; brand?: string; category?: string; release_year?: number }) =>
+        request<ProductConfigItem>("/admin/products", { method: "POST", body: JSON.stringify(data) }),
+      aliases: () => request<ProductAliasItem[]>("/admin/products/aliases"),
+      createAlias: (data: { product_id: string; alias_text: string; alias_type?: string }) =>
+        request<ProductAliasItem>("/admin/products/aliases", { method: "POST", body: JSON.stringify(data) }),
+      templates: () => request<ProductSpecTemplateItem[]>("/admin/products/templates"),
+      createTemplate: (data: { category: string; spec_key: string; display_label: string; value_type: "string" | "number" | "boolean"; unit?: string }) =>
+        request<ProductSpecTemplateItem>("/admin/products/templates", { method: "POST", body: JSON.stringify(data) }),
+      detailRequests: () => request<ProductDetailChangeRequestItem[]>("/admin/products/detail-requests"),
+      reviewDetailRequest: (id: string, action: "approve" | "reject") =>
+        request<{ request_id: string; status: string }>(`/admin/products/detail-requests/${id}/review`, {
+          method: "POST",
+          body: JSON.stringify({ action }),
+        }),
+      candidates: () => request<ProductResolutionCandidate[]>("/admin/products/resolution-candidates"),
+      reviewCandidate: (id: string, product_id: string, alias_text?: string, sentiment_label?: "POSITIVE" | "NEGATIVE" | "NEUTRAL") =>
+        request(`/admin/products/resolution-candidates/${id}/review`, {
+          method: "POST",
+          body: JSON.stringify({ product_id, alias_text, sentiment_label }),
+        }),
+      videoMappings: () => request<VideoProductMapping[]>("/admin/products/video-mappings"),
+      overrideVideoMapping: (videoId: string, product_id: string, role: "primary" | "secondary" = "primary") =>
+        request(`/admin/products/video-mappings/${videoId}`, {
+          method: "PUT",
+          body: JSON.stringify({ product_id, role }),
+        }),
     },
     pipeline: {
       health: () => request<PipelineHealthData>("/admin/pipeline/health"),

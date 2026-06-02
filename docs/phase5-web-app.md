@@ -1,5 +1,7 @@
 # Phase 5 — Web App: Hướng dẫn vận hành
 
+> Cập nhật 2026-06-02: analytics pages, Admin CRUD và product catalog API đã được triển khai. Thiết kế nghiệp vụ đầy đủ nằm tại [`phase5-web-application.md`](phase5-web-application.md) và [`product-catalog-and-moderation.md`](product-catalog-and-moderation.md).
+
 ## Tổng quan
 
 Phase 5 xây dựng một web app hoàn chỉnh gồm:
@@ -135,6 +137,20 @@ GET    /auth/me              → Thông tin user hiện tại
 GET    /dashboard/user       → Dashboard data cho user (any role)
 GET    /dashboard/admin      → Dashboard data cho admin (role=admin only)
 
+GET    /products/top/{category}               → Ranking theo product_id chuẩn
+GET    /products/{product_id}/aspects         → Chi tiết, specs và aspect breakdown
+GET    /products/{product_id}/attribution     → Timeline attribution
+POST   /products/{product_id}/details/requests → User gửi phiếu chỉnh sửa
+GET    /search?q=&category=                   → Tìm kiếm catalog
+
+GET|POST|PUT|DELETE /admin/products
+GET|POST|DELETE     /admin/products/aliases
+GET|POST|DELETE     /admin/products/templates
+GET                 /admin/products/detail-requests
+POST                /admin/products/detail-requests/{request_id}/review
+GET|PUT              /admin/products/video-mappings
+GET|POST             /admin/products/resolution-candidates
+
 GET    /health               → Health check public
 ```
 
@@ -195,7 +211,12 @@ Social_media_sentiment_pipeline/
 │   ├── main.py                 ← FastAPI app entry point
 │   ├── routers/
 │   │   ├── auth.py             ← /auth/*
-│   │   └── dashboard.py        ← /dashboard/* (mock data hiện tại)
+│   │   ├── dashboard.py        ← /dashboard/*
+│   │   ├── products.py         ← ranking, details, specs, attribution
+│   │   ├── search.py           ← tìm kiếm catalog
+│   │   ├── admin.py            ← CRUD keyword/channel
+│   │   ├── product_catalog.py  ← catalog, alias/template, candidate, mapping, moderation
+│   │   └── pipeline.py         ← proxy Airflow
 │   └── schemas/
 │       ├── request_schemas.py
 │       └── response_schemas.py
@@ -206,7 +227,8 @@ Social_media_sentiment_pipeline/
     │   ├── layout.tsx
     │   ├── page.tsx            ← redirect /dashboard
     │   ├── (auth)/             ← login, register
-    │   └── (app)/              ← dashboard (route-guarded)
+    │   ├── (app)/              ← dashboard và admin (route-guarded)
+    │   └── (public)/           ← analytics pages
     ├── components/
     │   ├── Providers.tsx
     │   ├── layout/             ← Sidebar, Header
@@ -224,10 +246,10 @@ Social_media_sentiment_pipeline/
 
 | Role | Xem dashboard | Xem analytics | Admin CRUD | Pipeline health |
 |---|---|---|---|---|
-| `user` | UserDashboard | Có (TODO) | Không | Không |
-| `admin` | AdminDashboard | Có (TODO) | Có (TODO) | Có (TODO) |
+| `user` | UserDashboard | Có | Không | Không |
+| `admin` | AdminDashboard | Có | Có | Có |
 
-Hiện tại dashboard phân biệt theo role. Các trang analytics và admin chưa implement — TODO Phase 5 tiếp theo.
+Dashboard phân biệt theo role. Analytics pages, CRUD keyword/channel, Pipeline Health và trang quản lý sản phẩm đã được triển khai.
 
 ---
 
@@ -286,7 +308,7 @@ allow_origins=["http://localhost:3000", "http://localhost:3001"]
 
 ## Phát triển tiếp theo
 
-### Endpoints cần implement
+### Endpoint đã triển khai
 
 ```
 GET  /products/top/{category}          ← query agg_daily_product_ranking BQ
@@ -303,42 +325,18 @@ DELETE /admin/keywords/{id}
 GET  /admin/pipeline/health            ← Airflow REST API proxy
 GET  /admin/pipeline/dag-runs          ← Airflow /api/v1/dags/.../dagRuns
 POST /admin/pipeline/trigger/{dag_id}  ← Airflow trigger DAG
+GET|POST|PUT|DELETE /admin/products    ← catalog chuẩn
+GET|POST|DELETE /admin/products/aliases
+GET|POST|DELETE /admin/products/templates
+GET  /admin/products/detail-requests
+POST /admin/products/detail-requests/{request_id}/review
 ```
 
-### Chuyển từ mock data sang BigQuery
+### Hạng mục còn cần hoàn thiện
 
-`api/routers/dashboard.py` hiện trả hardcoded data. Để kết nối BQ thật:
-
-```python
-from google.cloud import bigquery
-
-client = bigquery.Client(project=settings.gcp_project_id)
-
-query = f"""
-SELECT product_name, bayesian_score, controversy_label, total_mentions
-FROM `{settings.bq_dataset}.agg_daily_product_ranking`
-WHERE snapshot_date = CURRENT_DATE()
-ORDER BY bayesian_score DESC
-LIMIT 10
-"""
-rows = client.query(query).result()
-```
-
-### Thêm Redis cache
-
-```python
-# api/cache.py
-import redis
-r = redis.Redis(host=settings.redis_host, port=settings.redis_port)
-
-# Trong router:
-cached = r.get("dashboard:user")
-if cached:
-    return json.loads(cached)
-data = build_dashboard_data()
-r.setex("dashboard:user", 300, json.dumps(data))  # TTL 5 phút
-return data
-```
+- Bổ sung UI đầy đủ cho alias/template specs, candidate resolution và phiếu moderation nếu cần tách khỏi trang Admin Products hiện tại.
+- Bổ sung integration test với BigQuery test dataset cho quy trình duyệt phiếu.
+- Chạy rebuild lịch sử sau migration catalog trước khi dùng ranking production.
 
 ---
 

@@ -1,7 +1,7 @@
 from datetime import date, datetime
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 # ── Products / Analytics ──────────────────────────────────────────────────────
 
@@ -24,7 +24,61 @@ class ProductDetailResponse(BaseModel):
     controversy_label: str
     total_mentions: int
     aspects: list[AspectSentiment]
+    details: Optional["ProductDetails"] = None
+    spec_templates: list["ProductSpecTemplateItem"] = Field(default_factory=list)
     as_of_date: date
+
+
+class ProductDetails(BaseModel):
+    specs: Optional[dict[str, Any]] = None
+    description: Optional[str] = None
+    official_url: Optional[str] = None
+    image_url: Optional[str] = None
+    updated_at: Optional[datetime] = None
+
+
+class ProductConfigItem(BaseModel):
+    product_id: str
+    product_name: str
+    brand: Optional[str]
+    category: Optional[str]
+    release_year: Optional[int]
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+class ProductAliasItem(BaseModel):
+    alias_id: str
+    product_id: str
+    alias_text: str
+    alias_type: str
+    is_active: bool
+    created_at: datetime
+
+
+class ProductSpecTemplateItem(BaseModel):
+    category: str
+    spec_key: str
+    display_label: str
+    value_type: Literal["string", "number", "boolean"]
+    unit: Optional[str]
+    is_active: bool
+
+
+class ProductDetailChangeRequestItem(BaseModel):
+    request_id: str
+    product_id: str
+    proposed_specs: Optional[dict[str, Any]]
+    proposed_description: Optional[str]
+    proposed_official_url: Optional[str]
+    proposed_image_url: Optional[str]
+    submitted_by: str
+    status: Literal["pending", "approved", "rejected"]
+    reviewed_by: Optional[str]
+    reviewed_at: Optional[datetime]
+    review_note: Optional[str]
+    created_at: datetime
 
 
 class AttributionResponse(BaseModel):

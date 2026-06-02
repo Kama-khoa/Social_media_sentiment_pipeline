@@ -37,6 +37,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     "/analytics/top-products": "Bảng xếp hạng",
     "/admin/channels": "Quản lý kênh YouTube",
     "/admin/keywords": "Quản lý từ khóa",
+    "/admin/products": "Quản lý sản phẩm",
     "/admin/pipeline-health": "Vận hành Pipeline",
   };
 
