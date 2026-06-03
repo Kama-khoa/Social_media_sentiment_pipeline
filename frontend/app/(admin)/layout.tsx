@@ -37,6 +37,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     "/admin/keywords": "Quản lý từ khóa",
     "/admin/channels": "Quản lý kênh",
     "/admin/products": "Quản lý sản phẩm",
+    "/admin/users": "Quản lý tài khoản",
     "/admin/logs": "Quản lý log pipeline",
     "/admin/airflow": "Quản lý Airflow",
   };

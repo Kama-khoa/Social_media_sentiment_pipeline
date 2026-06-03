@@ -143,12 +143,12 @@ def run_full(config, repos: dict, gcs_client: GCSClient, dag_run_id: str, execut
     comment_extractor = _build_comment_extractor(config, repos, gcs_client)
 
     logger.info("=== PHASE A: DAILY ===")
-    daily_result = 0
-    # daily_result = video_extractor.run_daily(
-    #     execution_date, dag_run_id, budget,
-    #     comment_extractor=comment_extractor,
-    # )
-    # logger.info("Phase A done: %s", daily_result)
+    # daily_result = 0
+    daily_result = video_extractor.run_daily(
+        execution_date, dag_run_id, budget,
+        comment_extractor=comment_extractor,
+    )
+    logger.info("Phase A done: %s", daily_result)
 
     logger.info("=== PHASE B: HISTORICAL ===")
     historical_result = video_extractor.run_historical(

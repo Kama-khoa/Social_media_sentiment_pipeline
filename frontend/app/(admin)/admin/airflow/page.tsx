@@ -162,6 +162,11 @@ export default function PipelineHealthPage() {
           {/* Airflow status */}
           <Card className="p-5 shadow-none">
             <h2 className="text-sm font-semibold text-slate-700 uppercase tracking-wider mb-4">Trạng thái Airflow</h2>
+            {data.airflow.message && (
+              <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                {data.airflow.message}
+              </div>
+            )}
             <div className="flex items-center gap-8">
               <div>
                 <p className="text-xs text-slate-500 mb-1">Webserver</p>

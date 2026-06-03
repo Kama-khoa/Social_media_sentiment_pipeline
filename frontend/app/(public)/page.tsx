@@ -19,6 +19,21 @@ const categories = [
   { slug: "tai_nghe", label: "Tai nghe" },
 ];
 
+function topProductToSearchResult(product: TopProduct): SearchResultItem {
+  return {
+    rank: product.rank,
+    product_id: product.product_id,
+    product_name: product.product_name,
+    brand: product.brand,
+    category: product.category,
+    bayesian_score: product.bayesian_score,
+    controversy_label: product.controversy_label,
+    total_mentions: product.total_mentions,
+    positive_pct: product.positive_pct,
+    negative_pct: product.negative_pct,
+  };
+}
+
 export default function ExplorePage() {
   const [category, setCategory] = useState("all");
   const [products, setProducts] = useState<TopProduct[]>([]);
@@ -52,23 +67,63 @@ export default function ExplorePage() {
   useEffect(() => {
     setLoading(true);
     setError(null);
-    api.products.top(category).then(setProducts).catch(() => setError("Không thể tải dữ liệu. Vui lòng thử lại.")).finally(() => setLoading(false));
+    api.products.top(category)
+      .then((items) => {
+        setProducts(items);
+        if (category === "all") setOverviewProducts(items);
+      })
+      .catch(() => setError("Không thể tải dữ liệu. Vui lòng thử lại."))
+      .finally(() => setLoading(false));
   }, [category]);
 
-  useEffect(() => { api.products.top("all").then(setOverviewProducts).catch(() => undefined); }, []);
+  useEffect(() => {
+    if (category === "all" || overviewProducts.length > 0) return;
+    api.products.top("all").then(setOverviewProducts).catch(() => undefined);
+  }, [category, overviewProducts.length]);
 
   useEffect(() => {
     if (view !== "search") return;
+    let active = true;
+    if (!query.trim()) {
+      setSearchError(null);
+      setSearchLoading(true);
+      api.products.top(searchCategory, 50)
+        .then((items) => {
+          if (active) setSearchResults(items.map(topProductToSearchResult));
+        })
+        .catch(() => {
+          if (active) setSearchError("Không thể tải danh sách mặc định. Vui lòng thử lại.");
+        })
+        .finally(() => {
+          if (active) setSearchLoading(false);
+        });
+      return () => {
+        active = false;
+      };
+    }
+    const controller = new AbortController();
     const timer = window.setTimeout(() => {
       setSearchLoading(true);
       setSearchError(null);
       const categoryLabel = categories.find((item) => item.slug === searchCategory)?.label ?? "";
-      api.search(query, searchCategory === "all" ? "" : categoryLabel, 50)
-        .then((response) => setSearchResults(response.results))
-        .catch(() => setSearchError("Không thể tải kết quả tìm kiếm. Vui lòng thử lại."))
-        .finally(() => setSearchLoading(false));
+      api.search(query, searchCategory === "all" ? "" : categoryLabel, 50, { signal: controller.signal })
+        .then((response) => {
+          if (active) setSearchResults(response.results);
+        })
+        .catch((err: unknown) => {
+          if (active && (err as DOMException)?.name !== "AbortError") {
+            setSearchError("Không thể tải kết quả tìm kiếm. Vui lòng thử lại.");
+          }
+        })
+        .finally(() => {
+          if (active) setSearchLoading(false);
+        });
     }, 250);
-    return () => window.clearTimeout(timer);
+    return () => {
+      active = false;
+      controller.abort();
+      window.clearTimeout(timer);
+    };
   }, [query, searchCategory, view]);
 
   const categoryCards = useMemo(() => categories.map((item) => ({
@@ -90,7 +145,8 @@ export default function ExplorePage() {
       {error && <div className="card my-6 border-[var(--neg)] p-4 text-sm text-[var(--neg)]">{error}</div>}
       <div className="my-6 grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-3.5">{categoryCards.map((item) => <div key={item.slug} className="card flex flex-col gap-1.5 p-4"><span className="muted text-[13px] font-semibold">{item.label}</span><span className="num text-2xl font-bold">{item.mentions.toLocaleString("vi-VN")}</span><span className="faint text-xs">lượt đề cập từ BigQuery</span></div>)}</div>
 
-      {loading ? <div className="grid min-h-72 place-items-center"><div className="spinner" /></div> : <>
+      {loading && products.length === 0 ? <div className="grid min-h-72 place-items-center"><div className="spinner" /></div> : <>
+        {loading && <div className="muted mb-3 text-[13px] font-semibold">Đang cập nhật dữ liệu...</div>}
         <div className="mb-[22px] grid grid-cols-[repeat(auto-fit,minmax(280px,1fr))] gap-[18px]">
           {products.slice(0, 3).map((product, index) => <Link key={product.product_id} href={`/product/${product.product_id}`} className="card focusable fade-up p-5 text-left transition-all hover:-translate-y-[3px] hover:shadow-[var(--shadow-md)]" style={{ borderTop: `3px solid ${["#f5b50a", "#9aa3b2", "#cd7f32"][index]}` }}><div className="flex items-center justify-between"><span className="num text-[34px] font-extrabold text-[var(--text-3)]">#{product.rank}</span><ScoreRing score={product.bayesian_score} size={72} /></div><h3 className="mb-0.5 mt-2.5 text-lg font-bold">{product.product_name}</h3><p className="faint mb-3 text-[13px]">{product.brand}</p><SentimentBar positivePct={product.positive_pct} negativePct={product.negative_pct} height={8} /></Link>)}
         </div>

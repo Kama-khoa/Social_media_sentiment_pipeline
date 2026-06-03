@@ -312,3 +312,29 @@ Thiết kế đầy đủ: [`../docs/product-catalog-and-moderation.md`](../docs
 - **`_ensure_database_exists()`**: chạy ở module level khi import `database.py`. Nó connect đến database `postgres` và chạy `CREATE DATABASE` với `autocommit=True`. Nếu cần debug, set `POSTGRES_URL` đến một server có quyền tạo database.
 - **CORS**: hiện chỉ cho phép `http://localhost:3000`. Khi deploy production, thêm production URL vào `allow_origins` trong `main.py`.
 - **Deprecated `@app.on_event("startup")`**: FastAPI 0.115 vẫn hỗ trợ nhưng sẽ bị remove. Migration sang `lifespan` context manager nếu nâng cấp FastAPI sau này.
+---
+
+## Data Freshness Cho Dashboard
+
+Các endpoint dashboard và product ranking đọc dữ liệu từ BigQuery marts:
+
+- `/dashboard/user` dùng `agg_daily_product_ranking`, `fact_product_mentions`, `dim_products`, `causal_events`.
+- `/products/top/{category}` dùng `agg_daily_product_ranking`.
+- Product detail/aspect breakdown dùng `fact_product_mentions`.
+
+Sau khi chạy YouTube API comment backfill, cần rebuild dữ liệu trước khi mở dashboard:
+
+```powershell
+conda activate etl-py313
+python scripts\dbt\dbt_runner.py run --select stg_youtube_comments
+python scripts\dbt\dbt_runner.py run --select int_comment_sentences --full-refresh
+python -m nlp.runner
+python scripts\dbt\dbt_runner.py run --select int_sentiment_results int_sentence_product_targets fact_product_mentions agg_daily_product_ranking
+```
+
+Nếu API vẫn trả ranking cũ, kiểm tra:
+
+1. `raw_comments_api` đã có comments mới.
+2. `raw_sentiment_results` đã có NLP output.
+3. `agg_daily_product_ranking` đã được rebuild.
+4. Redis/API cache đã hết TTL hoặc server đã restart.

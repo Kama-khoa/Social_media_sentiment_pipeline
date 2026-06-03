@@ -26,6 +26,9 @@ class _NoOpProgress(Generic[_T]):
     def update(self, _: int = 1) -> None:
         return None
 
+    def set_postfix(self, **_: object) -> None:
+        return None
+
 
 def progress_bar(iterable: Iterable[_T] | None = None, **kwargs: object):
     if tqdm is None:

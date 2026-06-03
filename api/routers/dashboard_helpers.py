@@ -160,10 +160,10 @@ def _get_quick_stats(project: str, dataset: str, marts: str) -> QuickStat:
                 (SELECT COUNT(*) FROM `{project}.{dataset}.keyword_config` WHERE is_active = TRUE) AS active_keywords,
                 (SELECT COALESCE(SUM(videos_discovered), 0)
                  FROM `{project}.{dataset}.quota_daily_summary`
-                 WHERE quota_date = CURRENT_DATE()) AS videos_today,
-                (SELECT COALESCE(SUM(comments_crawled), 0)
+                 WHERE summary_date = CURRENT_DATE()) AS videos_today,
+                (SELECT COALESCE(SUM(comments_collected), 0)
                  FROM `{project}.{dataset}.quota_daily_summary`
-                 WHERE quota_date = CURRENT_DATE()) AS comments_today
+                 WHERE summary_date = CURRENT_DATE()) AS comments_today
         """)
         r = rows[0] if rows else {}
         return QuickStat(
@@ -181,13 +181,13 @@ def _get_quick_stats(project: str, dataset: str, marts: str) -> QuickStat:
 def _get_quota_today(project: str, dataset: str) -> tuple[int, int]:
     try:
         rows = query_to_list(f"""
-            SELECT total_units_used, quota_limit
+            SELECT total_units_used
             FROM `{project}.{dataset}.quota_daily_summary`
-            WHERE quota_date = CURRENT_DATE()
+            WHERE summary_date = CURRENT_DATE()
             LIMIT 1
         """)
         if rows:
-            return int(rows[0].get("total_units_used") or 0), int(rows[0].get("quota_limit") or 10000)
+            return int(rows[0].get("total_units_used") or 0), 10000
     except Exception:
         pass
     return 0, 10000

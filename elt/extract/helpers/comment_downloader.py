@@ -5,6 +5,7 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Optional
+from urllib.parse import quote
 
 from youtube_comment_downloader import YoutubeCommentDownloader
 
@@ -21,7 +22,9 @@ class ProxyConfig:
     password: str
 
     def to_proxy_url(self) -> str:
-        return f"http://{self.username}:{self.password}@{self.host}:{self.port}"
+        username = quote(self.username, safe="")
+        password = quote(self.password, safe="")
+        return f"http://{username}:{password}@{self.host}:{self.port}"
 
 
 class CommentDownloader:
@@ -32,6 +35,11 @@ class CommentDownloader:
     def download(self, video_id: str, max_comments: int = 500) -> list[dict]:
         downloader = YoutubeCommentDownloader()
         proxy = self._proxy_config.to_proxy_url() if self._proxy_config else None
+        if proxy:
+            downloader.session.proxies.update({
+                "http": proxy,
+                "https": proxy,
+            })
 
         try:
             generator = downloader.get_comments_from_url(

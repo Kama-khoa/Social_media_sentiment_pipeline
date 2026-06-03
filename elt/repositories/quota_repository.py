@@ -46,7 +46,7 @@ class QuotaRepository:
         query = f"""
             SELECT bucket, SUM(units_used) AS total
             FROM {self._table("quota_operation_log")}
-            WHERE log_date = @today
+            WHERE DATE(created_at) = @today
             GROUP BY bucket
         """
         job_config = bigquery.QueryJobConfig(
@@ -70,12 +70,13 @@ class QuotaRepository:
                              THEN units_used ELSE 0 END)                     AS units_channel_seed,
                     SUM(CASE WHEN operation_type = 'videos_list'
                              THEN units_used ELSE 0 END)                     AS units_videos_list,
-                    0                                                         AS units_comment_threads,
+                    SUM(CASE WHEN operation_type = 'comment_threads'
+                             THEN units_used ELSE 0 END)                     AS units_comment_threads,
                     SUM(units_used)                                           AS total_units_used,
                     SUM(comments_collected)                                   AS comments_collected,
                     SUM(videos_processed)                                     AS videos_discovered
                 FROM {self._table("quota_operation_log")}
-                WHERE log_date = @today
+                WHERE DATE(created_at) = @today
             ) AS source
             ON target.summary_date = source.summary_date
             WHEN MATCHED THEN UPDATE SET

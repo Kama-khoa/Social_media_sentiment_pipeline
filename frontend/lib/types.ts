@@ -14,6 +14,16 @@ export interface UserInfo {
   created_at: string;
 }
 
+export interface AdminUserItem {
+  id: string;
+  email: string;
+  display_name: string;
+  role: "user" | "admin";
+  is_active: boolean;
+  created_at: string;
+  last_login_at: string | null;
+}
+
 // ── Products / Analytics ──────────────────────────────────────────────────────
 
 export interface TopProduct {
@@ -238,6 +248,9 @@ export interface ProductResolutionCandidate {
   status: string;
   resolved_product_id: string | null;
   created_at: string;
+  resolver_confidence?: number | null;
+  resolver_reason?: string | null;
+  resolution_method?: string | null;
 }
 
 export interface VideoProductMapping {
@@ -269,6 +282,7 @@ export interface DagRunDetail {
 export interface AirflowHealth {
   webserver: string;
   scheduler: string;
+  message: string | null;
 }
 
 export interface PipelineMetrics {
@@ -285,4 +299,21 @@ export interface PipelineHealthData {
   recent_dag_runs: DagRunDetail[];
   metrics: PipelineMetrics;
   as_of: string;
+}
+
+export interface LogFileItem {
+  path: string;
+  size_bytes: number;
+  modified_at: string;
+}
+
+export interface LogFileListResponse {
+  files: LogFileItem[];
+}
+
+export interface LogTailResponse {
+  path: string;
+  lines: string[];
+  truncated: boolean;
+  size_bytes: number;
 }

@@ -2,7 +2,6 @@ from datetime import datetime, timedelta
 
 from airflow import DAG
 from airflow.operators.bash import BashOperator
-from airflow.sensors.external_task import ExternalTaskSensor
 
 default_args = {
     "owner": "analytics_pipeline",
@@ -23,34 +22,26 @@ with DAG(
     tags=["analytics", "daily"],
 ) as dag:
 
-    wait_for_nlp = ExternalTaskSensor(
-        task_id="wait_for_nlp",
-        external_dag_id="sentiment_analysis_dag",
-        external_task_id="promote_nlp_results",
-        allowed_states=["success"],
-        failed_states=["failed", "skipped"],
-        poke_interval=300,
-        timeout=7200,
-        mode="poke",
+    ensure_mart_tables = BashOperator(
+        task_id="ensure_mart_tables",
+        bash_command="python -m schema.layer_4_marts.init_marts_tables",
+        cwd="/opt/airflow",
     )
 
-    run_bayesian_ranking = BashOperator(
-        task_id="run_bayesian_ranking",
-        bash_command="cd /opt/airflow && python -m analytics.bayesian_ranking",
-    )
-
-    run_controversy_index = BashOperator(
-        task_id="run_controversy_index",
-        bash_command="cd /opt/airflow && python -m analytics.controversy_index",
+    rebuild_analytics_marts = BashOperator(
+        task_id="rebuild_analytics_marts",
+        bash_command=(
+            "python scripts/dbt/dbt_runner.py run "
+            "--select int_sentiment_results int_sentence_product_targets "
+            "fact_product_mentions dim_products agg_daily_product_ranking"
+        ),
+        cwd="/opt/airflow",
     )
 
     run_pelt_attribution = BashOperator(
         task_id="run_pelt_attribution",
-        bash_command=(
-            "cd /opt/airflow && "
-            "python -m analytics.pelt_attribution "
-            '--dag-run-id "{{ dag_run.run_id }}"'
-        ),
+        bash_command="python -m analytics.pelt_attribution",
+        cwd="/opt/airflow",
     )
 
-    wait_for_nlp >> run_bayesian_ranking >> run_controversy_index >> run_pelt_attribution
+    ensure_mart_tables >> rebuild_analytics_marts >> run_pelt_attribution

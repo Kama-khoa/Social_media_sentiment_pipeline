@@ -44,6 +44,15 @@ class CommentDownloaderConfig:
 
 
 @dataclass
+class ApiCommentBackfillConfig:
+    max_videos_per_run: int
+    max_comments_per_video: int
+    max_pages_per_video: int
+    daily_quota_units: int
+    request_delay_seconds: float
+
+
+@dataclass
 class QuotaConfig:
     daily_budget: int
     safety_buffer: int
@@ -56,6 +65,7 @@ class PipelineConfig:
     gcp: GCPConfig
     crawl: CrawlConfig
     comment_downloader: CommentDownloaderConfig
+    api_comment_backfill: ApiCommentBackfillConfig
     quota: QuotaConfig
     youtube_api_key: str
     gemini_api_key: str
@@ -84,6 +94,7 @@ def load_config(config_path: str | None = None) -> PipelineConfig:
 
     crawl = raw["crawl"]
     downloader = raw["comment_downloader"]
+    api_comment_backfill = raw.get("api_comment_backfill", {})
     quota = raw["quota"]
 
     return PipelineConfig(
@@ -122,6 +133,13 @@ def load_config(config_path: str | None = None) -> PipelineConfig:
         comment_downloader=CommentDownloaderConfig(
             request_delay_seconds=downloader["request_delay_seconds"],
             max_retries=downloader["max_retries"],
+        ),
+        api_comment_backfill=ApiCommentBackfillConfig(
+            max_videos_per_run=api_comment_backfill.get("max_videos_per_run", 1000),
+            max_comments_per_video=api_comment_backfill.get("max_comments_per_video", 100),
+            max_pages_per_video=api_comment_backfill.get("max_pages_per_video", 1),
+            daily_quota_units=api_comment_backfill.get("daily_quota_units", 5000),
+            request_delay_seconds=api_comment_backfill.get("request_delay_seconds", 0.2),
         ),
         quota=QuotaConfig(
             daily_budget=quota["daily_budget"],

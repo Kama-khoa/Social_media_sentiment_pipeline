@@ -139,3 +139,29 @@ Manual debug qua Python script (`scripts/dbt/dbt_runner.py`)
 - Không dùng `keyword_id` làm `product_id`; keyword chỉ phục vụ discovery video
 - Chạy `python -m nlp.product_target_resolver --limit 100` giữa hai lượt dbt khi cần resolve candidate mơ hồ
 - Chi tiết catalog và moderation: `docs/product-catalog-and-moderation.md`
+---
+
+## Update 2026-06-03 — Transform sau API comment backfill
+
+`stg_youtube_comments` hiện đọc hai nguồn:
+
+- `raw_comments`: external table trỏ GCS comments cũ.
+- `raw_comments_api`: native BigQuery table từ YouTube API comment backfill.
+
+Model staging union hai nguồn, dedupe theo `comment_id`, và ưu tiên `raw_comments_api` bằng `source_priority DESC`. Nhờ vậy downstream không bị duplicate và tự dùng timestamp API chuẩn khi có.
+
+Sau khi chạy `scripts/run_api_comment_backfill.py`, rebuild dữ liệu cho dashboard:
+
+```powershell
+conda activate etl-py313
+python scripts\dbt\dbt_runner.py run --select stg_youtube_comments
+python scripts\dbt\dbt_runner.py run --select int_comment_sentences --full-refresh
+python -m nlp.runner
+python scripts\dbt\dbt_runner.py run --select int_sentiment_results int_sentence_product_targets fact_product_mentions agg_daily_product_ranking
+```
+
+Nếu chỉ mới crawl video raw và muốn tạo candidate cho API comments:
+
+```powershell
+python scripts\dbt\dbt_runner.py run --select stg_youtube_videos int_video_product_mentions
+```

@@ -34,6 +34,7 @@ def _make_budget(search_remaining: int = 9000) -> QuotaBudget:
     budget._remaining = {
         QuotaBucket.SEARCH: search_remaining,
         QuotaBucket.CHANNEL_SEED: 500,
+        QuotaBucket.COMMENT_THREADS: 5000,
     }
     return budget
 

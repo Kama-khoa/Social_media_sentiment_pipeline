@@ -130,11 +130,19 @@ def create_product_resolution_candidates(client: bigquery.Client) -> None:
         bigquery.SchemaField("reviewed_by", "STRING", mode="NULLABLE"),
         bigquery.SchemaField("reviewed_at", "TIMESTAMP", mode="NULLABLE"),
         bigquery.SchemaField("created_at", "TIMESTAMP", mode="REQUIRED"),
+        bigquery.SchemaField("resolver_confidence", "FLOAT64", mode="NULLABLE"),
+        bigquery.SchemaField("resolver_reason", "STRING", mode="NULLABLE"),
+        bigquery.SchemaField("resolution_method", "STRING", mode="NULLABLE"),
     ]
     table = table_ref(client, "product_resolution_candidates")
     table.schema = schema
     table.description = "Unresolved or ambiguous product mentions waiting for admin review or LLM fallback."
-    client.create_table(table, exists_ok=True)
+    created = client.create_table(table, exists_ok=True)
+    existing_fields = {field.name for field in created.schema}
+    missing_fields = [field for field in schema if field.name not in existing_fields]
+    if missing_fields:
+        created.schema = [*created.schema, *missing_fields]
+        client.update_table(created, ["schema"])
     print("product_resolution_candidates: OK")
 
 

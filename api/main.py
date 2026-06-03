@@ -4,8 +4,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from api.database import init_db
 from api.routers.admin import config as admin_config
 from api.routers.admin import dashboard as admin_dashboard
+from api.routers.admin import logs as admin_logs
 from api.routers.admin import pipeline as admin_pipeline
 from api.routers.admin import products as admin_products
+from api.routers.admin import users as admin_users
 from api.routers.public import auth, products, search
 from api.routers.user import auth as user_auth
 from api.routers.user import dashboard as user_dashboard
@@ -41,4 +43,6 @@ app.include_router(user_dashboard.router)
 app.include_router(admin_dashboard.router)
 app.include_router(admin_config.router)
 app.include_router(admin_products.router)
+app.include_router(admin_logs.router)
 app.include_router(admin_pipeline.router)
+app.include_router(admin_users.router)

@@ -1,7 +1,6 @@
 from datetime import datetime, timedelta
 from airflow import DAG
 from airflow.operators.bash import BashOperator
-from airflow.sensors.external_task import ExternalTaskSensor
 
 default_args = {
     'owner': 'nlp_pipeline',
@@ -22,33 +21,54 @@ with DAG(
     tags=['nlp', 'daily'],
 ) as dag:
 
-    # Wait for the daily extraction DAG to complete
-    wait_for_extraction = ExternalTaskSensor(
-        task_id='wait_for_extraction',
-        external_dag_id='youtube_daily_extraction_dag',
-        external_task_id='dbt_run',
-        allowed_states=['success'],
-        failed_states=['failed', 'skipped'],
+    prepare_comment_sentences = BashOperator(
+        task_id='prepare_comment_sentences',
+        bash_command=(
+            'python scripts/dbt/dbt_runner.py run '
+            '--select stg_youtube_comments int_comment_sentences'
+        ),
+        cwd='/opt/airflow',
     )
 
     run_nlp_inference = BashOperator(
         task_id='run_nlp_inference',
         bash_command=(
-            'cd /opt/airflow && '
             'python -m nlp.runner '
-            '--limit 500 '
+            '--limit 0 '
             '--dag-run-id "{{ dag_run.run_id }}"'
         ),
+        cwd='/opt/airflow',
     )
 
     promote_nlp_results = BashOperator(
         task_id='promote_nlp_results',
         bash_command=(
-            'cd /opt/airflow/transform && '
-            'dbt run --profiles-dir . --select int_sentiment_results int_video_product_mentions int_sentence_product_targets int_product_resolution_candidates && '
-            'cd /opt/airflow && python -m nlp.product_target_resolver --limit 100 && '
-            'cd /opt/airflow/transform && dbt run --profiles-dir . --select int_video_product_mentions int_sentence_product_targets fact_product_mentions'
+            'python scripts/dbt/dbt_runner.py run '
+            '--select int_sentiment_results int_video_product_mentions '
+            'int_sentence_product_targets int_product_resolution_candidates'
         ),
+        cwd='/opt/airflow',
     )
 
-    wait_for_extraction >> run_nlp_inference >> promote_nlp_results
+    resolve_product_targets = BashOperator(
+        task_id='resolve_product_targets',
+        bash_command='python -m nlp.product_target_resolver --limit 100 --batch-size 10',
+        cwd='/opt/airflow',
+    )
+
+    rebuild_fact_product_mentions = BashOperator(
+        task_id='rebuild_fact_product_mentions',
+        bash_command=(
+            'python scripts/dbt/dbt_runner.py run '
+            '--select int_video_product_mentions int_sentence_product_targets fact_product_mentions'
+        ),
+        cwd='/opt/airflow',
+    )
+
+    (
+        prepare_comment_sentences
+        >> run_nlp_inference
+        >> promote_nlp_results
+        >> resolve_product_targets
+        >> rebuild_fact_product_mentions
+    )

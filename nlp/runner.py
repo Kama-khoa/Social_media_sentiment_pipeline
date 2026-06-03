@@ -216,6 +216,11 @@ def fetch_unprocessed_sentences(limit: int, reprocess: bool = False) -> list[Sen
     base_dataset = os.environ["BQ_DATASET"]
     dataset = _intermediate_dataset(base_dataset)
     client = bigquery.Client(project=project_id)
+    limit_clause = ""
+    query_parameters = []
+    if limit > 0:
+        limit_clause = "LIMIT @limit"
+        query_parameters.append(bigquery.ScalarQueryParameter("limit", "INT64", limit))
 
     processed_filter = ""
     processed_joins = ""
@@ -245,13 +250,9 @@ def fetch_unprocessed_sentences(limit: int, reprocess: bool = False) -> list[Sen
           AND s.data_quality_score >= 0.8
           AND s.word_count BETWEEN 2 AND 80
         ORDER BY s.published_at DESC
-        LIMIT @limit
+        {limit_clause}
     """
-    job_config = bigquery.QueryJobConfig(
-        query_parameters=[
-            bigquery.ScalarQueryParameter("limit", "INT64", limit),
-        ]
-    )
+    job_config = bigquery.QueryJobConfig(query_parameters=query_parameters)
     rows = client.query(query, job_config=job_config).result()
     return [_normalize_sentence_record(dict(row.items())) for row in rows]
 

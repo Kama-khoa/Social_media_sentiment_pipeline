@@ -1,5 +1,6 @@
 import type {
   AdminDashboardData,
+  AdminUserItem,
   AttributionData,
   ChannelConfigItem,
   KeywordConfigItem,
@@ -13,6 +14,8 @@ import type {
   ProductDetail,
   ProductComment,
   SearchResponse,
+  LogFileListResponse,
+  LogTailResponse,
   TopProduct,
   UserDashboardData,
 } from "./types";
@@ -22,6 +25,24 @@ const BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000"
 function getToken(): string | null {
   if (typeof window === "undefined") return null;
   return sessionStorage.getItem("access_token");
+}
+
+function formatErrorDetail(detail: unknown, fallback: string): string {
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) {
+    return detail
+      .map((item) => {
+        if (typeof item === "string") return item;
+        if (item && typeof item === "object" && "msg" in item) return String(item.msg);
+        return null;
+      })
+      .filter(Boolean)
+      .join(", ") || fallback;
+  }
+  if (detail && typeof detail === "object" && "msg" in detail) {
+    return String(detail.msg);
+  }
+  return fallback;
 }
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
@@ -35,7 +56,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const res = await fetch(`${BASE_URL}${path}`, { ...options, headers });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
-    throw { status: res.status, detail: err.detail ?? "Request failed" };
+    throw { status: res.status, detail: formatErrorDetail(err.detail, res.statusText || "Request failed") };
   }
   if (res.status === 204) return undefined as T;
   return res.json();
@@ -79,8 +100,8 @@ export const api = {
       }),
   },
 
-  search: (q: string, category = "", limit = 20) =>
-    request<SearchResponse>(`/search?q=${encodeURIComponent(q)}&category=${encodeURIComponent(category)}&limit=${limit}`),
+  search: (q: string, category = "", limit = 20, options: RequestInit = {}) =>
+    request<SearchResponse>(`/search?q=${encodeURIComponent(q)}&category=${encodeURIComponent(category)}&limit=${limit}`, options),
 
   admin: {
     channels: {
@@ -137,6 +158,18 @@ export const api = {
       trigger: (dagId: string) =>
         request<unknown>(`/admin/pipeline/dags/${dagId}/trigger`, { method: "POST" }),
       metrics: () => request<unknown>("/admin/pipeline/metrics"),
+    },
+    logs: {
+      list: () => request<LogFileListResponse>("/admin/logs"),
+      tail: (path: string, lines = 200) =>
+        request<LogTailResponse>(`/admin/logs/tail?path=${encodeURIComponent(path)}&lines=${lines}`),
+    },
+    users: {
+      list: () => request<AdminUserItem[]>("/admin/users"),
+      create: (data: { email: string; password: string; display_name: string; role: "user" | "admin" }) =>
+        request<AdminUserItem>("/admin/users", { method: "POST", body: JSON.stringify(data) }),
+      update: (id: string, data: { display_name?: string; role?: "user" | "admin"; is_active?: boolean; password?: string }) =>
+        request<AdminUserItem>(`/admin/users/${id}`, { method: "PUT", body: JSON.stringify(data) }),
     },
   },
 };

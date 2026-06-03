@@ -14,9 +14,9 @@ const items: Array<{ href: string; label: string; icon: IconName }> = [
   { href: "/admin/channels", label: "Quản lý kênh", icon: "broadcast" },
   { href: "/admin/keywords", label: "Quản lý từ khóa", icon: "tag" },
   { href: "/admin/products", label: "Quản lý sản phẩm", icon: "box" },
-  { href: "/admin/airflow", label: "Tình trạng Pipeline", icon: "heart" },
+  { href: "/admin/users", label: "Quản lý tài khoản", icon: "user" },
   { href: "/admin/airflow#runs", label: "Lịch sử DAG Runs", icon: "flow" },
-  { href: "/admin#ops", label: "Chỉ số vận hành", icon: "activity" },
+  { href: "/admin/logs", label: "Log pipeline", icon: "server" },
 ];
 
 export function AdminSidebar({ open, onClose }: AdminSidebarProps) {

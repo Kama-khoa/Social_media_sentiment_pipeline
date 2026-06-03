@@ -21,6 +21,12 @@ x-airflow-common: &airflow-common
   user: "${AIRFLOW_UID:-50000}:0"
 
 services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    restart: always
+
   web-db:
     image: postgres:15
     environment:

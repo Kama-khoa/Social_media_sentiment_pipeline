@@ -7,6 +7,7 @@ sources:
     tables:
       - name: raw_videos
       - name: raw_comments
+      - name: raw_comments_api
       - name: raw_sentiment_results
       - name: keyword_config
       - name: product_config

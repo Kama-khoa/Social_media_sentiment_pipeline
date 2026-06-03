@@ -37,8 +37,9 @@ export default function KeywordsPage() {
     setPageError(null);
     try {
       setKeywords(await api.admin.keywords.list());
-    } catch {
-      setPageError("Không thể tải danh sách từ khóa. Vui lòng thử lại.");
+    } catch (err: unknown) {
+      const e = err as { detail?: string };
+      setPageError(e?.detail ?? "Không thể tải danh sách từ khóa. Vui lòng thử lại.");
     } finally {
       setLoading(false);
     }

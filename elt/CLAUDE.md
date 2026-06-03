@@ -151,3 +151,41 @@ Convention này là bắt buộc — BigQuery External Table (layer_1) dùng pat
 - Mỗi script trong `extract/` có thể chạy thủ công để test: `conda run -n etl-py313 python -m elt.main --mode full`
 - `seed_loader.py` chạy khi setup hoặc khi cần thêm kênh, keyword, sản phẩm hay alias mới
 - DAG trong `airflow/` sẽ gọi vào các script này — không ngược lại
+---
+
+## Update 2026-06-03 — API Comment Backfill
+
+Nhánh này bổ sung nguồn comment có timestamp chuẩn từ YouTube Data API, tách khỏi `youtube-comment-downloader`.
+
+Files mới/quan trọng:
+
+| File | Nhiệm vụ |
+|---|---|
+| `extract/helpers/youtube_api_comment_client.py` | Gọi `commentThreads.list`, parse top-level comments thành `CommentDTO` |
+| `extract/api_comment_backfill.py` | Chọn candidate video, crawl API comments, progress bar, consume `QuotaBudget` |
+| `repositories/api_comment_repository.py` | Query candidate từ `stg_youtube_videos` + `int_video_product_mentions`, MERGE vào `raw_comments_api` |
+| `../scripts/run_api_comment_backfill.py` | CLI chạy dry-run hoặc crawl thật |
+| `../schema/layer_1_raw/init_api_comment_tables.py` | Tạo `raw_comments_api` và `api_comment_backfill_state` |
+
+Luồng chạy:
+
+```powershell
+conda activate etl-py313
+python schema\layer_1_raw\init_api_comment_tables.py
+python scripts\dbt\dbt_runner.py run --select stg_youtube_videos int_video_product_mentions
+python scripts\run_api_comment_backfill.py --max-videos 10 --max-comments-per-video 100 --dry-run
+python scripts\run_api_comment_backfill.py --max-videos 10 --max-comments-per-video 100
+```
+
+Quota:
+
+- Bucket mới: `youtube_api_comments`.
+- `QuotaBudget.from_config()` lấy allocation từ `config.api_comment_backfill.daily_quota_units`.
+- `QuotaRepository.get_today_used_by_bucket()` tính quota đã dùng trong ngày bằng `DATE(created_at)`.
+- Mỗi page `commentThreads.list` consume 1 unit và được log vào `quota_operation_log`.
+
+Data integrity:
+
+- Không sửa/xóa GCS files cũ.
+- `raw_comments_api` upsert bằng `comment_id`.
+- `stg_youtube_comments` ưu tiên row API khi cùng `comment_id` đã tồn tại ở GCS.

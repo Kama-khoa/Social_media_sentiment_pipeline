@@ -10,6 +10,7 @@ class Settings:
     jwt_algorithm: str = os.getenv("JWT_ALGORITHM", "HS256")
     jwt_expire_minutes: int = int(os.getenv("JWT_EXPIRE_MINUTES", "480"))
     app_database_url: str = os.getenv("APP_DATABASE_URL") or os.getenv("POSTGRES_URL", "postgresql+psycopg2://postgres:postgres@localhost:5432/sentiment_webapi")
+    cache_enabled: bool = os.getenv("CACHE_ENABLED", "true").lower() in ("1", "true", "yes", "on")
     redis_host: str = os.getenv("REDIS_HOST", "localhost")
     redis_port: int = int(os.getenv("REDIS_PORT", "6379"))
     airflow_base_url: str = os.getenv("AIRFLOW_BASE_URL", "http://localhost:8080")

@@ -281,3 +281,54 @@ Xem schema, resolver target, API và use case chi tiết tại [`docs/product-ca
 
 ---
 *Developed by Khoa Trần (2026)*
+---
+
+## Runbook nhanh: YouTube API comment backfill và chuẩn bị dashboard
+
+Nhánh API comment backfill dùng YouTube Data API `commentThreads.list` để lấy `publishedAt` chuẩn cho comment. Dữ liệu được upsert vào native BigQuery table `raw_comments_api` bằng `comment_id`, không xóa hoặc sửa GCS comments cũ. `stg_youtube_comments` union `raw_comments` và `raw_comments_api`, ưu tiên bản API khi trùng `comment_id`.
+
+### 1. Chuẩn bị bảng API comment
+
+```powershell
+conda activate etl-py313
+python schema\layer_1_raw\init_api_comment_tables.py
+```
+
+### 2. Sau khi crawl video raw xong, tạo candidate video
+
+API backfill chọn video từ `stg_youtube_videos` join `int_video_product_mentions`, nên cần chạy dbt tối thiểu:
+
+```powershell
+python scripts\dbt\dbt_runner.py run --select stg_youtube_videos int_video_product_mentions
+```
+
+### 3. Kiểm tra candidate và quota, chưa gọi API
+
+```powershell
+python scripts\run_api_comment_backfill.py --max-videos 10 --max-comments-per-video 100 --dry-run
+```
+
+`--dry-run` chỉ hiển thị số video candidate và quota ước tính. Nó không crawl comment, nên `videos_processed=0` là đúng.
+
+### 4. Crawl comments thật bằng API
+
+```powershell
+python scripts\run_api_comment_backfill.py --max-videos 10 --max-comments-per-video 100
+```
+
+Mỗi page `commentThreads.list` tốn 1 quota unit. Script dùng `QuotaBudget`, đọc quota đã dùng trong ngày từ `quota_operation_log` theo `DATE(created_at)`, consume bucket `youtube_api_comments`, log operation vào `quota_operation_log`, và cập nhật `quota_daily_summary`.
+
+### 5. Chuẩn bị dữ liệu hiển thị trang chủ/dashboard
+
+Sau khi `raw_comments_api` có dữ liệu:
+
+```powershell
+python scripts\dbt\dbt_runner.py run --select stg_youtube_comments
+python scripts\dbt\dbt_runner.py run --select int_comment_sentences --full-refresh
+python -m nlp.runner
+python scripts\dbt\dbt_runner.py run --select int_sentiment_results int_sentence_product_targets fact_product_mentions agg_daily_product_ranking
+```
+
+Trang chủ/dashboard đọc chủ yếu từ `agg_daily_product_ranking`, `fact_product_mentions`, `dim_products`. Nếu ranking chưa đổi, kiểm tra `raw_sentiment_results` đã có kết quả NLP cho comments mới chưa.
+
+Xem hướng dẫn tổng hợp toàn dự án tại [`docs/project-usage-guide.md`](docs/project-usage-guide.md).

@@ -358,7 +358,16 @@ def list_resolution_candidates(status: str = "pending", _: AppUser = Depends(req
         WHERE r.candidate_id IS NULL
         ORDER BY c.created_at DESC
     """)
-    return reviewed + computed
+    merged = reviewed + computed
+    seen: set[str] = set()
+    deduped = []
+    for item in merged:
+        candidate_id = item.get("candidate_id")
+        if candidate_id in seen:
+            continue
+        seen.add(candidate_id)
+        deduped.append(item)
+    return deduped
 
 
 @router.post("/resolution-candidates/{candidate_id}/review")
@@ -383,13 +392,14 @@ def review_resolution_candidate(
         USING (SELECT @candidate_id AS candidate_id) source
         ON target.candidate_id=source.candidate_id
         WHEN MATCHED THEN UPDATE SET status='approved', resolved_product_id=@product_id,
-            reviewed_by=@admin_id, reviewed_at=CURRENT_TIMESTAMP()
+            reviewed_by=@admin_id, reviewed_at=CURRENT_TIMESTAMP(), resolution_method='admin',
+            resolver_confidence=1.0, resolver_reason='Approved manually by admin'
         WHEN NOT MATCHED THEN INSERT
             (candidate_id, source_type, source_id, candidate_text, status, resolved_product_id,
-             reviewed_by, reviewed_at, created_at)
+             reviewed_by, reviewed_at, created_at, resolver_confidence, resolver_reason, resolution_method)
         VALUES
             (@candidate_id, @source_type, @source_id, @candidate_text, 'approved', @product_id,
-             @admin_id, CURRENT_TIMESTAMP(), CURRENT_TIMESTAMP())
+             @admin_id, CURRENT_TIMESTAMP(), CURRENT_TIMESTAMP(), 1.0, 'Approved manually by admin', 'admin')
         """,
         job_config=bigquery.QueryJobConfig(query_parameters=[
             bigquery.ScalarQueryParameter("candidate_id", "STRING", candidate_id),

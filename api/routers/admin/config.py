@@ -1,4 +1,5 @@
 import hashlib
+import logging
 import time
 from datetime import datetime, timezone
 
@@ -19,6 +20,7 @@ from api.schemas.request_schemas import (
 from api.schemas.response_schemas import ChannelConfigItem, KeywordConfigItem
 
 router = APIRouter(prefix="/admin", tags=["admin"])
+logger = logging.getLogger(__name__)
 
 
 def _bq_now() -> str:
@@ -30,15 +32,19 @@ def _bq_now() -> str:
 @router.get("/channels", response_model=list[ChannelConfigItem])
 def list_channels(_: AppUser = Depends(require_admin)):
     settings = get_settings()
-    rows = query_to_list(
-        f"""
-        SELECT channel_id, channel_name, channel_url, channel_handle,
-               subscriber_count, is_active, is_historically_scanned,
-               created_at, last_updated_at
-        FROM `{settings.gcp_project_id}.{settings.bq_dataset}.channel_config`
-        ORDER BY is_active DESC, channel_name ASC
-        """
-    )
+    try:
+        rows = query_to_list(
+            f"""
+            SELECT channel_id, channel_name, channel_url, channel_handle,
+                   subscriber_count, is_active, is_historically_scanned,
+                   created_at, last_updated_at
+            FROM `{settings.gcp_project_id}.{settings.bq_dataset}.channel_config`
+            ORDER BY is_active DESC, channel_name ASC
+            """
+        )
+    except Exception as exc:
+        logger.warning("Could not list channels: %s", exc)
+        raise HTTPException(status_code=502, detail="Không thể tải channel_config từ BigQuery.")
     return [
         ChannelConfigItem(
             channel_id=r["channel_id"],
@@ -180,13 +186,28 @@ def delete_channel(channel_id: str, _: AppUser = Depends(require_admin)):
 @router.get("/keywords", response_model=list[KeywordConfigItem])
 def list_keywords(_: AppUser = Depends(require_admin)):
     settings = get_settings()
-    rows = query_to_list(
-        f"""
-        SELECT keyword_id, keyword_text, search_cluster, is_active, created_at, last_updated_at
-        FROM `{settings.gcp_project_id}.{settings.bq_dataset}.keyword_config`
-        ORDER BY is_active DESC, keyword_text ASC
-        """
-    )
+    try:
+        rows = query_to_list(
+            f"""
+            SELECT keyword_id, keyword_text, search_cluster, is_active, created_at, last_updated_at
+            FROM `{settings.gcp_project_id}.{settings.bq_dataset}.keyword_config`
+            ORDER BY is_active DESC, keyword_text ASC
+            """
+        )
+    except Exception as exc:
+        logger.warning("Could not list keywords with last_updated_at: %s", exc)
+        try:
+            rows = query_to_list(
+                f"""
+                SELECT keyword_id, keyword_text, search_cluster, is_active, created_at,
+                       CAST(NULL AS TIMESTAMP) AS last_updated_at
+                FROM `{settings.gcp_project_id}.{settings.bq_dataset}.keyword_config`
+                ORDER BY is_active DESC, keyword_text ASC
+                """
+            )
+        except Exception as fallback_exc:
+            logger.warning("Could not list keywords: %s", fallback_exc)
+            raise HTTPException(status_code=502, detail="Không thể tải keyword_config từ BigQuery.")
     return [
         KeywordConfigItem(
             keyword_id=r["keyword_id"],
@@ -214,19 +235,31 @@ def create_keyword(body: KeywordCreateRequest, _: AppUser = Depends(require_admi
 
     now = _bq_now()
     client = _get_bq_client()
-    client.query(
-        f"""
-        INSERT INTO `{settings.gcp_project_id}.{settings.bq_dataset}.keyword_config`
-        (keyword_id, keyword_text, search_cluster, is_active, created_at, last_updated_at)
-        VALUES (@kid, @text, @cluster, TRUE, @now, @now)
-        """,
-        job_config=bigquery.QueryJobConfig(query_parameters=[
-            bigquery.ScalarQueryParameter("kid", "STRING", keyword_id),
-            bigquery.ScalarQueryParameter("text", "STRING", body.keyword_text.strip()),
-            bigquery.ScalarQueryParameter("cluster", "STRING", body.search_cluster),
-            bigquery.ScalarQueryParameter("now", "TIMESTAMP", now),
-        ]),
-    ).result()
+    params = [
+        bigquery.ScalarQueryParameter("kid", "STRING", keyword_id),
+        bigquery.ScalarQueryParameter("text", "STRING", body.keyword_text.strip()),
+        bigquery.ScalarQueryParameter("cluster", "STRING", body.search_cluster),
+        bigquery.ScalarQueryParameter("now", "TIMESTAMP", now),
+    ]
+    try:
+        client.query(
+            f"""
+            INSERT INTO `{settings.gcp_project_id}.{settings.bq_dataset}.keyword_config`
+            (keyword_id, keyword_text, search_cluster, is_active, created_at, last_updated_at)
+            VALUES (@kid, @text, @cluster, TRUE, @now, @now)
+            """,
+            job_config=bigquery.QueryJobConfig(query_parameters=params),
+        ).result()
+    except Exception as exc:
+        logger.warning("Could not insert keyword with last_updated_at: %s", exc)
+        client.query(
+            f"""
+            INSERT INTO `{settings.gcp_project_id}.{settings.bq_dataset}.keyword_config`
+            (keyword_id, keyword_text, search_cluster, is_active, created_at)
+            VALUES (@kid, @text, @cluster, TRUE, @now)
+            """,
+            job_config=bigquery.QueryJobConfig(query_parameters=params),
+        ).result()
 
     return KeywordConfigItem(
         keyword_id=keyword_id,
@@ -258,19 +291,31 @@ def update_keyword(keyword_id: str, body: KeywordUpdateRequest, _: AppUser = Dep
     now = _bq_now()
 
     client = _get_bq_client()
-    client.query(
-        f"""
-        UPDATE `{settings.gcp_project_id}.{settings.bq_dataset}.keyword_config`
-        SET keyword_text = @text, search_cluster = @cluster, last_updated_at = @now
-        WHERE keyword_id = @kid
-        """,
-        job_config=bigquery.QueryJobConfig(query_parameters=[
-            bigquery.ScalarQueryParameter("kid", "STRING", keyword_id),
-            bigquery.ScalarQueryParameter("text", "STRING", new_text),
-            bigquery.ScalarQueryParameter("cluster", "STRING", new_cluster),
-            bigquery.ScalarQueryParameter("now", "TIMESTAMP", now),
-        ]),
-    ).result()
+    params = [
+        bigquery.ScalarQueryParameter("kid", "STRING", keyword_id),
+        bigquery.ScalarQueryParameter("text", "STRING", new_text),
+        bigquery.ScalarQueryParameter("cluster", "STRING", new_cluster),
+        bigquery.ScalarQueryParameter("now", "TIMESTAMP", now),
+    ]
+    try:
+        client.query(
+            f"""
+            UPDATE `{settings.gcp_project_id}.{settings.bq_dataset}.keyword_config`
+            SET keyword_text = @text, search_cluster = @cluster, last_updated_at = @now
+            WHERE keyword_id = @kid
+            """,
+            job_config=bigquery.QueryJobConfig(query_parameters=params),
+        ).result()
+    except Exception as exc:
+        logger.warning("Could not update keyword with last_updated_at: %s", exc)
+        client.query(
+            f"""
+            UPDATE `{settings.gcp_project_id}.{settings.bq_dataset}.keyword_config`
+            SET keyword_text = @text, search_cluster = @cluster
+            WHERE keyword_id = @kid
+            """,
+            job_config=bigquery.QueryJobConfig(query_parameters=params),
+        ).result()
 
     return KeywordConfigItem(
         keyword_id=keyword_id,
@@ -294,17 +339,29 @@ def delete_keyword(keyword_id: str, _: AppUser = Depends(require_admin)):
 
     now = _bq_now()
     client = _get_bq_client()
-    client.query(
-        f"""
-        UPDATE `{settings.gcp_project_id}.{settings.bq_dataset}.keyword_config`
-        SET is_active = FALSE, last_updated_at = @now
-        WHERE keyword_id = @kid
-        """,
-        job_config=bigquery.QueryJobConfig(query_parameters=[
-            bigquery.ScalarQueryParameter("kid", "STRING", keyword_id),
-            bigquery.ScalarQueryParameter("now", "TIMESTAMP", now),
-        ]),
-    ).result()
+    params = [
+        bigquery.ScalarQueryParameter("kid", "STRING", keyword_id),
+        bigquery.ScalarQueryParameter("now", "TIMESTAMP", now),
+    ]
+    try:
+        client.query(
+            f"""
+            UPDATE `{settings.gcp_project_id}.{settings.bq_dataset}.keyword_config`
+            SET is_active = FALSE, last_updated_at = @now
+            WHERE keyword_id = @kid
+            """,
+            job_config=bigquery.QueryJobConfig(query_parameters=params),
+        ).result()
+    except Exception as exc:
+        logger.warning("Could not deactivate keyword with last_updated_at: %s", exc)
+        client.query(
+            f"""
+            UPDATE `{settings.gcp_project_id}.{settings.bq_dataset}.keyword_config`
+            SET is_active = FALSE
+            WHERE keyword_id = @kid
+            """,
+            job_config=bigquery.QueryJobConfig(query_parameters=params),
+        ).result()
     invalidate_prefix("products:")
     invalidate_prefix("search:")
 

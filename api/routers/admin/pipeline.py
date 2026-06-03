@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, timezone
 
 import httpx
@@ -18,7 +19,8 @@ from api.schemas.response_schemas import (
 router = APIRouter(prefix="/admin/pipeline", tags=["pipeline"])
 
 _AIRFLOW_TIMEOUT = 10.0
-_DAG_IDS = ["youtube_daily_extraction_dag", "sentiment_analysis_dag", "seed_sync_dag"]
+_DAG_IDS = ["youtube_daily_extraction_dag", "sentiment_analysis_dag", "analytics_dag"]
+logger = logging.getLogger(__name__)
 
 
 def _airflow_client(settings) -> httpx.Client:
@@ -42,58 +44,83 @@ def _safe_airflow_get(client: httpx.Client, path: str) -> dict | None:
         raise HTTPException(status_code=exc.response.status_code, detail=f"Airflow error: {exc.response.text[:200]}")
 
 
+def _airflow_error_message(exc: HTTPException) -> str:
+    if exc.status_code in (401, 403):
+        return "Airflow authentication failed. Check AIRFLOW_API_USERNAME/AIRFLOW_API_PASSWORD."
+    if exc.status_code == 404:
+        return "Airflow endpoint or DAG was not found."
+    if exc.status_code == 502:
+        return "Cannot connect to Airflow webserver. Check AIRFLOW_BASE_URL and Docker networking."
+    if exc.status_code == 504:
+        return "Airflow request timed out."
+    return str(exc.detail)
+
+
 @router.get("/health", response_model=PipelineHealthResponse)
 def pipeline_health(_: AppUser = Depends(require_admin)):
     settings = get_settings()
 
-    with _airflow_client(settings) as client:
-        health_data = _safe_airflow_get(client, "/health")
+    health_data: dict | None = None
+    dag_runs: list[DagRunDetail] = []
+    airflow_message: str | None = None
 
-        dag_runs: list[DagRunDetail] = []
-        for dag_id in _DAG_IDS:
-            runs_data = _safe_airflow_get(client, f"/api/v1/dags/{dag_id}/dagRuns?limit=1&order_by=-start_date")
-            if not runs_data or not runs_data.get("dag_runs"):
-                continue
+    try:
+        with _airflow_client(settings) as client:
+            health_data = _safe_airflow_get(client, "/health")
 
-            run = runs_data["dag_runs"][0]
-            run_id = run.get("run_id", "")
-
-            tasks: list[TaskInstanceDetail] = []
-            if run_id:
-                ti_data = _safe_airflow_get(client, f"/api/v1/dags/{dag_id}/dagRuns/{run_id}/taskInstances")
-                if ti_data:
-                    for ti in ti_data.get("task_instances", []):
-                        tasks.append(TaskInstanceDetail(
-                            task_id=ti.get("task_id", ""),
-                            state=ti.get("state") or "none",
-                            duration=ti.get("duration"),
-                            try_number=ti.get("try_number", 1),
-                        ))
-
-            start_date = run.get("start_date") or run.get("execution_date")
-            end_date = run.get("end_date")
-            duration_seconds = None
-            if start_date and end_date:
+            for dag_id in _DAG_IDS:
                 try:
-                    from datetime import datetime as dt
-                    start = dt.fromisoformat(start_date.replace("Z", "+00:00"))
-                    end = dt.fromisoformat(end_date.replace("Z", "+00:00"))
-                    duration_seconds = int((end - start).total_seconds())
-                except Exception:
-                    pass
+                    runs_data = _safe_airflow_get(client, f"/api/v1/dags/{dag_id}/dagRuns?limit=1&order_by=-start_date")
+                    if not runs_data or not runs_data.get("dag_runs"):
+                        continue
 
-            dag_runs.append(DagRunDetail(
-                dag_id=dag_id,
-                run_id=run_id,
-                state=run.get("state", "unknown"),
-                start_date=start_date,
-                duration_seconds=duration_seconds,
-                tasks=tasks,
-            ))
+                    run = runs_data["dag_runs"][0]
+                    run_id = run.get("run_id", "")
+
+                    tasks: list[TaskInstanceDetail] = []
+                    if run_id:
+                        ti_data = _safe_airflow_get(client, f"/api/v1/dags/{dag_id}/dagRuns/{run_id}/taskInstances")
+                        if ti_data:
+                            for ti in ti_data.get("task_instances", []):
+                                tasks.append(TaskInstanceDetail(
+                                    task_id=ti.get("task_id", ""),
+                                    state=ti.get("state") or "none",
+                                    duration=ti.get("duration"),
+                                    try_number=ti.get("try_number", 1),
+                                ))
+
+                    start_date = run.get("start_date") or run.get("execution_date")
+                    end_date = run.get("end_date")
+                    duration_seconds = None
+                    if start_date and end_date:
+                        try:
+                            from datetime import datetime as dt
+                            start = dt.fromisoformat(start_date.replace("Z", "+00:00"))
+                            end = dt.fromisoformat(end_date.replace("Z", "+00:00"))
+                            duration_seconds = int((end - start).total_seconds())
+                        except Exception:
+                            pass
+
+                    dag_runs.append(DagRunDetail(
+                        dag_id=dag_id,
+                        run_id=run_id,
+                        state=run.get("state", "unknown"),
+                        start_date=start_date,
+                        duration_seconds=duration_seconds,
+                        tasks=tasks,
+                    ))
+                except HTTPException as exc:
+                    if airflow_message is None:
+                        airflow_message = _airflow_error_message(exc)
+                    logger.warning("Could not fetch Airflow DAG %s: %s", dag_id, exc.detail)
+                    continue
+    except HTTPException as exc:
+        airflow_message = _airflow_error_message(exc)
 
     airflow_health = AirflowHealth(
         webserver=health_data.get("metadatabase", {}).get("status", "unknown") if health_data else "unknown",
         scheduler=health_data.get("scheduler", {}).get("status", "unknown") if health_data else "unknown",
+        message=airflow_message,
     )
 
     metrics = _fetch_bq_metrics(settings)
@@ -150,33 +177,63 @@ def pipeline_metrics(_: AppUser = Depends(require_admin)):
 
 
 def _fetch_bq_metrics(settings) -> PipelineMetrics:
-    quota_rows = query_to_list(
+    quota_rows = []
+    quota_queries = [
         f"""
         SELECT total_units_used, comments_collected, videos_discovered
         FROM `{settings.gcp_project_id}.{settings.bq_dataset}.quota_daily_summary`
         WHERE summary_date = CURRENT_DATE()
         LIMIT 1
-        """
-    )
+        """,
+        f"""
+        SELECT total_units_used, comments_crawled AS comments_collected, videos_discovered
+        FROM `{settings.gcp_project_id}.{settings.bq_dataset}.quota_daily_summary`
+        WHERE quota_date = CURRENT_DATE()
+        LIMIT 1
+        """,
+    ]
+    for sql in quota_queries:
+        try:
+            quota_rows = query_to_list(sql)
+            break
+        except Exception as exc:
+            logger.warning("Could not fetch quota metrics with fallback query: %s", exc)
     quota = quota_rows[0] if quota_rows else {}
 
-    pending_rows = query_to_list(
-        f"""
-        SELECT COUNT(*) AS cnt
-        FROM `{settings.gcp_project_id}.{settings.bq_dataset}.channel_config`
-        WHERE is_active = TRUE AND is_historically_scanned = FALSE
-        """
-    )
+    pending_rows = []
+    try:
+        pending_rows = query_to_list(
+            f"""
+            SELECT COUNT(*) AS cnt
+            FROM `{settings.gcp_project_id}.{settings.bq_dataset}.channel_config`
+            WHERE is_active = TRUE AND is_historically_scanned = FALSE
+            """
+        )
+    except Exception as exc:
+        logger.warning("Could not fetch pending channel metrics: %s", exc)
     pending = pending_rows[0]["cnt"] if pending_rows else 0
 
-    nlp_rows = query_to_list(
+    nlp_rows = []
+    nlp_queries = [
         f"""
         SELECT dag_run_id
         FROM `{settings.gcp_project_id}.{settings.bq_dataset}.raw_sentiment_results`
         ORDER BY processed_at DESC
         LIMIT 1
-        """
-    )
+        """,
+        f"""
+        SELECT dag_run_id
+        FROM `{settings.gcp_project_id}.{settings.bq_dataset}.raw_sentiment_results`
+        ORDER BY created_at DESC
+        LIMIT 1
+        """,
+    ]
+    for sql in nlp_queries:
+        try:
+            nlp_rows = query_to_list(sql)
+            break
+        except Exception as exc:
+            logger.warning("Could not fetch NLP metrics with fallback query: %s", exc)
     last_nlp = nlp_rows[0]["dag_run_id"] if nlp_rows else None
 
     return PipelineMetrics(

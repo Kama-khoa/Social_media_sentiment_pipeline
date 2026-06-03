@@ -144,6 +144,7 @@ class KeywordConfigItem(BaseModel):
 class AirflowHealth(BaseModel):
     webserver: str
     scheduler: str
+    message: Optional[str] = None
 
 
 class TaskInstanceDetail(BaseModel):
@@ -178,6 +179,23 @@ class PipelineHealthResponse(BaseModel):
     as_of: datetime
 
 
+class LogFileItem(BaseModel):
+    path: str
+    size_bytes: int
+    modified_at: datetime
+
+
+class LogFileListResponse(BaseModel):
+    files: list[LogFileItem]
+
+
+class LogTailResponse(BaseModel):
+    path: str
+    lines: list[str]
+    truncated: bool
+    size_bytes: int
+
+
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
@@ -190,6 +208,16 @@ class UserInfo(BaseModel):
     display_name: str
     role: str
     created_at: datetime
+
+
+class AdminUserItem(BaseModel):
+    id: str
+    email: str
+    display_name: str
+    role: Literal["user", "admin"]
+    is_active: bool
+    created_at: datetime
+    last_login_at: Optional[datetime] = None
 
 
 class CategoryStat(BaseModel):

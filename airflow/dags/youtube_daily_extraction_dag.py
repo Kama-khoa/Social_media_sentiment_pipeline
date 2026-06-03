@@ -21,23 +21,20 @@ with DAG(
     tags=['elt', 'daily'],
 ) as dag:
 
-    extract_videos = BashOperator(
-        task_id='extract_videos',
-        bash_command='python -m elt.main --mode videos --date {{ ds }} --run-id {{ run_id }}',
+    run_youtube_elt = BashOperator(
+        task_id='run_youtube_elt',
+        bash_command='python -m elt.main --mode full --date {{ ds }} --run-id "{{ dag_run.run_id }}"',
         cwd='/opt/airflow',
     )
 
-    extract_comments = BashOperator(
-        task_id='extract_comments',
-        bash_command='python -m elt.main --mode comments --date {{ ds }} --run-id {{ run_id }}',
+    prepare_downstream_models = BashOperator(
+        task_id='prepare_downstream_models',
+        bash_command=(
+            'python scripts/dbt/dbt_runner.py run '
+            '--select stg_youtube_videos stg_youtube_comments '
+            'int_video_product_mentions int_comment_sentences'
+        ),
         cwd='/opt/airflow',
     )
 
-    dbt_run = BashOperator(
-        task_id='dbt_run',
-        # Assuming dbt is installed and profiles.yml is configured in the environment
-        bash_command='cd /opt/airflow/transform && dbt run',
-        # Note: Need to update the cd path to match the actual deployment path in production
-    )
-
-    extract_videos >> extract_comments >> dbt_run
+    run_youtube_elt >> prepare_downstream_models

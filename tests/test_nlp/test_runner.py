@@ -377,3 +377,36 @@ def test_run_without_bq_keeps_single_pass_router_behavior(monkeypatch) -> None:
     rows = run(limit=1, write_bq=False, router=_FakeRouter())
 
     assert [row["sentence_id"] for row in rows] == ["s1", "s1"]
+
+
+def test_fetch_unprocessed_sentences_omits_limit_when_limit_is_zero(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    class FakeQueryResult:
+        def result(self):
+            return []
+
+    class FakeClient:
+        def __init__(self, project):
+            captured["project"] = project
+
+        def query(self, sql, job_config):
+            captured["sql"] = sql
+            captured["job_config"] = job_config
+            return FakeQueryResult()
+
+    fake_bigquery = types.SimpleNamespace(
+        Client=FakeClient,
+        QueryJobConfig=lambda **kwargs: kwargs,
+        ScalarQueryParameter=lambda *args: args,
+    )
+    fake_cloud = types.ModuleType("google.cloud")
+    fake_cloud.bigquery = fake_bigquery
+    monkeypatch.setitem(sys.modules, "google.cloud", fake_cloud)
+    monkeypatch.setitem(sys.modules, "google.cloud.bigquery", fake_bigquery)
+    monkeypatch.setenv("GCP_PROJECT_ID", "project")
+    monkeypatch.setenv("BQ_DATASET", "dataset")
+
+    assert runner_module.fetch_unprocessed_sentences(limit=0) == []
+    assert "LIMIT @limit" not in captured["sql"]
+    assert captured["job_config"]["query_parameters"] == []

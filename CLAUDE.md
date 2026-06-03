@@ -280,3 +280,46 @@ python -m nlp.runner --limit 500 --dag-run-id reprocess-t070 --reprocess
 ```
 
 Phase tiếp theo: hoàn thiện Analytics Engine trên dữ liệu `fact_product_mentions`, ưu tiên Bayesian ranking, controversy index, sau đó PELT attribution.
+---
+
+## Update 2026-06-03 — YouTube API Comment Backfill
+
+Mục tiêu: sửa vấn đề `published_at` comment từ `youtube-comment-downloader` có thể là timestamp suy diễn từ relative time. Nhánh backfill mới lấy `snippet.publishedAt` chuẩn từ YouTube Data API.
+
+Các file chính:
+
+| File | Vai trò |
+|---|---|
+| `schema/layer_1_raw/init_api_comment_tables.py` | Tạo `raw_comments_api` và `api_comment_backfill_state` |
+| `elt/extract/helpers/youtube_api_comment_client.py` | Gọi `commentThreads.list`, parse `publishedAt` |
+| `elt/extract/api_comment_backfill.py` | Orchestrator API comments, progress bar, quota budget |
+| `elt/repositories/api_comment_repository.py` | Query candidate video, `MERGE` comments theo `comment_id`, checkpoint |
+| `scripts/run_api_comment_backfill.py` | Entrypoint chạy/dry-run backfill |
+
+Quota:
+
+- `QuotaBucket.COMMENT_THREADS = "youtube_api_comments"`.
+- `QuotaBudget.from_config()` tính quota còn lại từ `quota_operation_log`.
+- `QuotaRepository.get_today_used_by_bucket()` dùng `DATE(created_at) = @today`.
+- Mỗi page `commentThreads.list` tính 1 unit, log `operation_type="comment_threads"`.
+
+Runbook:
+
+```powershell
+conda activate etl-py313
+python schema\layer_1_raw\init_api_comment_tables.py
+python scripts\dbt\dbt_runner.py run --select stg_youtube_videos int_video_product_mentions
+python scripts\run_api_comment_backfill.py --max-videos 10 --max-comments-per-video 100 --dry-run
+python scripts\run_api_comment_backfill.py --max-videos 10 --max-comments-per-video 100
+```
+
+Sau khi crawl xong để chuẩn bị dashboard:
+
+```powershell
+python scripts\dbt\dbt_runner.py run --select stg_youtube_comments
+python scripts\dbt\dbt_runner.py run --select int_comment_sentences --full-refresh
+python -m nlp.runner
+python scripts\dbt\dbt_runner.py run --select int_sentiment_results int_sentence_product_targets fact_product_mentions agg_daily_product_ranking
+```
+
+Không xóa GCS comments cũ. `raw_comments_api` là native table được upsert; `stg_youtube_comments` union hai nguồn và ưu tiên API khi trùng `comment_id`.

@@ -14,6 +14,20 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class AdminUserCreateRequest(BaseModel):
+    email: EmailStr
+    password: str = Field(min_length=8)
+    display_name: str = Field(min_length=2)
+    role: Literal["user", "admin"] = "user"
+
+
+class AdminUserUpdateRequest(BaseModel):
+    display_name: Optional[str] = Field(default=None, min_length=2)
+    role: Optional[Literal["user", "admin"]] = None
+    is_active: Optional[bool] = None
+    password: Optional[str] = Field(default=None, min_length=8)
+
+
 # ── Admin channel config ──────────────────────────────────────────────────────
 
 class ChannelCreateRequest(BaseModel):
