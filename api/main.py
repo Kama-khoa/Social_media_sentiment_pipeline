@@ -2,7 +2,14 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from api.database import init_db
-from api.routers import auth, dashboard, products, search, admin, pipeline, product_catalog
+from api.routers.admin import config as admin_config
+from api.routers.admin import dashboard as admin_dashboard
+from api.routers.admin import pipeline as admin_pipeline
+from api.routers.admin import products as admin_products
+from api.routers.public import auth, products, search
+from api.routers.user import auth as user_auth
+from api.routers.user import dashboard as user_dashboard
+from api.routers.user import products as user_products
 
 app = FastAPI(title="Sentiment Intelligence Platform API", version="0.1.0")
 
@@ -26,9 +33,12 @@ def health():
 
 
 app.include_router(auth.router)
-app.include_router(dashboard.router)
+app.include_router(user_auth.router)
 app.include_router(products.router)
 app.include_router(search.router)
-app.include_router(admin.router)
-app.include_router(product_catalog.router)
-app.include_router(pipeline.router)
+app.include_router(user_products.router)
+app.include_router(user_dashboard.router)
+app.include_router(admin_dashboard.router)
+app.include_router(admin_config.router)
+app.include_router(admin_products.router)
+app.include_router(admin_pipeline.router)

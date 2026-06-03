@@ -11,7 +11,7 @@ from api.cache import invalidate_prefix
 from api.config import get_settings
 from api.dependencies import require_admin
 from api.models import AppUser
-from api.routers.products import _json_value, _validate_specs
+from api.routers.product_helpers import json_value, validate_specs
 from api.schemas.request_schemas import (
     ProductAliasCreateRequest,
     ProductCreateRequest,
@@ -240,7 +240,7 @@ def list_detail_requests(status: str = "pending", _: AppUser = Depends(require_a
         [bigquery.ScalarQueryParameter("status", "STRING", status)],
     )
     for row in rows:
-        row["proposed_specs"] = _json_value(row.get("proposed_specs"))
+        row["proposed_specs"] = json_value(row.get("proposed_specs"))
     return rows
 
 
@@ -258,9 +258,9 @@ def review_detail_request(
     if not rows:
         raise HTTPException(status_code=404, detail="Pending request not found")
     request = rows[0]
-    specs = _json_value(request.get("proposed_specs"))
+    specs = json_value(request.get("proposed_specs"))
     if body.action == "approve":
-        _validate_specs(request["product_id"], specs)
+        validate_specs(request["product_id"], specs)
         get_bq_client().query(
             f"""
             MERGE `{settings.gcp_project_id}.{settings.bq_dataset}.product_details` target

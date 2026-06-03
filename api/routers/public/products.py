@@ -1,17 +1,12 @@
-import json
-import uuid
 from datetime import date
-from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, HTTPException, Response
 from google.cloud import bigquery
 
-from api.bq_client import CATEGORY_SLUG_MAP, get_bq_client, normalize_controversy, query_to_list
+from api.bq_client import CATEGORY_SLUG_MAP, normalize_controversy, query_to_list
 from api.cache import get_cached, set_cached
 from api.config import get_settings
-from api.dependencies import get_current_user
-from api.models import AppUser
-from api.schemas.request_schemas import ProductDetailChangeRequestCreate
+from api.routers.product_helpers import json_value
 from api.schemas.response_schemas import (
     AspectSentiment,
     AttributionResponse,
@@ -26,42 +21,6 @@ from api.schemas.response_schemas import (
 router = APIRouter(prefix="/products", tags=["products"])
 
 _CACHE_TTL = 300
-
-
-def _json_value(value):
-    if value is None or isinstance(value, dict):
-        return value
-    return json.loads(value)
-
-
-def _validate_specs(product_id: str, specs: dict | None) -> None:
-    if not specs:
-        return
-    settings = get_settings()
-    rows = query_to_list(
-        f"""
-        SELECT t.spec_key, t.value_type
-        FROM `{settings.gcp_project_id}.{settings.bq_dataset}.product_config` p
-        JOIN `{settings.gcp_project_id}.{settings.bq_dataset}.product_spec_templates` t
-          ON p.category = t.category
-        WHERE p.product_id = @product_id AND t.is_active = TRUE
-        """,
-        [bigquery.ScalarQueryParameter("product_id", "STRING", product_id)],
-    )
-    types = {r["spec_key"]: r["value_type"] for r in rows}
-    unknown = sorted(set(specs) - set(types))
-    if unknown:
-        raise HTTPException(status_code=422, detail=f"Unknown specification keys: {', '.join(unknown)}")
-    expected_types = {"string": str, "number": (int, float), "boolean": bool}
-    for key, value in specs.items():
-        if (
-            value is not None
-            and (
-                not isinstance(value, expected_types[types[key]])
-                or (types[key] == "number" and isinstance(value, bool))
-            )
-        ):
-            raise HTTPException(status_code=422, detail=f"Invalid value type for specification: {key}")
 
 
 def _cache_key(path: str) -> str:
@@ -216,7 +175,7 @@ def get_product_aspects(product_id: str, response: Response):
         total_mentions=p["total_mentions"] or 0,
         aspects=aspects,
         details=ProductDetails(
-            specs=_json_value(p.get("specs")),
+            specs=json_value(p.get("specs")),
             description=p.get("description"),
             official_url=p.get("official_url"),
             image_url=p.get("image_url"),
@@ -227,46 +186,6 @@ def get_product_aspects(product_id: str, response: Response):
     )
     set_cached(cache_key, result.model_dump(mode="json"), _CACHE_TTL)
     return result
-
-
-@router.post("/{product_id}/details/requests", status_code=201)
-def submit_product_detail_request(
-    product_id: str,
-    body: ProductDetailChangeRequestCreate,
-    current_user: AppUser = Depends(get_current_user),
-):
-    settings = get_settings()
-    products = query_to_list(
-        f"SELECT product_id FROM `{settings.gcp_project_id}.{settings.bq_dataset}.product_config` WHERE product_id = @product_id AND is_active = TRUE",
-        [bigquery.ScalarQueryParameter("product_id", "STRING", product_id)],
-    )
-    if not products:
-        raise HTTPException(status_code=404, detail="Product not found")
-    if not any((body.proposed_specs, body.proposed_description, body.proposed_official_url, body.proposed_image_url)):
-        raise HTTPException(status_code=422, detail="At least one proposed change is required")
-    _validate_specs(product_id, body.proposed_specs)
-
-    request_id = str(uuid.uuid4())
-    client = get_bq_client()
-    client.query(
-        f"""
-        INSERT INTO `{settings.gcp_project_id}.{settings.bq_dataset}.product_detail_change_requests`
-        (request_id, product_id, proposed_specs, proposed_description, proposed_official_url,
-         proposed_image_url, submitted_by, status, created_at)
-        VALUES (@request_id, @product_id, PARSE_JSON(@specs), @description, @official_url,
-                @image_url, @submitted_by, 'pending', CURRENT_TIMESTAMP())
-        """,
-        job_config=bigquery.QueryJobConfig(query_parameters=[
-            bigquery.ScalarQueryParameter("request_id", "STRING", request_id),
-            bigquery.ScalarQueryParameter("product_id", "STRING", product_id),
-            bigquery.ScalarQueryParameter("specs", "STRING", json.dumps(body.proposed_specs) if body.proposed_specs is not None else "null"),
-            bigquery.ScalarQueryParameter("description", "STRING", body.proposed_description),
-            bigquery.ScalarQueryParameter("official_url", "STRING", body.proposed_official_url),
-            bigquery.ScalarQueryParameter("image_url", "STRING", body.proposed_image_url),
-            bigquery.ScalarQueryParameter("submitted_by", "STRING", current_user.id),
-        ]),
-    ).result()
-    return {"request_id": request_id, "status": "pending"}
 
 
 @router.get("/{product_id}/attribution", response_model=AttributionResponse)
