@@ -41,7 +41,7 @@ graph TD
     subgraph NLP ["NLP Pipeline (Phase 3)"]
         D1["vELECTRA<br>(Aspect Extraction)"]
         D2["PhoBERT<br>(Sentiment Classify)"]
-        D3["Gemini 1.5 Flash<br>(Confidence Fallback)"]
+        D3["Gemini Flash<br>(Confidence Fallback)"]
     end
 
     subgraph Analytics ["Analytics Engine (Phase 4)"]
@@ -63,8 +63,8 @@ graph TD
     C1 --> C2
     C2 --> D1
     D1 --> D2
-    D2 -- "conf < 0.8" --> D3
-    D2 -- "conf >= 0.8" --> C2
+    D2 -- "conf < 0.7" --> D3
+    D2 -- "conf >= 0.7" --> C2
     D3 --> C2
     C2 --> C3
     C3 --> E1

@@ -24,6 +24,8 @@ iphone-12,iPhone 12,Apple,Điện thoại,2020,iphone 12
 iphone-12-mini,iPhone 12 mini,Apple,Điện thoại,2020,iphone 12 mini
 iphone-12-pro,iPhone 12 Pro,Apple,Điện thoại,2020,iphone 12 pro
 iphone-12-pro-max,iPhone 12 Pro Max,Apple,Điện thoại,2020,iphone 12 pro max
+iphone-11,iPhone 11,Apple,Điện thoại,2019,iphone 11
+iphone-6,iPhone 6,Apple,Điện thoại,2014,iphone 6
 samsung-galaxy-s26,Samsung Galaxy S26,Samsung,Điện thoại,2026,Galaxy S26|samsung galaxy s26
 samsung-galaxy-s26-plus,Samsung Galaxy S26+,Samsung,Điện thoại,2026,Galaxy S26+|samsung galaxy s26+
 samsung-galaxy-s26-ultra,Samsung Galaxy S26 Ultra,Samsung,Điện thoại,2026,Galaxy S26 Ultra|samsung galaxy s26 ultra
@@ -52,6 +54,7 @@ samsung-galaxy-s20,Samsung Galaxy S20,Samsung,Điện thoại,2020,Galaxy S20|sa
 samsung-galaxy-s20-plus,Samsung Galaxy S20+,Samsung,Điện thoại,2020,Galaxy S20+|samsung galaxy s20+
 samsung-galaxy-s20-ultra,Samsung Galaxy S20 Ultra,Samsung,Điện thoại,2020,Galaxy S20 Ultra|samsung galaxy s20 ultra
 samsung-galaxy-s20-fe,Samsung Galaxy S20 FE,Samsung,Điện thoại,2020,Galaxy S20 FE|samsung galaxy s20 fe
+samsung-galaxy-s6,Samsung Galaxy S6,Samsung,Điện thoại,2015,Galaxy S6|samsung galaxy s6
 samsung-galaxy-z-fold7,Samsung Galaxy Z Fold7,Samsung,Điện thoại,2025,Galaxy Z Fold7|samsung galaxy z fold7
 samsung-galaxy-z-flip7,Samsung Galaxy Z Flip7,Samsung,Điện thoại,2025,Galaxy Z Flip7|samsung galaxy z flip7
 samsung-galaxy-z-fold6,Samsung Galaxy Z Fold6,Samsung,Điện thoại,2024,Galaxy Z Fold6|samsung galaxy z fold6
@@ -249,6 +252,14 @@ motorola-edge-50-fusion,Motorola Edge 50 Fusion,Motorola,Điện thoại,2025,Ed
 motorola-razr-60-ultra,Motorola Razr 60 Ultra,Motorola,Điện thoại,2025,Razr 60 Ultra|motorola razr 60 ultra
 motorola-razr-60,Motorola Razr 60,Motorola,Điện thoại,2025,Razr 60|motorola razr 60
 motorola-razr-50-ultra,Motorola Razr 50 Ultra,Motorola,Điện thoại,2025,Razr 50 Ultra|motorola razr 50 ultra
+macbook-air-m1,MacBook Air M1,Apple,Laptop,2020,macbook air m1
+macbook-air-m2,MacBook Air M2,Apple,Laptop,2022,macbook air m2
+macbook-air-m4,MacBook Air M4,Apple,Laptop,2025,macbook air m4
+macbook-air-m5,MacBook Air M5,Apple,Laptop,2026,macbook air m5
+macbook-pro-m1,MacBook Pro M1,Apple,Laptop,2020,macbook pro m1
+macbook-pro-m5,MacBook Pro M5,Apple,Laptop,2026,macbook pro m5
+macbook-air-15,MacBook Air 15,Apple,Laptop,2023,macbook air 15|macbook air 15 inch
+macbook-pro-14,MacBook Pro 14,Apple,Laptop,2021,macbook pro 14|macbook pro 14 inch
 macbook-air-13-m4,MacBook Air 13 M4,Apple,Laptop,2025,macbook air 13 m4
 macbook-air-15-m4,MacBook Air 15 M4,Apple,Laptop,2025,macbook air 15 m4
 macbook-pro-14-m4,MacBook Pro 14 M4,Apple,Laptop,2025,macbook pro 14 m4
@@ -399,9 +410,14 @@ microsoft-surface-laptop-7-13-8,Microsoft Surface Laptop 7 13.8,Microsoft,Laptop
 microsoft-surface-laptop-7-13-8-2024,Microsoft Surface Laptop 7 13.8 2024,Microsoft,Laptop,2024,Surface Laptop 7 13.8 2024|microsoft surface laptop 7 13.8 2024
 microsoft-surface-laptop-7-15,Microsoft Surface Laptop 7 15,Microsoft,Laptop,2025,Surface Laptop 7 15|microsoft surface laptop 7 15
 microsoft-surface-laptop-7-15-2024,Microsoft Surface Laptop 7 15 2024,Microsoft,Laptop,2024,Surface Laptop 7 15 2024|microsoft surface laptop 7 15 2024
+apple-airpods-1,Apple AirPods 1st generation,Apple,Tai nghe,2016,AirPods 1|AirPods Gen 1|AirPods first generation|AirPods 1st generation|apple airpods 1st generation
+apple-airpods-3,Apple AirPods 3,Apple,Tai nghe,2021,AirPods 3|apple airpods 3
 apple-airpods-4,Apple AirPods 4,Apple,Tai nghe,2025,AirPods 4|apple airpods 4
 apple-airpods-4-anc,Apple AirPods 4 ANC,Apple,Tai nghe,2025,AirPods 4 ANC|apple airpods 4 anc
+apple-airpods-pro-1,Apple AirPods Pro 1st generation,Apple,Tai nghe,2019,AirPods Pro 1|AirPods Pro Gen 1|AirPods Pro first generation|AirPods Pro 1st generation|apple airpods pro 1st generation
 apple-airpods-pro-2,Apple AirPods Pro 2,Apple,Tai nghe,2025,AirPods Pro 2|apple airpods pro 2
+apple-airpods-pro-3,Apple AirPods Pro 3,Apple,Tai nghe,2025,AirPods Pro 3|apple airpods pro 3
+apple-airpods-max,Apple AirPods Max,Apple,Tai nghe,2020,AirPods Max|apple airpods max
 apple-airpods-max-usb-c,Apple AirPods Max USB-C,Apple,Tai nghe,2025,AirPods Max USB-C|apple airpods max usb-c
 samsung-galaxy-buds4-pro,Samsung Galaxy Buds4 Pro,Samsung,Tai nghe,2025,Galaxy Buds4 Pro|samsung galaxy buds4 pro
 samsung-galaxy-buds4,Samsung Galaxy Buds4,Samsung,Tai nghe,2025,Galaxy Buds4|samsung galaxy buds4
@@ -412,6 +428,7 @@ sony-wh-1000xm6,Sony WH-1000XM6,Sony,Tai nghe,2025,WH-1000XM6|sony wh-1000xm6
 sony-wf-1000xm6,Sony WF-1000XM6,Sony,Tai nghe,2025,WF-1000XM6|sony wf-1000xm6
 sony-wh-1000xm5,Sony WH-1000XM5,Sony,Tai nghe,2025,WH-1000XM5|sony wh-1000xm5
 sony-wf-1000xm5,Sony WF-1000XM5,Sony,Tai nghe,2025,WF-1000XM5|sony wf-1000xm5
+sony-wf-1000xm4,Sony WF-1000XM4,Sony,Tai nghe,2021,WF-1000XM4|sony wf-1000xm4
 sony-ult-wear-wh-ult900n,Sony ULT WEAR WH-ULT900N,Sony,Tai nghe,2025,ULT WEAR WH-ULT900N|sony ult wear wh-ult900n
 sony-linkbuds-fit,Sony LinkBuds Fit,Sony,Tai nghe,2025,LinkBuds Fit|sony linkbuds fit
 sony-linkbuds-open,Sony LinkBuds Open,Sony,Tai nghe,2025,LinkBuds Open|sony linkbuds open
@@ -435,7 +452,7 @@ jabra-elite-8-active-gen-2,Jabra Elite 8 Active Gen 2,Jabra,Tai nghe,2025,Elite 
 jabra-elite-10,Jabra Elite 10,Jabra,Tai nghe,2025,Elite 10|jabra elite 10
 jabra-elite-8-active,Jabra Elite 8 Active,Jabra,Tai nghe,2025,Elite 8 Active|jabra elite 8 active
 jabra-elite-4-active,Jabra Elite 4 Active,Jabra,Tai nghe,2025,Elite 4 Active|jabra elite 4 active
-nothing-ear,Nothing Ear,Nothing,Tai nghe,2025,Ear|nothing ear
+nothing-ear,Nothing Ear,Nothing,Tai nghe,2025,nothing ear
 nothing-ear-a,Nothing Ear (a),Nothing,Tai nghe,2025,Ear (a)|nothing ear (a)
 nothing-ear-2,Nothing Ear (2),Nothing,Tai nghe,2025,Ear (2)|nothing ear (2)
 nothing-cmf-buds-pro-2,Nothing CMF Buds Pro 2,Nothing,Tai nghe,2025,CMF Buds Pro 2|nothing cmf buds pro 2

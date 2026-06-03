@@ -322,7 +322,10 @@ def sync_products(client: bigquery.Client) -> dict:
 
 
 def sync_product_spec_templates(client: bigquery.Client) -> int:
-    common: list[tuple[str, str, str, str | None]] = []
+    common: list[tuple[str, str, str, str | None]] = [
+        ("generation", "Thế hệ", "string", None),
+        ("release_date", "Ngày ra mắt", "string", None),
+    ]
     templates = {
         "Điện thoại": [
             ("screen_size_inches", "Kích thước màn hình", "number", "inch"),
@@ -333,15 +336,18 @@ def sync_product_spec_templates(client: bigquery.Client) -> int:
             ("chipset", "Chipset", "string", None),
         ],
         "Laptop": [
+            ("model_year", "Năm model", "number", None),
             ("screen_size_inches", "Kích thước màn hình", "number", "inch"),
             ("ram_gb", "RAM", "number", "GB"),
             ("storage_gb", "Bộ nhớ", "number", "GB"),
+            ("chipset", "Chipset", "string", None),
             ("processor", "Bộ xử lý", "string", None),
             ("graphics", "Đồ họa", "string", None),
         ],
         "Tai nghe": [
             ("battery_hours", "Thời lượng pin", "number", "giờ"),
             ("connection", "Kết nối", "string", None),
+            ("connector", "Cổng sạc", "string", None),
             ("noise_cancellation", "Chống ồn chủ động", "boolean", None),
         ],
     }

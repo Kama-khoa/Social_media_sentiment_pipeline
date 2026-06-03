@@ -5,9 +5,16 @@ WITH sentences AS (
     FROM {{ ref('int_comment_sentences') }}
 ),
 aliases AS (
-    SELECT product_id, alias_text
+    SELECT product_id, alias_text, LOWER(TRIM(alias_text)) AS normalized_alias
     FROM {{ source('raw', 'product_aliases') }}
     WHERE is_active = TRUE AND LENGTH(TRIM(alias_text)) >= 3
+      AND LOWER(TRIM(alias_text)) NOT IN (
+          'ear',
+          'macbook air',
+          'macbook pro',
+          'airpods',
+          'airpods pro'
+      )
 ),
 overridden_sentences AS (
     SELECT DISTINCT sentence_id
@@ -17,7 +24,7 @@ explicit_matches AS (
     SELECT DISTINCT s.sentence_id, s.video_id, a.product_id
     FROM sentences s
     JOIN aliases a
-      ON STRPOS(LOWER(s.sentence_text_normalized), LOWER(a.alias_text)) > 0
+      ON STRPOS(LOWER(s.sentence_text_normalized), a.normalized_alias) > 0
     LEFT JOIN overridden_sentences o USING (sentence_id)
     WHERE o.sentence_id IS NULL
 ),

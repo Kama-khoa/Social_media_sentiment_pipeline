@@ -34,7 +34,7 @@ with DAG(
         task_id='run_nlp_inference',
         bash_command=(
             'python -m nlp.runner '
-            '--limit 0 '
+            '--limit 5000 '
             '--dag-run-id "{{ dag_run.run_id }}"'
         ),
         cwd='/opt/airflow',
