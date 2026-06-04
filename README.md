@@ -20,6 +20,25 @@ Hệ thống end-to-end phân tích cảm xúc (Sentiment Analysis) đa khía c�
 
 ### 1. Kiến trúc hệ thống (System Architecture)
 ```mermaid
+%%{
+  init: {
+    "theme": "base",
+    "themeVariables": {
+      "background": "#ffffff",
+      "primaryColor": "#ffffff",
+      "primaryBorderColor": "#000000",
+      "primaryTextColor": "#000000",
+      "lineColor": "#000000",
+      "secondaryColor": "#ffffff",
+      "tertiaryColor": "#ffffff",
+      "clusterBkg": "#ffffff",
+      "clusterBorder": "#000000",
+      "edgeLabelBackground": "#ffffff",
+      "fontFamily": "Arial",
+      "fontSize": "14px"
+    }
+  }
+}%%
 graph TD
     subgraph Data_Collection ["Data Collection (Phase 1)"]
         A1[YouTube Data API]
