@@ -1,7 +1,7 @@
 x-airflow-common: &airflow-common
   build:
-    context: .
-    dockerfile: Dockerfile.airflow
+    context: ..
+    dockerfile: docker/Dockerfile.airflow
   environment:
     - AIRFLOW__CORE__EXECUTOR=LocalExecutor
     - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres/airflow
@@ -12,12 +12,12 @@ x-airflow-common: &airflow-common
     - GOOGLE_APPLICATION_CREDENTIALS=/opt/airflow/gcp_credentials.json
     - AIRFLOW__CORE__PARALLELISM=1
   env_file:
-    - .env
+    - ../.env
   volumes:
     # Mount the entire project into /opt/airflow so dags, elt, transform, and configs are available
-    - .:/opt/airflow
+    - ..:/opt/airflow
     # Mount the GCP credentials file defined in .env into the container
-    - ${GOOGLE_APPLICATION_CREDENTIALS}:/opt/airflow/gcp_credentials.json:ro
+    - ${GOOGLE_APPLICATION_CREDENTIALS:?Set GOOGLE_APPLICATION_CREDENTIALS in .env or shell}:/opt/airflow/gcp_credentials.json:ro
   user: "${AIRFLOW_UID:-50000}:0"
 
 services:

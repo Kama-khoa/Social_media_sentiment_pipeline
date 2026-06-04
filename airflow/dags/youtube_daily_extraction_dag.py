@@ -23,7 +23,12 @@ with DAG(
 
     run_youtube_elt = BashOperator(
         task_id='run_youtube_elt',
-        bash_command='python -m elt.main --mode full --date {{ ds }} --run-id "{{ dag_run.run_id }}"',
+        bash_command=(
+            'python -m elt.main --mode full --date {{ ds }} --run-id "{{ dag_run.run_id }}" '
+            '--manual-channel-id "{{ dag_run.conf.get(\'channel_id\', \'\') }}" '
+            '--lookback-days "{{ dag_run.conf.get(\'lookback_days\', 30) }}" '
+            '--crawl-mode "{{ dag_run.conf.get(\'crawl_mode\', \'api_or_ytdlp\') }}"'
+        ),
         cwd='/opt/airflow',
     )
 

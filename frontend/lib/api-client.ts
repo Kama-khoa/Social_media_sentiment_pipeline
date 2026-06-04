@@ -106,10 +106,15 @@ export const api = {
   admin: {
     channels: {
       list: () => request<ChannelConfigItem[]>("/admin/channels"),
-      create: (data: { channel_id: string; channel_name: string; channel_url?: string; channel_handle?: string; subscriber_count?: number }) =>
+      create: (data: { channel_url: string }) =>
         request<ChannelConfigItem>("/admin/channels", { method: "POST", body: JSON.stringify(data) }),
-      update: (id: string, data: { channel_name?: string; channel_url?: string; channel_handle?: string; subscriber_count?: number }) =>
+      update: (id: string, data: { channel_name?: string; channel_url?: string; channel_handle?: string; subscriber_count?: number; is_active?: boolean }) =>
         request<ChannelConfigItem>(`/admin/channels/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+      crawl: (id: string, data: { lookback_days: number; preferred_mode?: "auto" | "api" | "ytdlp" }) =>
+        request<{ run_id?: string; crawl_mode: string; quota_remaining: number; lookback_days: number }>(`/admin/channels/${id}/crawl`, {
+          method: "POST",
+          body: JSON.stringify(data),
+        }),
       remove: (id: string) => request<void>(`/admin/channels/${id}`, { method: "DELETE" }),
     },
     keywords: {

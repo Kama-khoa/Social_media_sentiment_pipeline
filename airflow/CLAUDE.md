@@ -79,7 +79,7 @@ default_args = {
 
 | Thư viện | Version | Mục đích |
 |---|---|---|
-| `apache-airflow` | 2.10.4 | Orchestration hiện tại theo `Dockerfile.airflow` |
+| `apache-airflow` | 2.10.4 | Orchestration hiện tại theo `docker/Dockerfile.airflow` |
 | `apache-airflow-providers-google` | compatible | GCP operators |
 
 ---
@@ -89,7 +89,13 @@ default_args = {
 Dự án đang **chuyển đổi từ Docker-based deployment sang local development** để tránh hiện tượng overload session. 
 Trong giai đoạn này:
 - Khuyến nghị chạy pipeline manual qua các script trong `elt/` (ví dụ `conda run -n etl-py313 python -m elt.main`) hoặc qua các script bảo trì để linh hoạt hơn.
-- Cấu hình Docker (`docker-compose.yml`) vẫn được giữ lại để dùng cho production sau này.
+- Cấu hình Docker (`docker/docker-compose.yml`) vẫn được giữ lại để dùng cho production sau này.
+
+Chạy Airflow bằng Docker Compose từ root project:
+
+```powershell
+docker compose --env-file .env -f docker\docker-compose.yml up airflow-webserver airflow-scheduler
+```
 
 ---
 

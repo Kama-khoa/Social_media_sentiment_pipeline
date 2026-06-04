@@ -24,6 +24,19 @@ JWT_SECRET_KEY=...
 NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 ```
 
+Các file đóng gói Docker được gom trong thư mục `docker/`:
+
+- `docker/docker-compose.yml`
+- `docker/Dockerfile.airflow`
+
+Nếu chạy Airflow/Redis/Postgres bằng Docker Compose từ root project, dùng:
+
+```powershell
+docker compose --env-file .env -f docker\docker-compose.yml up airflow-webserver airflow-scheduler redis web-db
+```
+
+Các DAG Airflow vẫn nằm trong `airflow/dags/`; compose mount toàn bộ root project vào `/opt/airflow` nên các lệnh trong DAG tiếp tục chạy từ `/opt/airflow`.
+
 ## 2. Khởi Tạo BigQuery Schema
 
 Chạy lần đầu hoặc khi cần tạo lại bảng:

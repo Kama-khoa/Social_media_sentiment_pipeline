@@ -31,11 +31,7 @@ class AdminUserUpdateRequest(BaseModel):
 # ── Admin channel config ──────────────────────────────────────────────────────
 
 class ChannelCreateRequest(BaseModel):
-    channel_id: str = Field(min_length=2)
-    channel_name: str = Field(min_length=2)
-    channel_url: Optional[str] = None
-    channel_handle: Optional[str] = None
-    subscriber_count: Optional[int] = None
+    channel_url: str = Field(min_length=10)
 
 
 class ChannelUpdateRequest(BaseModel):
@@ -43,6 +39,12 @@ class ChannelUpdateRequest(BaseModel):
     channel_url: Optional[str] = None
     channel_handle: Optional[str] = None
     subscriber_count: Optional[int] = None
+    is_active: Optional[bool] = None
+
+
+class ChannelCrawlRequest(BaseModel):
+    lookback_days: int = Field(default=30, ge=1, le=730)
+    preferred_mode: Literal["auto", "api", "ytdlp"] = "auto"
 
 
 # ── Admin keyword config ──────────────────────────────────────────────────────

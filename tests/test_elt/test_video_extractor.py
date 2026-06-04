@@ -202,3 +202,97 @@ class TestRunHistorical:
         assert result["channels_scanned"] == 1
         # mark_historically_scanned should be called exactly once (for ch2, UC_2)
         deps["channel_repo"].mark_historically_scanned.assert_called_once_with("UC_2")
+
+
+class TestRunManualChannel:
+    @patch("elt.extract.video_extractor.datetime")
+    def test_manual_channel_falls_back_to_ytdlp_when_search_quota_is_empty(
+        self,
+        mock_datetime: MagicMock,
+        extractor: VideoExtractor,
+        deps: dict,
+    ):
+        now = datetime(2026, 5, 20, tzinfo=timezone.utc)
+        mock_datetime.now.return_value = now
+        deps["channel_repo"].get_active_channel.return_value = _sample_channel()
+        deps["crawl_state_repo"].get_existing_video_ids.return_value = set()
+
+        raw_videos = [{"id": "vid_1", "upload_date": "20260518", "title": "Samsung Galaxy S25 review"}]
+        dto = VideoDTO(
+            video_id="vid_1",
+            channel_id="UC_test",
+            title="Samsung Galaxy S25 review",
+            published_at=datetime(2026, 5, 18, tzinfo=timezone.utc),
+            search_mode="MANUAL",
+            crawled_at=now,
+        )
+
+        mock_fetcher = MagicMock()
+        mock_fetcher.fetch_channel_videos.return_value = raw_videos
+        mock_fetcher._parse_published_at.return_value = datetime(2026, 5, 18, tzinfo=timezone.utc)
+        mock_fetcher.filter_by_keywords.side_effect = lambda videos: videos
+        mock_fetcher.enrich_batch.side_effect = lambda videos: videos
+        mock_fetcher.build_video_dtos.return_value = [dto]
+        extractor._build_fetcher = MagicMock(return_value=mock_fetcher)
+
+        result = extractor.run_manual_channel(
+            channel_id="UC_test",
+            lookback_days=7,
+            crawl_mode="api_or_ytdlp",
+            execution_date="2026-05-20",
+            dag_run_id="manual_test",
+            budget=_make_budget(search_remaining=0),
+        )
+
+        assert result["crawl_mode"] == "ytdlp"
+        assert result["total_saved"] == 1
+        mock_fetcher.fetch_channel_videos.assert_called_once()
+        extractor._api_client.search_channel_recent.assert_not_called()
+        deps["channel_repo"].mark_historically_scanned.assert_not_called()
+
+    @patch("elt.extract.video_extractor.datetime")
+    def test_manual_channel_uses_api_when_quota_is_available(
+        self,
+        mock_datetime: MagicMock,
+        extractor: VideoExtractor,
+        deps: dict,
+    ):
+        now = datetime(2026, 5, 20, tzinfo=timezone.utc)
+        mock_datetime.now.return_value = now
+        deps["channel_repo"].get_active_channel.return_value = _sample_channel()
+        deps["crawl_state_repo"].get_existing_video_ids.return_value = set()
+        extractor._api_client.search_channel_recent.return_value = [
+            {"id": "vid_1", "published_at": datetime(2026, 5, 19, tzinfo=timezone.utc)}
+        ]
+
+        dto = VideoDTO(
+            video_id="vid_1",
+            channel_id="UC_test",
+            title="Samsung Galaxy S25 review",
+            published_at=datetime(2026, 5, 19, tzinfo=timezone.utc),
+            search_mode="MANUAL",
+            crawled_at=now,
+        )
+
+        mock_fetcher = MagicMock()
+        mock_fetcher.filter_by_keywords.side_effect = lambda videos: videos
+        mock_fetcher.enrich_batch.side_effect = lambda videos: videos
+        mock_fetcher.build_video_dtos.return_value = [dto]
+        extractor._build_fetcher = MagicMock(return_value=mock_fetcher)
+
+        budget = _make_budget(search_remaining=100)
+        result = extractor.run_manual_channel(
+            channel_id="UC_test",
+            lookback_days=3,
+            crawl_mode="api_or_ytdlp",
+            execution_date="2026-05-20",
+            dag_run_id="manual_test",
+            budget=budget,
+        )
+
+        assert result["crawl_mode"] == "api_or_ytdlp"
+        assert result["total_saved"] == 1
+        assert budget.remaining(QuotaBucket.SEARCH) == 0
+        extractor._api_client.search_channel_recent.assert_called_once()
+        mock_fetcher.fetch_channel_videos.assert_not_called()
+        deps["channel_repo"].mark_historically_scanned.assert_not_called()

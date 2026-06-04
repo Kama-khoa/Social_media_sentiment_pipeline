@@ -172,6 +172,25 @@ GEMINI_API_KEY=your_gemini_api_key
 # BRIGHTDATA_PASSWORD=your_password
 ```
 
+### 4. Cấu trúc Docker và Airflow
+
+Các file Docker được gom trong `docker/`, còn DAG orchestration nằm trong `airflow/dags/`:
+
+```text
+docker/
+  docker-compose.yml
+  Dockerfile.airflow
+
+airflow/
+  dags/
+```
+
+Nếu muốn chạy các service Docker từ root project:
+
+```bash
+docker compose --env-file .env -f docker/docker-compose.yml up airflow-webserver airflow-scheduler redis web-db
+```
+
 ---
 
 ## 🚀 Hướng dẫn Chạy Dự án Từng Bước
