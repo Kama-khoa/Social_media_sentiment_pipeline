@@ -23,6 +23,9 @@ class ProductDetailResponse(BaseModel):
     bayesian_score: float
     controversy_label: str
     total_mentions: int
+    total_mention_count: int = 0
+    statement_count: int = 0
+    question_count: int = 0
     aspects: list[AspectSentiment]
     details: Optional["ProductDetails"] = None
     spec_templates: list["ProductSpecTemplateItem"] = Field(default_factory=list)
@@ -106,6 +109,9 @@ class SearchResultItem(BaseModel):
     bayesian_score: float
     controversy_label: str
     total_mentions: int
+    total_mention_count: int = 0
+    statement_count: int = 0
+    question_count: int = 0
     positive_pct: float
     negative_pct: float
 
@@ -236,6 +242,9 @@ class TopProduct(BaseModel):
     bayesian_score: float
     controversy_label: Literal["high", "medium", "low"]
     total_mentions: int
+    total_mention_count: int = 0
+    statement_count: int = 0
+    question_count: int = 0
     positive_pct: float
     negative_pct: float
     top_aspect: Optional[str]

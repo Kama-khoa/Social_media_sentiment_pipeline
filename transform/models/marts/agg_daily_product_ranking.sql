@@ -27,19 +27,37 @@ valid_mentions AS (
     FROM fact_mentions
     WHERE aspect_label != 'NONE'
 ),
+statement_mentions AS (
+    SELECT *
+    FROM valid_mentions
+    WHERE sentence_type = 'statement'
+),
+rolling_totals AS (
+    SELECT
+        d.ranking_date,
+        f.product_id,
+        p.category,
+        COUNT(*) AS total_mention_count,
+        COUNTIF(f.sentence_type = 'question') AS question_count
+    FROM snapshot_dates d
+    JOIN valid_mentions f
+      ON f.mention_date BETWEEN DATE_SUB(d.ranking_date, INTERVAL 29 DAY) AND d.ranking_date
+    JOIN {{ ref('dim_products') }} p ON f.product_id = p.product_id
+    GROUP BY 1, 2, 3
+),
 rolling_stats AS (
     SELECT
         d.ranking_date,
         f.product_id,
         p.category,
-        COUNT(*) AS total_mentions,
+        COUNT(*) AS statement_count,
         COUNTIF(UPPER(f.sentiment_label) = 'POSITIVE') AS positive_count,
         COUNTIF(UPPER(f.sentiment_label) = 'NEGATIVE') AS negative_count,
         COUNTIF(UPPER(f.sentiment_label) = 'NEUTRAL') AS neutral_count,
         AVG(f.sentiment_score) AS mean_score,
         STDDEV_POP(f.sentiment_score) AS std_score
     FROM snapshot_dates d
-    JOIN valid_mentions f
+    JOIN statement_mentions f
       ON f.mention_date BETWEEN DATE_SUB(d.ranking_date, INTERVAL 29 DAY) AND d.ranking_date
     JOIN {{ ref('dim_products') }} p ON f.product_id = p.product_id
     GROUP BY 1, 2, 3
@@ -49,7 +67,7 @@ global_stats AS (
         d.ranking_date,
         AVG(f.sentiment_score) AS global_mean
     FROM snapshot_dates d
-    JOIN valid_mentions f
+    JOIN statement_mentions f
       ON f.mention_date BETWEEN DATE_SUB(d.ranking_date, INTERVAL 29 DAY) AND d.ranking_date
     GROUP BY 1
 ),
@@ -85,21 +103,27 @@ top_aspects AS (
 ),
 scored_stats AS (
     SELECT
-        s.product_id,
-        s.ranking_date,
-        s.category,
-        SAFE_DIVIDE(50.0 * g.global_mean + s.total_mentions * s.mean_score, 50.0 + s.total_mentions) AS bayesian_score,
-        SAFE_DIVIDE(COALESCE(s.std_score, 0.0), ABS(s.mean_score) + 0.1) AS controversy_index,
-        s.total_mentions,
-        s.positive_count,
-        s.negative_count,
-        s.neutral_count,
+        t.product_id,
+        t.ranking_date,
+        t.category,
+        COALESCE(
+            SAFE_DIVIDE(50.0 * g.global_mean + s.statement_count * s.mean_score, 50.0 + s.statement_count),
+            0.0
+        ) AS bayesian_score,
+        COALESCE(SAFE_DIVIDE(COALESCE(s.std_score, 0.0), ABS(s.mean_score) + 0.1), 0.0) AS controversy_index,
+        t.total_mention_count,
+        COALESCE(s.statement_count, 0) AS statement_count,
+        COALESCE(t.question_count, 0) AS question_count,
+        COALESCE(s.positive_count, 0) AS positive_count,
+        COALESCE(s.negative_count, 0) AS negative_count,
+        COALESCE(s.neutral_count, 0) AS neutral_count,
         COALESCE(n.excluded_none_count, 0) AS excluded_none_count,
         a.top_aspect,
         s.mean_score
-    FROM rolling_stats s
-    JOIN global_stats g USING (ranking_date)
-    JOIN top_aspects a USING (ranking_date, product_id)
+    FROM rolling_totals t
+    LEFT JOIN rolling_stats s USING (ranking_date, product_id, category)
+    LEFT JOIN global_stats g USING (ranking_date)
+    LEFT JOIN top_aspects a USING (ranking_date, product_id)
     LEFT JOIN none_stats n USING (ranking_date, product_id)
 ),
 trended_stats AS (
@@ -121,16 +145,22 @@ SELECT
     controversy_index,
     CASE
         WHEN controversy_index > 0.6 THEN 'cao'
-        WHEN controversy_index < 0.3 THEN 'thấp'
-        ELSE 'trung bình'
+        WHEN controversy_index < 0.3 THEN 'thap'
+        ELSE 'trung binh'
     END AS controversy_label,
-    total_mentions,
+    total_mention_count AS total_mentions,
+    total_mention_count,
+    statement_count,
+    question_count,
     positive_count,
     negative_count,
     neutral_count,
     excluded_none_count,
     top_aspect,
     sentiment_trend,
-    RANK() OVER (PARTITION BY ranking_date, category ORDER BY bayesian_score DESC) AS rank_position,
+    ROW_NUMBER() OVER (
+        PARTITION BY ranking_date
+        ORDER BY bayesian_score DESC, statement_count DESC, total_mention_count DESC, product_id ASC
+    ) AS rank_position,
     CURRENT_TIMESTAMP() AS _dbt_processed_at
 FROM trended_stats

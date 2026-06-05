@@ -25,6 +25,7 @@ def create_int_comment_sentences(client: bigquery.Client) -> None:
         bigquery.SchemaField("sentence_index", "INT64", mode="REQUIRED"),
         bigquery.SchemaField("sentence_text", "STRING", mode="REQUIRED"),
         bigquery.SchemaField("sentence_text_normalized", "STRING", mode="REQUIRED"),
+        bigquery.SchemaField("sentence_type", "STRING", mode="REQUIRED"),
         bigquery.SchemaField("is_vietnamese", "BOOL", mode="REQUIRED"),
         bigquery.SchemaField("word_count", "INT64", mode="REQUIRED"),
         bigquery.SchemaField("data_quality_score", "FLOAT64", mode="REQUIRED"),

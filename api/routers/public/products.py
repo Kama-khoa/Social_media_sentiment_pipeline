@@ -24,7 +24,7 @@ _CACHE_TTL = 300
 
 
 def _cache_key(path: str) -> str:
-    return f"products:{path}"
+    return f"products:v2:{path}"
 
 
 @router.get("/top/{category}", response_model=list[TopProduct])
@@ -40,27 +40,41 @@ def get_top_products(category: str, response: Response, limit: int = 20):
     category_label = CATEGORY_SLUG_MAP.get(category)
 
     sql = f"""
-        SELECT
-            r.rank_position AS rank,
-            r.product_id,
-            p.product_name,
-            p.brand,
-            p.category,
-            r.bayesian_score,
-            r.controversy_label,
-            r.total_mentions,
-            SAFE_DIVIDE(r.positive_count * 100.0, r.total_mentions) AS positive_pct,
-            SAFE_DIVIDE(r.negative_count * 100.0, r.total_mentions) AS negative_pct,
-            r.top_aspect
-        FROM `{settings.gcp_project_id}.{settings.bq_marts_dataset}.agg_daily_product_ranking` r
-        JOIN `{settings.gcp_project_id}.{settings.bq_marts_dataset}.dim_products` p
-          ON r.product_id = p.product_id
-        WHERE r.ranking_date = (
-            SELECT MAX(ranking_date)
-            FROM `{settings.gcp_project_id}.{settings.bq_marts_dataset}.agg_daily_product_ranking`
+        WITH filtered_products AS (
+            SELECT
+                r.product_id,
+                p.product_name,
+                p.brand,
+                p.category,
+                r.bayesian_score,
+                r.controversy_label,
+                r.total_mention_count,
+                r.total_mentions,
+                r.statement_count,
+                r.question_count,
+                SAFE_DIVIDE(r.positive_count * 100.0, r.statement_count) AS positive_pct,
+                SAFE_DIVIDE(r.negative_count * 100.0, r.statement_count) AS negative_pct,
+                r.top_aspect
+            FROM `{settings.gcp_project_id}.{settings.bq_marts_dataset}.agg_daily_product_ranking` r
+            JOIN `{settings.gcp_project_id}.{settings.bq_marts_dataset}.dim_products` p
+              ON r.product_id = p.product_id
+            WHERE r.ranking_date = (
+                SELECT MAX(ranking_date)
+                FROM `{settings.gcp_project_id}.{settings.bq_marts_dataset}.agg_daily_product_ranking`
+            )
+            {"AND p.category = @category" if category_label else ""}
+        ),
+        ranked_products AS (
+            SELECT
+                ROW_NUMBER() OVER (
+                    ORDER BY bayesian_score DESC, statement_count DESC, total_mention_count DESC, product_id ASC
+                ) AS rank,
+                *
+            FROM filtered_products
         )
-        {"AND p.category = @category" if category_label else ""}
-        ORDER BY r.rank_position ASC
+        SELECT *
+        FROM ranked_products
+        ORDER BY rank ASC
         LIMIT @limit
     """
 
@@ -78,7 +92,10 @@ def get_top_products(category: str, response: Response, limit: int = 20):
             category=r["category"],
             bayesian_score=round(float(r["bayesian_score"] or 0), 4),
             controversy_label=normalize_controversy(r.get("controversy_label")),
-            total_mentions=r["total_mentions"],
+            total_mentions=r["total_mention_count"],
+            total_mention_count=r["total_mention_count"],
+            statement_count=r["statement_count"],
+            question_count=r["question_count"],
             positive_pct=round(float(r["positive_pct"] or 0), 1),
             negative_pct=round(float(r["negative_pct"] or 0), 1),
             top_aspect=r.get("top_aspect"),
@@ -104,12 +121,14 @@ def get_product_aspects(product_id: str, response: Response):
         f"""
         SELECT p.product_id, p.product_name, p.brand, p.category,
                d.specs, d.description, d.official_url, d.image_url, d.updated_at,
-               r.bayesian_score, r.controversy_label, r.total_mentions
+               r.bayesian_score, r.controversy_label, r.total_mention_count, r.total_mentions,
+               r.statement_count, r.question_count
         FROM `{settings.gcp_project_id}.{settings.bq_marts_dataset}.dim_products` p
         LEFT JOIN `{settings.gcp_project_id}.{settings.bq_dataset}.product_details` d
           ON p.product_id = d.product_id
         LEFT JOIN (
-            SELECT product_id, bayesian_score, controversy_label, total_mentions
+            SELECT product_id, bayesian_score, controversy_label, total_mention_count, total_mentions,
+                   statement_count, question_count
             FROM `{settings.gcp_project_id}.{settings.bq_marts_dataset}.agg_daily_product_ranking`
             WHERE ranking_date = (
                 SELECT MAX(ranking_date)
@@ -137,6 +156,7 @@ def get_product_aspects(product_id: str, response: Response):
         FROM `{settings.gcp_project_id}.{settings.bq_marts_dataset}.fact_product_mentions`
         WHERE product_id = @product_id
           AND aspect_label != 'NONE'
+          AND sentence_type = 'statement'
         GROUP BY aspect_label
         ORDER BY total_mentions DESC
         """,
@@ -173,6 +193,9 @@ def get_product_aspects(product_id: str, response: Response):
         bayesian_score=round(float(p["bayesian_score"] or 0), 4),
         controversy_label=normalize_controversy(p.get("controversy_label")),
         total_mentions=p["total_mentions"] or 0,
+        total_mention_count=p["total_mention_count"] or 0,
+        statement_count=p["statement_count"] or 0,
+        question_count=p["question_count"] or 0,
         aspects=aspects,
         details=ProductDetails(
             specs=json_value(p.get("specs")),

@@ -27,17 +27,30 @@ _VALID_RUN_STATES = {"success", "failed", "running", "queued"}
 
 def _get_top_products(project: str, marts: str, limit: int = 5) -> list[TopProduct]:
     rows = query_to_list(f"""
-        SELECT r.rank_position AS rank, r.product_id, p.product_name, p.brand, p.category,
-               r.bayesian_score, r.controversy_label, r.total_mentions,
-               SAFE_DIVIDE(r.positive_count * 100.0, r.total_mentions) AS positive_pct,
-               SAFE_DIVIDE(r.negative_count * 100.0, r.total_mentions) AS negative_pct,
-               r.top_aspect
-        FROM `{project}.{marts}.agg_daily_product_ranking` r
-        JOIN `{project}.{marts}.dim_products` p ON r.product_id = p.product_id
-        WHERE r.ranking_date = (
-            SELECT MAX(ranking_date) FROM `{project}.{marts}.agg_daily_product_ranking`
+        WITH filtered_products AS (
+            SELECT r.product_id, p.product_name, p.brand, p.category,
+                   r.bayesian_score, r.controversy_label, r.total_mention_count, r.total_mentions,
+                   r.statement_count, r.question_count,
+                   SAFE_DIVIDE(r.positive_count * 100.0, r.statement_count) AS positive_pct,
+                   SAFE_DIVIDE(r.negative_count * 100.0, r.statement_count) AS negative_pct,
+                   r.top_aspect
+            FROM `{project}.{marts}.agg_daily_product_ranking` r
+            JOIN `{project}.{marts}.dim_products` p ON r.product_id = p.product_id
+            WHERE r.ranking_date = (
+                SELECT MAX(ranking_date) FROM `{project}.{marts}.agg_daily_product_ranking`
+            )
+        ),
+        ranked_products AS (
+            SELECT
+                ROW_NUMBER() OVER (
+                    ORDER BY bayesian_score DESC, statement_count DESC, total_mention_count DESC, product_id ASC
+                ) AS rank,
+                *
+            FROM filtered_products
         )
-        ORDER BY r.rank_position ASC
+        SELECT *
+        FROM ranked_products
+        ORDER BY rank ASC
         LIMIT {limit}
     """)
     return [
@@ -49,7 +62,10 @@ def _get_top_products(project: str, marts: str, limit: int = 5) -> list[TopProdu
             category=r["category"],
             bayesian_score=round(float(r["bayesian_score"] or 0), 4),
             controversy_label=normalize_controversy(r.get("controversy_label")),
-            total_mentions=r["total_mentions"] or 0,
+            total_mentions=r["total_mention_count"] or 0,
+            total_mention_count=r["total_mention_count"] or 0,
+            statement_count=r["statement_count"] or 0,
+            question_count=r["question_count"] or 0,
             positive_pct=round(float(r["positive_pct"] or 0), 1),
             negative_pct=round(float(r["negative_pct"] or 0), 1),
             top_aspect=r.get("top_aspect"),
@@ -60,7 +76,7 @@ def _get_top_products(project: str, marts: str, limit: int = 5) -> list[TopProdu
 
 def _get_category_stats(project: str, marts: str) -> list[CategoryStat]:
     rows = query_to_list(f"""
-        SELECT category, SUM(total_mentions) AS mention_count
+        SELECT category, SUM(total_mention_count) AS mention_count
         FROM `{project}.{marts}.agg_daily_product_ranking`
         WHERE ranking_date = (
             SELECT MAX(ranking_date) FROM `{project}.{marts}.agg_daily_product_ranking`

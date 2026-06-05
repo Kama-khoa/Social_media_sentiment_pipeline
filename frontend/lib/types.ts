@@ -35,6 +35,9 @@ export interface TopProduct {
   bayesian_score: number;
   controversy_label: "high" | "medium" | "low";
   total_mentions: number;
+  total_mention_count: number;
+  statement_count: number;
+  question_count: number;
   positive_pct: number;
   negative_pct: number;
   top_aspect: string | null;
@@ -58,6 +61,9 @@ export interface ProductDetail {
   bayesian_score: number;
   controversy_label: string;
   total_mentions: number;
+  total_mention_count: number;
+  statement_count: number;
+  question_count: number;
   aspects: AspectSentiment[];
   details: ProductDetails | null;
   spec_templates: ProductSpecTemplateItem[];
@@ -106,6 +112,9 @@ export interface SearchResultItem {
   bayesian_score: number;
   controversy_label: string;
   total_mentions: number;
+  total_mention_count: number;
+  statement_count: number;
+  question_count: number;
   positive_pct: number;
   negative_pct: number;
 }

@@ -8,7 +8,13 @@ from api.config import get_settings
 
 logger = logging.getLogger(__name__)
 
-CONTROVERSY_MAP = {"cao": "high", "trung bình": "medium", "thấp": "low"}
+CONTROVERSY_MAP = {
+    "cao": "high",
+    "trung bình": "medium",
+    "thấp": "low",
+    "trung binh": "medium",
+    "thap": "low",
+}
 
 CATEGORY_SLUG_MAP = {
     "all": None,

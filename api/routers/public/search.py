@@ -15,7 +15,7 @@ _VALID_CATEGORIES = {"Điện thoại", "Laptop", "Tai nghe"}
 
 @router.get("", response_model=SearchResponse)
 def search_products(q: str = "", category: str = "", limit: int = 20, response: Response = None):
-    cache_key = f"search:v2:{q.lower().strip()}:{category}:{limit}"
+    cache_key = f"search:v3:{q.lower().strip()}:{category}:{limit}"
     cached = get_cached(cache_key)
     if cached is not None:
         if response:
@@ -43,27 +43,42 @@ def search_products(q: str = "", category: str = "", limit: int = 20, response: 
     where_clause = " AND ".join(filters)
 
     sql = f"""
-        SELECT
-            p.product_id,
-            p.product_name,
-            p.brand,
-            p.category,
-            COALESCE(r.rank_position, 0) AS rank,
-            COALESCE(r.bayesian_score, 0.0) AS bayesian_score,
-            r.controversy_label,
-            COALESCE(r.total_mentions, 0) AS total_mentions,
-            SAFE_DIVIDE(COALESCE(r.positive_count, 0) * 100.0, r.total_mentions) AS positive_pct,
-            SAFE_DIVIDE(COALESCE(r.negative_count, 0) * 100.0, r.total_mentions) AS negative_pct
-        FROM `{settings.gcp_project_id}.{settings.bq_marts_dataset}.dim_products` p
-        LEFT JOIN (
-            SELECT product_id, rank_position, bayesian_score, controversy_label,
-                   total_mentions, positive_count, negative_count
+        WITH latest_ranking AS (
+            SELECT
+                product_id,
+                ROW_NUMBER() OVER (
+                    ORDER BY bayesian_score DESC, statement_count DESC, total_mention_count DESC, product_id ASC
+                ) AS rank,
+                bayesian_score,
+                controversy_label,
+                total_mention_count,
+                total_mentions,
+                statement_count,
+                question_count,
+                positive_count,
+                negative_count
             FROM `{settings.gcp_project_id}.{settings.bq_marts_dataset}.agg_daily_product_ranking`
             WHERE ranking_date = (
                 SELECT MAX(ranking_date)
                 FROM `{settings.gcp_project_id}.{settings.bq_marts_dataset}.agg_daily_product_ranking`
             )
-        ) r ON p.product_id = r.product_id
+        )
+        SELECT
+            p.product_id,
+            p.product_name,
+            p.brand,
+            p.category,
+            COALESCE(r.rank, 0) AS rank,
+            COALESCE(r.bayesian_score, 0.0) AS bayesian_score,
+            r.controversy_label,
+            COALESCE(r.total_mention_count, 0) AS total_mentions,
+            COALESCE(r.total_mention_count, 0) AS total_mention_count,
+            COALESCE(r.statement_count, 0) AS statement_count,
+            COALESCE(r.question_count, 0) AS question_count,
+            SAFE_DIVIDE(COALESCE(r.positive_count, 0) * 100.0, r.statement_count) AS positive_pct,
+            SAFE_DIVIDE(COALESCE(r.negative_count, 0) * 100.0, r.statement_count) AS negative_pct
+        FROM `{settings.gcp_project_id}.{settings.bq_marts_dataset}.dim_products` p
+        LEFT JOIN latest_ranking r ON p.product_id = r.product_id
         WHERE {where_clause}
         ORDER BY total_mentions DESC
         LIMIT @limit
@@ -81,6 +96,9 @@ def search_products(q: str = "", category: str = "", limit: int = 20, response: 
             bayesian_score=round(float(row["bayesian_score"] or 0), 4),
             controversy_label=normalize_controversy(row.get("controversy_label")),
             total_mentions=row["total_mentions"],
+            total_mention_count=row["total_mention_count"],
+            statement_count=row["statement_count"],
+            question_count=row["question_count"],
             positive_pct=round(float(row["positive_pct"] or 0), 1),
             negative_pct=round(float(row["negative_pct"] or 0), 1),
         )

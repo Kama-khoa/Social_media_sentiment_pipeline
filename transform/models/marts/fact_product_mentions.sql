@@ -30,6 +30,7 @@ SELECT
     s.channel_id,
     s.comment_id,
     sr.sentence_id,
+    s.sentence_type,
     sr.aspect_label,
     COALESCE(t.target_sentiment_label, sr.sentiment_label) AS sentiment_label,
     sr.confidence_score,

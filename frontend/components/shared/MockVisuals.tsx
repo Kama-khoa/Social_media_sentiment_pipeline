@@ -1,17 +1,26 @@
 import { Icon, type IconName } from "@/components/shared/Icon";
 
-export function ScoreRing({ score, size = 92 }: { score: number; size?: number }) {
+export function bayesScore100(score: number) {
+  return Math.max(0, Math.min(100, (score + 1) * 50));
+}
+
+export function hasEnoughBayesData(statementCount?: number) {
+  return statementCount === undefined || statementCount >= 5;
+}
+
+export function ScoreRing({ score, size = 92, statementCount }: { score: number; size?: number; statementCount?: number }) {
   const radius = size / 2 - 7;
   const circumference = 2 * Math.PI * radius;
-  const safeScore = Math.max(0, Math.min(1, score));
-  const dash = safeScore * circumference;
+  const enoughData = hasEnoughBayesData(statementCount);
+  const score100 = enoughData ? bayesScore100(score) : 0;
+  const dash = score100 / 100 * circumference;
   const center = size / 2;
   return (
     <svg viewBox={`0 0 ${size} ${size}`} style={{ width: size, height: size }}>
       <circle cx={center} cy={center} r={radius} fill="none" stroke="var(--surface-3)" strokeWidth="7" />
       <circle cx={center} cy={center} r={radius} fill="none" stroke="var(--primary)" strokeWidth="7" strokeLinecap="round" strokeDasharray={`${dash} ${circumference - dash}`} transform={`rotate(-90 ${center} ${center})`} style={{ transition: "stroke-dasharray 1s ease" }} />
-      <text x={center} y={center + 1} textAnchor="middle" className="num" style={{ fontSize: 19, fontWeight: 700, fill: "var(--text)" }}>{(safeScore * 100).toFixed(0)}</text>
-      <text x={center} y={center + 15} textAnchor="middle" style={{ fontSize: 8.5, fill: "var(--text-3)", fontWeight: 600 }}>BAYES</text>
+      <text x={center} y={center + 1} textAnchor="middle" className="num" style={{ fontSize: enoughData ? 19 : 13, fontWeight: 700, fill: "var(--text)" }}>{enoughData ? score100.toFixed(0) : "N/A"}</text>
+      <text x={center} y={center + 15} textAnchor="middle" style={{ fontSize: 7.5, fill: "var(--text-3)", fontWeight: 600 }}>BAYES</text>
     </svg>
   );
 }
