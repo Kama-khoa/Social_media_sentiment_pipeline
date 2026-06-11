@@ -250,6 +250,22 @@ class TopProduct(BaseModel):
     top_aspect: Optional[str]
 
 
+class ProductFavoriteStatus(BaseModel):
+    product_id: str
+    is_favorite: bool
+
+
+class FavoriteProductItem(BaseModel):
+    product_id: str
+    product_name: str
+    brand: Optional[str]
+    category: Optional[str]
+    bayesian_score: float
+    controversy_label: Literal["high", "medium", "low"]
+    total_mentions: int
+    created_at: datetime
+
+
 class CausalEventSummary(BaseModel):
     product_name: str
     change_point_date: date

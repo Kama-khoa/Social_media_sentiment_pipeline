@@ -50,6 +50,13 @@ deduped AS (
             ORDER BY source_priority DESC, crawled_at DESC
         ) AS rn
     FROM source
+),
+cleaned AS (
+    SELECT
+        *,
+        {{ clean_comment_text('text_original') }} AS cleaned_text_original
+    FROM deduped
+    WHERE rn = 1
 )
 
 SELECT
@@ -59,23 +66,24 @@ SELECT
     parent_comment_id,
     author_channel_id,
     author_display_name,
-    text_original,
+    cleaned_text_original AS text_original,
+    text_display,
     CAST(like_count AS INT64) AS like_count,
     CAST(reply_count AS INT64) AS reply_count,
     CAST(is_reply AS BOOL) AS is_reply,
     crawl_type,
     CAST(
         GREATEST(0.0,
-            CASE WHEN text_original IS NULL THEN 0.0 ELSE 1.0 END
+            CASE WHEN cleaned_text_original IS NULL THEN 0.0 ELSE 1.0 END
             -- Trừ 0.5 điểm nếu chứa đường dẫn URL (dấu hiệu của spam)
-            - CASE WHEN REGEXP_CONTAINS(LOWER(text_original), r'(http[s]?://|www\\.)') THEN 0.5 ELSE 0.0 END
+            - CASE WHEN REGEXP_CONTAINS(LOWER(cleaned_text_original), r'(http[s]?://|www\\.)') THEN 0.5 ELSE 0.0 END
             -- Trừ 0.3 điểm nếu bình luận quá ngắn (< 5 ký tự)
-            - CASE WHEN LENGTH(TRIM(text_original)) < 5 THEN 0.3 ELSE 0.0 END
+            - CASE WHEN LENGTH(TRIM(cleaned_text_original)) < 5 THEN 0.3 ELSE 0.0 END
             -- Trừ 0.5 điểm nếu không chứa chữ cái hoặc số (chủ yếu là emoji hoặc ký tự đặc biệt)
-            - CASE WHEN NOT REGEXP_CONTAINS(text_original, r'[a-zA-Z0-9_àáảãạăắằẳẵặâấầẩẫậèéẻẽẹêếềểễệìíỉĩịòóỏõọôốồổỗộơớờởỡợùúủũụưứừửữựỳýỷỹỵđÀÁẢÃẠĂẮẰẲẴẶÂẤẦẨẪẬÈÉẺẼẸÊẾỀỂỄỆÌÍỈĨỊÒÓỎÕỌÔỐỒỔỖỘƠỚỜỞỠỢÙÚỦŨỤƯỨỪỬỮỰỲÝỶỸỴĐ]') THEN 0.5 ELSE 0.0 END
+            - CASE WHEN NOT REGEXP_CONTAINS(cleaned_text_original, r'[a-zA-Z0-9_àáảãạăắằẳẵặâấầẩẫậèéẻẽẹêếềểễệìíỉĩịòóỏõọôốồổỗộơớờởỡợùúủũụưứừửữựỳýỷỹỵđÀÁẢÃẠĂẮẰẲẴẶÂẤẦẨẪẬÈÉẺẼẸÊẾỀỂỄỆÌÍỈĨỊÒÓỎÕỌÔỐỒỔỖỘƠỚỜỞỠỢÙÚỦŨỤƯỨỪỬỮỰỲÝỶỸỴĐ]') THEN 0.5 ELSE 0.0 END
         )
     AS FLOAT64) AS data_quality_score,
     CAST(published_at AS TIMESTAMP) AS published_at,
     CURRENT_TIMESTAMP() AS _dbt_loaded_at
-FROM deduped
-WHERE rn = 1
+FROM cleaned
+WHERE cleaned_text_original IS NOT NULL

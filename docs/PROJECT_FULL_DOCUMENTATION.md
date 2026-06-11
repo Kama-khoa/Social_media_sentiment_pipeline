@@ -40,7 +40,7 @@ Hệ thống bao phủ từ khâu Data Ingestion (thu thập từ YouTube), Data
 - **Data Transformation:** dbt-bigquery.
 - **NLP / ML:** vELECTRA (Aspect Extraction), PhoBERT (Sentiment Classification), Gemini 1.5 Flash (LLM Fallback), thư viện underthesea & pyvi.
 - **Analytics:** ruptures (thuật toán PELT).
-- **Backend API:** FastAPI, Redis, SQLAlchemy, SQLite (auth store).
+- **Backend API:** FastAPI, Redis, SQLAlchemy, PostgreSQL.
 - **Frontend Web App:** Next.js (App Router), TypeScript, Tailwind CSS.
 
 **Giá trị hệ thống mang lại:**
@@ -66,7 +66,7 @@ Sự kết hợp này giải quyết được vấn đề "tiếng Việt" (vELE
 Dữ liệu từ YouTube rất đa dạng và phức tạp (nested JSON). Cần một lớp Transform (sử dụng dbt) để làm sạch, chuẩn hóa, deduplicate, và tổ chức lại dữ liệu thành các mô hình (marts) tối ưu cho việc truy vấn và phân tích. BigQuery đóng vai trò là một Data Warehouse có khả năng mở rộng cực cao, cho phép xử lý hàng triệu bản ghi trong thời gian ngắn để phục vụ cho các thuật toán phân tích (Analytics) cũng như API trả về dữ liệu nhanh chóng. 
 
 **Vì sao cần API Backend (FastAPI, Redis)?**
-API đóng vai trò trung gian giữa Data Warehouse và Frontend, đảm bảo bảo mật dữ liệu. Việc trực tiếp truy vấn từ Frontend vào BigQuery là không an toàn và chậm. FastAPI cung cấp tốc độ cao, xử lý xác thực (Auth/RBAC) với JWT, quản lý người dùng (SQLite). Redis được sử dụng làm cache (TTL=300s) cho các endpoint phân tích giúp giảm tải cho BigQuery và tăng tốc độ phản hồi cho trang web (tránh tình trạng load > 2s).
+API đóng vai trò trung gian giữa Data Warehouse và Frontend, đảm bảo bảo mật dữ liệu. Việc trực tiếp truy vấn từ Frontend vào BigQuery là không an toàn và chậm. FastAPI cung cấp tốc độ cao, xử lý xác thực (Auth/RBAC) với JWT, quản lý người dùng (PostgreSQL). Redis được sử dụng làm cache (TTL=300s) cho các endpoint phân tích giúp giảm tải cho BigQuery và tăng tốc độ phản hồi cho trang web (tránh tình trạng load > 2s).
 
 **Vì sao cần Frontend/Web Analytics (Next.js)?**
 Dữ liệu phân tích dù sâu sắc đến đâu cũng vô nghĩa nếu không được trực quan hóa để người dùng cuối hiểu được. Next.js cung cấp một giao diện web tương tác, hiện đại (App Router), hỗ trợ hiển thị Dashboard phân tích, bảng xếp hạng sản phẩm, đồng thời cung cấp giao diện quản trị (Admin) để cấu hình pipeline và duyệt thông tin danh mục sản phẩm (Product Catalog).
@@ -113,7 +113,7 @@ Hệ thống được thiết kế theo kiến trúc **Data Platform phân lớp
 
 7. **API Backend:**
    - **Trách nhiệm:** Đọc dữ liệu phân tích từ Warehouse, cung cấp API cho Frontend, quản lý xác thực/phân quyền (RBAC), tiếp nhận và ghi nhận các luồng cấu hình từ Admin (ghi vào config tables) hoặc phiếu yêu cầu từ User.
-   - **Công cụ:** FastAPI, Redis (Cache), SQLAlchemy + SQLite (cho User Auth MVP).
+   - **Công cụ:** FastAPI, Redis (Cache), SQLAlchemy + PostgreSQL.
 
 8. **Frontend / Web App:**
    - **Trách nhiệm:** Giao diện tương tác người dùng, hiển thị biểu đồ, bảng xếp hạng, và trang quản trị Admin.
@@ -194,7 +194,7 @@ flowchart TD
     subgraph S7 [Application Backend]
         F1[FastAPI Backend]:::backend
         F2[(Redis Cache)]:::backend
-        F3[(SQLite Auth Store)]:::backend
+        F3[(PostgreSQL Auth Store)]:::backend
     end
 
     %% Web App

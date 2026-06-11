@@ -18,6 +18,8 @@ with DAG(
     schedule_interval='0 19 * * *', # 2:00 AM UTC+7 (19:00 UTC)
     start_date=datetime(2025, 1, 1),
     catchup=False,
+    max_active_runs=1,
+    max_active_tasks=1,
     tags=['elt', 'daily'],
 ) as dag:
 

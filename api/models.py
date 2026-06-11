@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, String
+from sqlalchemy import Boolean, DateTime, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from api.database import Base
@@ -22,3 +22,19 @@ class AppUser(Base):
         default=lambda: datetime.now(timezone.utc),
     )
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class ProductFavorite(Base):
+    __tablename__ = "product_favorites"
+
+    user_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("app_users.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    product_id: Mapped[str] = mapped_column(String, primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )

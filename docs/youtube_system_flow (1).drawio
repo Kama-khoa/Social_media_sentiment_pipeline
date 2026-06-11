@@ -1,0 +1,84 @@
+<mxfile host="app.diagrams.net">
+  <diagram name="System Flow" id="0">
+    <mxGraphModel dx="1819" dy="1021" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1000" pageHeight="800" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        
+        <!-- Components (Vertices) -->
+        <mxCell id="youtube" parent="1" style="shape=cloud;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#000000;strokeWidth=1.5;fontFamily=Helvetica;fontSize=12;fontColor=#000000;" value="&lt;b&gt;YouTube&lt;/b&gt;" vertex="1">
+          <mxGeometry height="70" width="190" x="300" y="40" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="ingestion" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#000000;strokeWidth=1.5;fontFamily=Helvetica;fontSize=12;fontColor=#000000;" value="&lt;b&gt;Thu thập dữ liệu&lt;/b&gt;" vertex="1">
+          <mxGeometry height="60" width="190" x="300" y="150" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="gcs" parent="1" style="shape=cylinder;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#000000;strokeWidth=1.5;fontFamily=Helvetica;fontSize=12;fontColor=#000000;" value="&lt;b&gt;Hồ dữ liệu thô (GCS)&lt;/b&gt;" vertex="1">
+          <mxGeometry height="60" width="190" x="300" y="260" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="bigquery" parent="1" style="shape=cylinder;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#000000;strokeWidth=2;fontFamily=Helvetica;fontSize=12;fontColor=#000000;" value="&lt;b&gt;Kho dữ liệu BigQuery&lt;/b&gt;" vertex="1">
+          <mxGeometry height="60" width="190" x="300" y="370" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="dbt" parent="1" style="shape=hexagon;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#000000;strokeWidth=1.5;fontFamily=Helvetica;fontSize=12;fontColor=#000000;" value="&lt;b&gt;Biến đổi dữ liệu (dbt)&lt;/b&gt;" vertex="1">
+          <mxGeometry height="60" width="190" x="40" y="370" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="nlp" parent="1" style="shape=hexagon;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#000000;strokeWidth=1.5;fontFamily=Helvetica;fontSize=12;fontColor=#000000;" value="&lt;b&gt;Pipeline NLP&lt;/b&gt;" vertex="1">
+          <mxGeometry height="60" width="190" x="560" y="370" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="analytics" parent="1" style="shape=hexagon;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#000000;strokeWidth=1.5;fontFamily=Helvetica;fontSize=12;fontColor=#000000;" value="&lt;b&gt;Bộ phân tích (Analytics)&lt;/b&gt;" vertex="1">
+          <mxGeometry height="60" width="190" x="100" y="490" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="fastapi" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#000000;strokeWidth=1.5;fontFamily=Helvetica;fontSize=12;fontColor=#000000;" value="&lt;b&gt;FastAPI Backend&lt;/b&gt;" vertex="1">
+          <mxGeometry height="60" width="190" x="500" y="490" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="webapp" parent="1" style="shape=display;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#000000;strokeWidth=1.5;fontFamily=Helvetica;fontSize=12;fontColor=#000000;" value="&lt;b&gt;Giao diện Web (Next.js)&lt;/b&gt;" vertex="1">
+          <mxGeometry height="60" width="190" x="300" y="610" as="geometry" />
+        </mxCell>
+
+        <!-- Connections (Edges) -->
+        <mxCell id="e1" edge="1" parent="1" source="youtube" style="endArrow=block;html=1;rounded=0;strokeColor=#000000;strokeWidth=1.5;fontSize=12;fontColor=#000000;labelBackgroundColor=#FFFFFF;" target="ingestion" value="&lt;b&gt;Đầu vào:&lt;/b&gt; Cấu hình API/Scraper (URLs, Từ khóa)&lt;br&gt;&lt;b&gt;Đầu ra:&lt;/b&gt; JSON video/bình luận thô">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="e2" edge="1" parent="1" source="ingestion" style="endArrow=block;html=1;rounded=0;strokeColor=#000000;strokeWidth=1.5;fontSize=12;fontColor=#000000;labelBackgroundColor=#FFFFFF;" target="gcs" value="&lt;b&gt;Đầu vào:&lt;/b&gt; Dữ liệu JSON thô&lt;br&gt;&lt;b&gt;Đầu ra:&lt;/b&gt; File NDJSON (raw/videos/*, raw/comments/*)">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e_ingestion_bq" edge="1" parent="1" source="ingestion" style="endArrow=block;html=1;rounded=0;strokeColor=#000000;strokeWidth=1.5;fontSize=12;fontColor=#000000;labelBackgroundColor=#FFFFFF;edgeStyle=orthogonalEdgeStyle;" target="bigquery" value="&lt;b&gt;Đầu vào:&lt;/b&gt; Trạng thái crawl &amp; quota&lt;br&gt;&lt;b&gt;Đầu ra:&lt;/b&gt; Cập nhật crawl_state &amp; quota_log">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e3" edge="1" parent="1" source="gcs" style="endArrow=block;html=1;rounded=0;strokeColor=#000000;strokeWidth=1.5;fontSize=12;fontColor=#000000;labelBackgroundColor=#FFFFFF;" target="bigquery" value="&lt;b&gt;Đầu vào:&lt;/b&gt; File NDJSON lưu trên GCS&lt;br&gt;&lt;b&gt;Đầu ra:&lt;/b&gt; Bảng external (raw_videos, raw_comments)">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e_bq_dbt" edge="1" parent="1" source="bigquery" style="endArrow=block;startArrow=block;html=1;rounded=0;strokeColor=#000000;strokeWidth=1.5;fontSize=12;fontColor=#000000;labelBackgroundColor=#FFFFFF;" target="dbt" value="&lt;b&gt;Đầu vào:&lt;/b&gt; Bảng raw &amp; staging&lt;br&gt;&lt;b&gt;Đầu ra:&lt;/b&gt; Bảng transform (Staging-&gt;Inter-&gt;Marts)">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e_nlp_bq" edge="1" parent="1" source="nlp" style="endArrow=block;startArrow=block;html=1;rounded=0;strokeColor=#000000;strokeWidth=1.5;fontSize=12;fontColor=#000000;labelBackgroundColor=#FFFFFF;" target="bigquery" value="&lt;b&gt;Đầu vào:&lt;/b&gt; Câu bình luận sạch (int_comment_sentences)&lt;br&gt;&lt;b&gt;Đầu ra:&lt;/b&gt; Nhãn khía cạnh &amp; cảm xúc (raw_sentiment_results)">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e_analytics_bq" edge="1" parent="1" source="analytics" style="endArrow=block;startArrow=block;html=1;rounded=0;strokeColor=#000000;strokeWidth=1.5;fontSize=12;fontColor=#000000;labelBackgroundColor=#FFFFFF;" target="bigquery" value="&lt;b&gt;Đầu vào:&lt;/b&gt; Bảng dữ liệu fact (fact_product_mentions)&lt;br&gt;&lt;b&gt;Đầu ra:&lt;/b&gt; Điểm Bayesian &amp; sự kiện thay đổi cảm xúc (PELT)">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e_fastapi_bq" edge="1" parent="1" source="bigquery" style="endArrow=block;startArrow=block;html=1;rounded=0;strokeColor=#000000;strokeWidth=1.5;fontSize=12;fontColor=#000000;labelBackgroundColor=#FFFFFF;" target="fastapi" value="&lt;b&gt;Đầu vào:&lt;/b&gt; Truy vấn bảng marts &amp; catalog&lt;br&gt;&lt;b&gt;Đầu ra:&lt;/b&gt; Cập nhật cấu hình &amp; duyệt thông số specs">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e8" edge="1" parent="1" source="fastapi" style="endArrow=block;startArrow=block;html=1;rounded=0;strokeColor=#000000;strokeWidth=1.5;fontSize=12;fontColor=#000000;labelBackgroundColor=#FFFFFF;" target="webapp" value="&lt;b&gt;Đầu vào:&lt;/b&gt; Yêu cầu REST API (JWT, bộ lọc specs)&lt;br&gt;&lt;b&gt;Đầu ra:&lt;/b&gt; Dữ liệu dashboard phân tích &amp; quyền admin">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

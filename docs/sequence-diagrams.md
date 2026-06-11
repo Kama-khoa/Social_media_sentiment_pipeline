@@ -481,14 +481,14 @@ sequenceDiagram
     actor Admin as Admin
     participant FE as Frontend
     participant BE as Backend
-    participant LocalDB as SQLite Database
+    participant PostgresDB as PostgreSQL Database
     participant Airflow as Airflow API
     participant DB as BigQuery Database
 
     Admin->>FE: Nhập email và password
     FE->>BE: POST /auth/login
-    BE->>LocalDB: Tìm app_users theo email
-    LocalDB-->>BE: User record
+    BE->>PostgresDB: Tìm app_users theo email
+    PostgresDB-->>BE: User record
 
     alt [Thông tin đăng nhập hợp lệ]
         BE-->>FE: HTTP 200, JWT access_token

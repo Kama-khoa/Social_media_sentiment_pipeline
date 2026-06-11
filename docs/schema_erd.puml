@@ -304,6 +304,28 @@ package "Layer 4: Marts" {
   }
 }
 
+' APPLICATION DB TABLES
+package "Application DB" {
+  entity "app_users" as app_users {
+    * user_id : STRING
+    --
+    email : STRING
+    hashed_password : STRING
+    full_name : STRING
+    role : STRING
+    is_active : BOOL
+    created_at : TIMESTAMP
+    updated_at : TIMESTAMP
+  }
+
+  entity "product_favorites" as product_favorites {
+    * user_id : STRING <<FK>>
+    * product_id : STRING <<FK>>
+    --
+    created_at : TIMESTAMP
+  }
+}
+
 ' Relationships
 product_config ||--o{ product_aliases : "1:N"
 product_config ||--o| product_details : "1:1"
@@ -311,7 +333,8 @@ product_config ||--o| product_details : "1:1"
 channel_config ||--o{ raw_videos : "1:N"
 channel_config ||--o{ stg_youtube_videos : "1:N"
 raw_videos ||--o{ raw_comments : "1:N"
-stg_youtube_videos ||--o{ stg_youtube_comments : "1:N"
+stg_youtube_comments ||--o{ fact_product_mentions : "1:N"
+stg_youtube_videos ||--o{ fact_product_mentions : "1:N"
 stg_youtube_videos ||--o| video_crawl_state : "1:1"
 
 keyword_config ||--o{ video_crawl_state : "1:N"
@@ -324,10 +347,11 @@ int_comment_sentences ||--o{ int_sentence_product_targets : "1:N"
 
 dim_products ||--o{ fact_product_mentions : "1:N"
 dim_products ||--o{ int_video_product_mentions : "1:N"
-stg_youtube_videos ||--o{ fact_product_mentions : "1:N"
-stg_youtube_comments ||--o{ fact_product_mentions : "1:N"
 
 dim_products ||--o{ agg_daily_product_ranking : "1:N"
 dim_products ||--o{ causal_events : "1:N"
+
+app_users ||--o{ product_favorites : "1:N"
+product_config ||--o{ product_favorites : "1:N"
 
 @enduml

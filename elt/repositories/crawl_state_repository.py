@@ -149,8 +149,7 @@ class CrawlStateRepository:
                 maturity_stage
             FROM {self._table("video_crawl_state")}
             WHERE
-                crawl_status != 'skipped'
-                AND is_comment_complete = FALSE
+                is_comment_complete = FALSE
                 AND (
                     last_comment_crawled_at IS NULL
                     OR (

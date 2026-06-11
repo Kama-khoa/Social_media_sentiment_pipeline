@@ -43,6 +43,22 @@ export interface TopProduct {
   top_aspect: string | null;
 }
 
+export interface ProductFavoriteStatus {
+  product_id: string;
+  is_favorite: boolean;
+}
+
+export interface FavoriteProductItem {
+  product_id: string;
+  product_name: string;
+  brand: string | null;
+  category: string | null;
+  bayesian_score: number;
+  controversy_label: "high" | "medium" | "low";
+  total_mentions: number;
+  created_at: string;
+}
+
 export interface AspectSentiment {
   aspect_label: string;
   positive_count: number;

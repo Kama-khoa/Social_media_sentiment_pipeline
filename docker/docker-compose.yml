@@ -12,7 +12,8 @@ x-airflow-common: &airflow-common
     - AIRFLOW__CORE__DAGS_FOLDER=/opt/airflow/airflow/dags
     - PYTHONPATH=/opt/airflow
     - GOOGLE_APPLICATION_CREDENTIALS=/opt/airflow/gcp_credentials.json
-    - AIRFLOW__CORE__PARALLELISM=1
+    - YOUTUBE_COOKIES_DIR=/opt/airflow/config
+    - AIRFLOW__CORE__PARALLELISM=4
   env_file:
     - ../.env
   volumes:
@@ -20,6 +21,8 @@ x-airflow-common: &airflow-common
     - ..:/opt/airflow
     # Mount the GCP credentials file defined in .env into the container
     - ${GOOGLE_APPLICATION_CREDENTIALS:?Set GOOGLE_APPLICATION_CREDENTIALS in .env or shell}:/opt/airflow/gcp_credentials.json:ro
+    # Cookie files are ignored by git and are exposed read-only for yt-dlp video extraction only.
+    - ../config:/opt/airflow/config:ro
   user: "${AIRFLOW_UID:-50000}:0"
 
 services:

@@ -1,4 +1,4 @@
-# CLAUDE.md — Social Media Sentiment Pipeline
+# AGENTS.md — Social Media Sentiment Pipeline
 
 ## Tổng quan dự án
 

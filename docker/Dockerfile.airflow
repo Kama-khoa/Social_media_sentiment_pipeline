@@ -13,12 +13,11 @@ USER airflow
 # Copy the Airflow-specific requirements file from the host
 COPY docker/requirements-airflow.txt /tmp/requirements-airflow.txt
 
-# Install the Python dependencies
-# Adding dbt-bigquery to support dbt run commands from Airflow
-# Run as root to avoid Read-only file system errors when updating system packages
+# Install the Python dependencies.
+# dbt-core and dbt-bigquery are pinned together in requirements-airflow.txt to
+# avoid adapter/manifest mismatches inside Airflow tasks.
 USER root
-RUN python -m pip install --no-cache-dir "apache-airflow==${AIRFLOW_VERSION}" -r /tmp/requirements-airflow.txt \
-    && python -m pip install --no-cache-dir dbt-bigquery==1.8.2
+RUN python -m pip install --no-cache-dir "apache-airflow==${AIRFLOW_VERSION}" -r /tmp/requirements-airflow.txt
 
 # Switch back to the airflow user
 USER airflow

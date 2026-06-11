@@ -101,7 +101,7 @@ export function GuestHeader({ title }: GuestHeaderProps) {
                   <div className="px-3 py-2.5"><div className="text-sm font-bold">{user.display_name}</div><div className="faint text-xs">{user.email}</div><span className="chip brand mt-2">{user.role === "admin" ? "Quản trị viên" : "Người dùng"}</span></div>
                   <hr className="divider" />
                   {user.role === "admin" && <DropItem href="/admin" icon="grid" label="Trang quản trị" highlight />}
-                  <DropItem icon="heart" label="Sản phẩm đã lưu" />
+                  <DropItem href="/favorites" icon="heart" label="Sản phẩm đã lưu" />
                   <hr className="divider" />
                   <DropItem icon="logout" label="Đăng xuất" danger onClick={handleLogout} />
                 </Card>

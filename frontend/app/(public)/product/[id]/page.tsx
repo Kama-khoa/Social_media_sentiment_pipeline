@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { api } from "@/lib/api-client";
 import type { AttributionData, ProductComment, ProductDetail } from "@/lib/types";
 import { useAuth } from "@/lib/auth-context";
@@ -23,12 +23,15 @@ const baseSections: Array<{ id: Section; label: string; icon: IconName }> = [
 
 export default function ProductDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const router = useRouter();
   const { user } = useAuth();
   const [data, setData] = useState<ProductDetail | null>(null);
   const [attribution, setAttribution] = useState<AttributionData | null>(null);
   const [comments, setComments] = useState<ProductComment[]>([]);
   const [section, setSection] = useState<Section>("analytics");
   const [loading, setLoading] = useState(true);
+  const [isFavorite, setIsFavorite] = useState(false);
+  const [favoriteLoading, setFavoriteLoading] = useState(false);
   const [proposal, setProposal] = useState("{}");
   const [proposalSent, setProposalSent] = useState(false);
 
@@ -36,6 +39,23 @@ export default function ProductDetailPage() {
     if (!id) return;
     Promise.all([api.products.aspects(id), api.products.attribution(id).catch(() => null), api.products.comments(id).catch(() => [])]).then(([detail, timeline, productComments]) => { setData(detail); setAttribution(timeline); setComments(productComments); }).finally(() => setLoading(false));
   }, [id]);
+
+  useEffect(() => {
+    if (!id || !user) {
+      setIsFavorite(false);
+      return;
+    }
+    let active = true;
+    api.products.favorites
+      .status(id)
+      .then((status) => {
+        if (active) setIsFavorite(status.is_favorite);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [id, user]);
 
   const sentiment = useMemo(() => {
     if (!data?.aspects.length) return { positive: 0, negative: 0, neutral: 100 };
@@ -56,11 +76,28 @@ export default function ProductDetailPage() {
     setProposalSent(true);
   }
 
+  async function toggleFavorite() {
+    if (!id) return;
+    if (!user) {
+      router.push(`/login?next=${encodeURIComponent(`/product/${id}`)}`);
+      return;
+    }
+    setFavoriteLoading(true);
+    try {
+      const status = isFavorite
+        ? await api.products.favorites.remove(id)
+        : await api.products.favorites.add(id);
+      setIsFavorite(status.is_favorite);
+    } finally {
+      setFavoriteLoading(false);
+    }
+  }
+
   return (
     <main className="fade-in mx-auto max-w-[1120px] px-6 py-7 pb-20">
       <Link href="/" className="muted mb-[18px] inline-flex items-center gap-1.5 text-sm font-semibold hover:text-[var(--primary)]"><Icon name="chevron" size={16} style={{ transform: "rotate(90deg)" }} />Quay lại danh sách</Link>
       <section className="card mb-[18px] p-[26px]">
-        <div className="flex flex-wrap justify-between gap-6"><div className="min-w-0 flex-[1_1_320px]"><div className="mb-2.5 flex flex-wrap gap-2"><span className="chip brand">{data.category}</span><span className="chip">{data.brand}</span><span className={`chip ${data.controversy_label === "high" ? "neg" : data.controversy_label === "medium" ? "neu" : "pos"}`}>{data.controversy_label === "high" ? "Nhiều tranh cãi" : data.controversy_label === "medium" ? "Tranh cãi vừa" : "Ít tranh cãi"}</span></div><h1 className="m-0 text-[32px] font-extrabold tracking-[-.02em]">{data.product_name}</h1><p className="muted mt-2 max-w-xl text-[14.5px] leading-relaxed">{data.details?.description ?? "Phân tích cảm xúc cộng đồng dựa trên bình luận YouTube Việt Nam."}</p><div className="mt-4 flex flex-wrap gap-2.5"><Button variant="secondary"><Icon name="heart" size={16} />Lưu sản phẩm</Button>{data.details?.official_url && <a href={data.details.official_url} target="_blank" rel="noreferrer"><Button variant="outline"><Icon name="external" size={16} />Trang chính thức</Button></a>}</div></div><div className="flex min-w-48 flex-col items-center gap-3"><ScoreRing score={data.bayesian_score} statementCount={data.statement_count} size={104} /><div className="text-center"><div className="num text-[15px] font-bold">{data.total_mentions.toLocaleString("vi-VN")}</div><div className="faint text-xs">lượt đề cập đã phân tích</div>{!hasEnoughBayesData(data.statement_count) && <div className="faint mt-1 text-xs font-semibold">Chưa đủ dữ liệu Bayes</div>}</div></div></div>
+        <div className="flex flex-wrap justify-between gap-6"><div className="min-w-0 flex-[1_1_320px]"><div className="mb-2.5 flex flex-wrap gap-2"><span className="chip brand">{data.category}</span><span className="chip">{data.brand}</span><span className={`chip ${data.controversy_label === "high" ? "neg" : data.controversy_label === "medium" ? "neu" : "pos"}`}>{data.controversy_label === "high" ? "Nhiều tranh cãi" : data.controversy_label === "medium" ? "Tranh cãi vừa" : "Ít tranh cãi"}</span></div><h1 className="m-0 text-[32px] font-extrabold tracking-[-.02em]">{data.product_name}</h1><p className="muted mt-2 max-w-xl text-[14.5px] leading-relaxed">{data.details?.description ?? "Phân tích cảm xúc cộng đồng dựa trên bình luận YouTube Việt Nam."}</p><div className="mt-4 flex flex-wrap gap-2.5"><Button variant={isFavorite ? "success" : "secondary"} onClick={toggleFavorite} disabled={favoriteLoading}><Icon name={isFavorite ? "check" : "heart"} size={16} />{isFavorite ? "Đã lưu" : "Lưu sản phẩm"}</Button>{data.details?.official_url && <a href={data.details.official_url} target="_blank" rel="noreferrer"><Button variant="outline"><Icon name="external" size={16} />Trang chính thức</Button></a>}</div></div><div className="flex min-w-48 flex-col items-center gap-3"><ScoreRing score={data.bayesian_score} statementCount={data.statement_count} size={104} /><div className="text-center"><div className="num text-[15px] font-bold">{data.total_mentions.toLocaleString("vi-VN")}</div><div className="faint text-xs">lượt đề cập đã phân tích</div>{!hasEnoughBayesData(data.statement_count) && <div className="faint mt-1 text-xs font-semibold">Chưa đủ dữ liệu Bayes</div>}</div></div></div>
         <div className="mt-[18px]"><SentimentBar positivePct={sentiment.positive} negativePct={sentiment.negative} height={12} /><div className="mt-2 flex justify-between text-[13px] font-semibold"><span className="text-[var(--pos)]">{sentiment.positive.toFixed(0)}% tích cực</span><span className="text-[var(--neu)]">{sentiment.neutral.toFixed(0)}% trung lập</span><span className="text-[var(--neg)]">{sentiment.negative.toFixed(0)}% tiêu cực</span></div></div>
       </section>
 

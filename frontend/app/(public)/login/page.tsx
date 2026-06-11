@@ -22,7 +22,11 @@ export default function LoginPage() {
     setLoading(true);
     try {
       const me = await login(email, password);
-      if (me.role === "admin") {
+      const next = new URLSearchParams(window.location.search).get("next");
+      const safeNext = next?.startsWith("/") && !next.startsWith("//") ? next : null;
+      if (safeNext) {
+        router.push(safeNext);
+      } else if (me.role === "admin") {
         router.push("/admin");
       } else {
         router.push("/");

@@ -19,6 +19,8 @@ with DAG(
     schedule_interval="0 22 * * *",
     start_date=datetime(2025, 1, 1),
     catchup=False,
+    max_active_runs=1,
+    max_active_tasks=1,
     tags=["analytics", "daily"],
 ) as dag:
 

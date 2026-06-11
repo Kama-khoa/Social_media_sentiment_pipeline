@@ -16,6 +16,8 @@ import type {
   SearchResponse,
   LogFileListResponse,
   LogTailResponse,
+  FavoriteProductItem,
+  ProductFavoriteStatus,
   TopProduct,
   UserDashboardData,
 } from "./types";
@@ -98,6 +100,15 @@ export const api = {
         method: "POST",
         body: JSON.stringify(data),
       }),
+    favorites: {
+      list: () => request<FavoriteProductItem[]>("/products/favorites"),
+      status: (productId: string) =>
+        request<ProductFavoriteStatus>(`/products/${productId}/favorite`),
+      add: (productId: string) =>
+        request<ProductFavoriteStatus>(`/products/${productId}/favorite`, { method: "POST" }),
+      remove: (productId: string) =>
+        request<ProductFavoriteStatus>(`/products/${productId}/favorite`, { method: "DELETE" }),
+    },
   },
 
   search: (q: string, category = "", limit = 20, options: RequestInit = {}) =>

@@ -47,6 +47,7 @@ def create_stg_youtube_comments(client: bigquery.Client) -> None:
         bigquery.SchemaField("author_channel_id", "STRING", mode="NULLABLE"),
         bigquery.SchemaField("author_display_name", "STRING", mode="NULLABLE"),
         bigquery.SchemaField("text_original", "STRING", mode="REQUIRED"),
+        bigquery.SchemaField("text_display", "STRING", mode="NULLABLE"),
         bigquery.SchemaField("like_count", "INT64", mode="REQUIRED"),
         bigquery.SchemaField("reply_count", "INT64", mode="REQUIRED"),
         bigquery.SchemaField("is_reply", "BOOL", mode="REQUIRED"),
