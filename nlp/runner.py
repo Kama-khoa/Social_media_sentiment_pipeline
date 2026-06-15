@@ -128,7 +128,38 @@ def _build_rows_for_annotations(
                 "dag_run_id": dag_run_id,
                 "processed_at": processed_at,
             })
-    return output
+    return _deduplicate_result_rows(output)
+
+
+def _deduplicate_result_rows(rows: list[dict]) -> list[dict]:
+    selected: dict[str, dict] = {}
+    first_positions: dict[str, int] = {}
+
+    for index, row in enumerate(rows):
+        result_id = str(row["result_id"])
+        if result_id not in selected:
+            selected[result_id] = row
+            first_positions[result_id] = index
+            continue
+
+        existing = selected[result_id]
+        row_key = (
+            str(row.get("processed_at", "")),
+            float(row.get("confidence_score", 0.0)),
+            index,
+        )
+        existing_key = (
+            str(existing.get("processed_at", "")),
+            float(existing.get("confidence_score", 0.0)),
+            first_positions[result_id],
+        )
+        if row_key > existing_key:
+            selected[result_id] = row
+
+    return [
+        selected[result_id]
+        for result_id in sorted(first_positions, key=lambda value: first_positions[value])
+    ]
 
 
 def build_result_rows(
@@ -293,6 +324,7 @@ def _build_merge_sql(target_table: str, staging_table: str) -> str:
 
 
 def write_rows_to_bigquery(rows: list[dict]) -> None:
+    rows = _deduplicate_result_rows(rows)
     if not rows:
         return
 

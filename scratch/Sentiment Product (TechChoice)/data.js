@@ -209,9 +209,88 @@
   const OPS_SERIES = [42, 51, 47, 63, 58, 71, 66, 79, 84, 73, 91, 88, 95, 82, 97];
   const NLP_SERIES = [88, 90, 87, 92, 94, 91, 93, 95, 92, 96, 94, 97, 95, 96, 98];
 
+  const ACCOUNTS = [
+    { id: "usr_001", email: "admin@techchoice.vn",   display_name: "Quản trị viên",    role: "admin", is_active: true,  created_at: "2025-01-15", last_login_at: "2026-06-05" },
+    { id: "usr_002", email: "nguyen.a@gmail.com",    display_name: "Nguyễn Văn A",     role: "user",  is_active: true,  created_at: "2025-03-20", last_login_at: "2026-06-04" },
+    { id: "usr_003", email: "tran.b@gmail.com",      display_name: "Trần Thị B",       role: "user",  is_active: true,  created_at: "2025-07-10", last_login_at: "2026-05-28" },
+    { id: "usr_004", email: "le.c@example.com",      display_name: "Lê Văn C",         role: "user",  is_active: false, created_at: "2025-09-01", last_login_at: "2026-01-12" },
+    { id: "usr_005", email: "pham.d@outlook.com",    display_name: "Phạm Ngọc D",      role: "user",  is_active: true,  created_at: "2026-01-08", last_login_at: "2026-06-03" },
+  ];
+
+  const ALIASES = [
+    { alias_id: "al1", product_id: "iphone-17-pro-max",          alias_text: "IP17PM",               alias_type: "abbreviation", is_active: true,  created_at: "2025-10-01" },
+    { alias_id: "al2", product_id: "iphone-17-pro-max",          alias_text: "iPhone 17 ProMax",     alias_type: "variant",      is_active: true,  created_at: "2025-10-02" },
+    { alias_id: "al3", product_id: "iphone-17-pro-max",          alias_text: "ip 17 pro",            alias_type: "typo",         is_active: true,  created_at: "2025-11-10" },
+    { alias_id: "al4", product_id: "samsung-galaxy-s25-ultra",   alias_text: "S25U",                 alias_type: "abbreviation", is_active: true,  created_at: "2025-11-01" },
+    { alias_id: "al5", product_id: "samsung-galaxy-s25-ultra",   alias_text: "Galaxy S25 Ultra 2025", alias_type: "variant",     is_active: true,  created_at: "2025-11-02" },
+    { alias_id: "al6", product_id: "xiaomi-15-pro",              alias_text: "Mi 15 Pro",            alias_type: "variant",      is_active: true,  created_at: "2025-12-01" },
+    { alias_id: "al7", product_id: "macbook-air-m4",             alias_text: "MBA M4",               alias_type: "abbreviation", is_active: false, created_at: "2025-12-15" },
+    { alias_id: "al8", product_id: "sony-wh-1000xm6",            alias_text: "XM6",                  alias_type: "abbreviation", is_active: true,  created_at: "2026-01-05" },
+  ];
+
+  const CANDIDATES = [
+    { candidate_id: "cand_001", candidate_text: "ip 17 pro max",   source_type: "video",    source_id: "vid_abc123",  status: "pending",  created_at: "2026-06-04", resolved_product_id: null },
+    { candidate_id: "cand_002", candidate_text: "s25 ultra 5g",    source_type: "sentence", source_id: "sent_def456", status: "pending",  created_at: "2026-06-04", resolved_product_id: null },
+    { candidate_id: "cand_003", candidate_text: "macbook m4 chip", source_type: "video",    source_id: "vid_ghi789",  status: "pending",  created_at: "2026-06-03", resolved_product_id: null },
+    { candidate_id: "cand_004", candidate_text: "xiao mi 15",      source_type: "sentence", source_id: "sent_jkl012", status: "approved", created_at: "2026-06-02", resolved_product_id: "xiaomi-15-pro" },
+    { candidate_id: "cand_005", candidate_text: "airpod pro 3",    source_type: "video",    source_id: "vid_mno345",  status: "rejected", created_at: "2026-06-01", resolved_product_id: null },
+  ];
+
+  const SPEC_TEMPLATES = [
+    { category: "Điện thoại", spec_key: "screen_size",    display_label: "Màn hình",         value_type: "string",  unit: "",     is_active: true  },
+    { category: "Điện thoại", spec_key: "chip",           display_label: "Chip xử lý",       value_type: "string",  unit: "",     is_active: true  },
+    { category: "Điện thoại", spec_key: "ram",            display_label: "RAM",              value_type: "string",  unit: "GB",   is_active: true  },
+    { category: "Điện thoại", spec_key: "storage",        display_label: "Bộ nhớ trong",     value_type: "string",  unit: "GB",   is_active: true  },
+    { category: "Điện thoại", spec_key: "battery",        display_label: "Dung lượng pin",   value_type: "number",  unit: "mAh",  is_active: true  },
+    { category: "Điện thoại", spec_key: "charging",       display_label: "Sạc nhanh",        value_type: "string",  unit: "W",    is_active: true  },
+    { category: "Laptop",     spec_key: "screen_size",    display_label: "Màn hình",         value_type: "string",  unit: "",     is_active: true  },
+    { category: "Laptop",     spec_key: "cpu",            display_label: "CPU",              value_type: "string",  unit: "",     is_active: true  },
+    { category: "Laptop",     spec_key: "ram",            display_label: "RAM",              value_type: "string",  unit: "GB",   is_active: true  },
+    { category: "Laptop",     spec_key: "weight",         display_label: "Trọng lượng",      value_type: "number",  unit: "kg",   is_active: true  },
+    { category: "Laptop",     spec_key: "battery_life",   display_label: "Thời lượng pin",   value_type: "number",  unit: "giờ",  is_active: false },
+    { category: "Tai nghe",   spec_key: "type",           display_label: "Kiểu dáng",        value_type: "string",  unit: "",     is_active: true  },
+    { category: "Tai nghe",   spec_key: "battery_life",   display_label: "Thời lượng pin",   value_type: "number",  unit: "giờ",  is_active: true  },
+    { category: "Tai nghe",   spec_key: "anc",            display_label: "Chống ồn (ANC)",   value_type: "boolean", unit: "",     is_active: true  },
+  ];
+
+  const EDIT_REQUESTS = [
+    { id: "r1", product_id: "iphone-17-pro-max",       product: "iPhone 17 Pro Max",
+      by_email: "user@example.com", by_name: "Người dùng",
+      title: "Cập nhật thông số sạc nhanh",
+      content: '{"Sạc": "45W có dây"}',
+      status: "pending",    handler: null,            reason: null,
+      created_at: "05/06/2026" },
+    { id: "r2", product_id: "samsung-galaxy-s25-ultra", product: "Galaxy S25 Ultra",
+      by_email: "user@example.com", by_name: "Người dùng",
+      title: "Sửa thông số trọng lượng",
+      content: '{"Trọng lượng": "218 g"}',
+      status: "processing", handler: "Quản trị viên",  reason: null,
+      created_at: "03/06/2026" },
+    { id: "r3", product_id: "macbook-air-m4",           product: "MacBook Air M4",
+      by_email: "minhtri@gmail.com", by_name: "Minh Trí",
+      title: "Thêm màu sắc Xanh Skyblue",
+      content: '{"Màu sắc": "Xanh Skyblue"}',
+      status: "accepted",   handler: "Quản trị viên",  reason: null,
+      created_at: "02/06/2026" },
+    { id: "r4", product_id: "xiaomi-15-pro",            product: "Xiaomi 15 Pro",
+      by_email: "haiyen@gmail.com", by_name: "Hải Yến",
+      title: "Cập nhật dung lượng pin",
+      content: '{"Pin": "6200 mAh"}',
+      status: "rejected",   handler: "Quản trị viên",
+      reason: "Thông số không khớp tài liệu chính thức từ nhà sản xuất.",
+      created_at: "01/06/2026" },
+    { id: "r5", product_id: "iphone-17-pro-max",        product: "iPhone 17 Pro Max",
+      by_email: "user@example.com", by_name: "Người dùng",
+      title: "Sửa thông số RAM lên 16 GB",
+      content: '{"RAM": "16 GB"}',
+      status: "pending",    handler: null,            reason: null,
+      created_at: "05/06/2026" },
+  ];
+
   window.DATA = {
     ASPECTS, PRODUCTS, COMMENTS, CATEGORIES,
     CHANNELS, KEYWORDS, DAG_RUNS, DAG_TASKS, OPS_SERIES, NLP_SERIES,
+    ACCOUNTS, ALIASES, CANDIDATES, SPEC_TEMPLATES, EDIT_REQUESTS,
     PIPELINE: {
       webserver: "healthy", scheduler: "healthy",
       quotaUsed: 7820, quotaLimit: 10000,

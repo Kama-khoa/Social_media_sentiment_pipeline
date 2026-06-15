@@ -42,6 +42,10 @@ function Icon({ name, size = 18, style }) {
     server: <><rect x="3" y="4" width="18" height="7" rx="2" {...p} /><rect x="3" y="13" width="18" height="7" rx="2" {...p} /><path d="M7 7.5h.01M7 16.5h.01" {...p} /></>,
     spark: <path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2 2M16 16l2 2M18 6l-2 2M8 16l-2 2" {...p} />,
     external: <path d="M14 4h6v6M20 4l-9 9M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5" {...p} />,
+    users: <><circle cx="9" cy="7" r="3.5" {...p} /><path d="M2 21v-1a7 7 0 0 1 14 0v1M16 3.6a3.5 3.5 0 0 1 0 6.8M22 21v-1a5 5 0 0 0-4-4.9" {...p} /></>,
+    link: <><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" {...p} /><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" {...p} /></>,
+    inbox: <><polyline points="22 12 16 12 14 15 10 15 8 12 2 12" {...p} /><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" {...p} /></>,
+    "play-circle": <><circle cx="12" cy="12" r="9" {...p} /><path d="M10 8l6 4-6 4V8Z" fill="currentColor" stroke="none" /></>,
   };
   return <svg viewBox="0 0 24 24" style={s} aria-hidden="true">{paths[name]}</svg>;
 }
@@ -234,7 +238,7 @@ function ScoreRing({ score, size = 92 }) {
       <circle cx={cx} cy={cx} r={r} fill="none" stroke="var(--primary)" strokeWidth="7" strokeLinecap="round"
         strokeDasharray={`${dash} ${c - dash}`} transform={`rotate(-90 ${cx} ${cx})`} style={{ transition: "stroke-dasharray 1s ease" }} />
       <text x={cx} y={cx + 1} textAnchor="middle" className="num" style={{ fontSize: 19, fontWeight: 700, fill: "var(--text)" }}>{(score * 100).toFixed(0)}</text>
-      <text x={cx} y={cx + 15} textAnchor="middle" style={{ fontSize: 8.5, fill: "var(--text-3)", fontWeight: 600 }}>BAYES</text>
+      <text x={cx} y={cx + 15} textAnchor="middle" style={{ fontSize: 8.5, fill: "var(--text-3)", fontWeight: 600 }}>ĐTÍN NHIỆM</text>
     </svg>
   );
 }

@@ -434,3 +434,47 @@ def review_resolution_candidate(
     if body.alias_text:
         create_alias(ProductAliasCreateRequest(product_id=body.product_id, alias_text=body.alias_text), admin)
     return {"candidate_id": candidate_id, "status": "approved", "product_id": body.product_id}
+
+
+@router.post("/resolution-candidates/{candidate_id}/reject")
+def reject_resolution_candidate(
+    candidate_id: str,
+    admin: AppUser = Depends(require_admin),
+):
+    settings = get_settings()
+    rows = query_to_list(
+        f"SELECT * FROM `{settings.gcp_project_id}.{settings.bq_dataset}_intermediate.int_product_resolution_candidates` WHERE candidate_id=@candidate_id",
+        [bigquery.ScalarQueryParameter("candidate_id", "STRING", candidate_id)],
+    )
+    if not rows:
+        rows = query_to_list(
+            f"SELECT * FROM `{settings.gcp_project_id}.{settings.bq_dataset}.product_resolution_candidates` WHERE candidate_id=@candidate_id",
+            [bigquery.ScalarQueryParameter("candidate_id", "STRING", candidate_id)],
+        )
+    if not rows:
+        raise HTTPException(status_code=404, detail="Resolution candidate not found")
+    candidate = rows[0]
+    get_bq_client().query(
+        f"""
+        MERGE `{settings.gcp_project_id}.{settings.bq_dataset}.product_resolution_candidates` target
+        USING (SELECT @candidate_id AS candidate_id) source
+        ON target.candidate_id=source.candidate_id
+        WHEN MATCHED THEN UPDATE SET status='rejected', resolved_product_id=NULL,
+            reviewed_by=@admin_id, reviewed_at=CURRENT_TIMESTAMP(), resolution_method='admin',
+            resolver_confidence=0.0, resolver_reason='Rejected manually by admin'
+        WHEN NOT MATCHED THEN INSERT
+            (candidate_id, source_type, source_id, candidate_text, status, resolved_product_id,
+             reviewed_by, reviewed_at, created_at, resolver_confidence, resolver_reason, resolution_method)
+        VALUES
+            (@candidate_id, @source_type, @source_id, @candidate_text, 'rejected', NULL,
+             @admin_id, CURRENT_TIMESTAMP(), CURRENT_TIMESTAMP(), 0.0, 'Rejected manually by admin', 'admin')
+        """,
+        job_config=bigquery.QueryJobConfig(query_parameters=[
+            bigquery.ScalarQueryParameter("candidate_id", "STRING", candidate_id),
+            bigquery.ScalarQueryParameter("source_type", "STRING", candidate["source_type"]),
+            bigquery.ScalarQueryParameter("source_id", "STRING", candidate["source_id"]),
+            bigquery.ScalarQueryParameter("candidate_text", "STRING", candidate["candidate_text"]),
+            bigquery.ScalarQueryParameter("admin_id", "STRING", admin.id),
+        ]),
+    ).result()
+    return {"candidate_id": candidate_id, "status": "rejected"}

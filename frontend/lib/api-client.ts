@@ -143,21 +143,25 @@ export const api = {
       aliases: () => request<ProductAliasItem[]>("/admin/products/aliases"),
       createAlias: (data: { product_id: string; alias_text: string; alias_type?: string }) =>
         request<ProductAliasItem>("/admin/products/aliases", { method: "POST", body: JSON.stringify(data) }),
+      removeAlias: (aliasId: string) => request<void>(`/admin/products/aliases/${aliasId}`, { method: "DELETE" }),
       templates: () => request<ProductSpecTemplateItem[]>("/admin/products/templates"),
       createTemplate: (data: { category: string; spec_key: string; display_label: string; value_type: "string" | "number" | "boolean"; unit?: string }) =>
         request<ProductSpecTemplateItem>("/admin/products/templates", { method: "POST", body: JSON.stringify(data) }),
-      detailRequests: () => request<ProductDetailChangeRequestItem[]>("/admin/products/detail-requests"),
+      removeTemplate: (category: string, specKey: string) =>
+        request<void>(`/admin/products/templates/${encodeURIComponent(category)}/${encodeURIComponent(specKey)}`, { method: "DELETE" }),
+      detailRequests: (status = "pending") => request<ProductDetailChangeRequestItem[]>(`/admin/products/detail-requests?status=${encodeURIComponent(status)}`),
       reviewDetailRequest: (id: string, action: "approve" | "reject") =>
         request<{ request_id: string; status: string }>(`/admin/products/detail-requests/${id}/review`, {
           method: "POST",
           body: JSON.stringify({ action }),
         }),
-      candidates: () => request<ProductResolutionCandidate[]>("/admin/products/resolution-candidates"),
+      candidates: (status = "pending") => request<ProductResolutionCandidate[]>(`/admin/products/resolution-candidates?status=${encodeURIComponent(status)}`),
       reviewCandidate: (id: string, product_id: string, alias_text?: string, sentiment_label?: "POSITIVE" | "NEGATIVE" | "NEUTRAL") =>
         request(`/admin/products/resolution-candidates/${id}/review`, {
           method: "POST",
           body: JSON.stringify({ product_id, alias_text, sentiment_label }),
         }),
+      rejectCandidate: (id: string) => request(`/admin/products/resolution-candidates/${id}/reject`, { method: "POST" }),
       videoMappings: () => request<VideoProductMapping[]>("/admin/products/video-mappings"),
       overrideVideoMapping: (videoId: string, product_id: string, role: "primary" | "secondary" = "primary") =>
         request(`/admin/products/video-mappings/${videoId}`, {

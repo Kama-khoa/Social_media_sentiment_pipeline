@@ -2,12 +2,12 @@
    TechChoice — Product Detail page
    exports: ProductDetail
    ============================================================ */
-function ProductDetail({ id, session, onBack, onAuth }) {
+function ProductDetail({ id, session, onBack, onAuth, savedIds = [], onToggleSave }) {
   const p = window.DATA.findProduct(id);
   const [loading, setLoading] = React.useState(true);
   const [section, setSection] = React.useState("analytics");
-  const [saved, setSaved] = React.useState(false);
   const [proposalSent, setProposalSent] = React.useState(false);
+  const saved = savedIds.includes(id);
   React.useEffect(() => { setLoading(true); const t = setTimeout(() => setLoading(false), 550); return () => clearTimeout(t); }, [id]);
 
   if (!p) return null;
@@ -58,7 +58,9 @@ function ProductDetail({ id, session, onBack, onAuth }) {
             <h1 style={{ margin: 0, fontSize: 32, fontWeight: 800, letterSpacing: "-.02em" }}>{p.product_name}</h1>
             <p className="muted" style={{ fontSize: 14.5, marginTop: 8, maxWidth: 560, lineHeight: 1.55 }}>{p.desc}</p>
             <div style={{ display: "flex", gap: 10, marginTop: 16, flexWrap: "wrap" }}>
-              <button className="btn btn-soft" onClick={() => session ? setSaved(s => !s) : onAuth("login")}>
+              <button className="btn btn-soft"
+                style={saved ? { color: "var(--neg)", borderColor: "color-mix(in oklab, var(--neg) 40%, transparent)" } : {}}
+                onClick={() => session ? (onToggleSave && onToggleSave(id)) : onAuth("login")}>
                 <Icon name="heart" size={16} />{saved ? "Đã lưu" : "Lưu sản phẩm"}
               </button>
               <button className="btn btn-ghost"><Icon name="external" size={16} />Trang chính thức</button>
@@ -96,7 +98,7 @@ function ProductDetail({ id, session, onBack, onAuth }) {
       {section === "analytics" && (
         <div className="fade-in" style={{ display: "flex", flexDirection: "column", gap: 18 }}>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: 14 }}>
-            <KpiCard icon="gauge" label="Điểm Bayesian" value={(p.score * 100).toFixed(1)} sub="trên thang 100" accent="var(--primary)" />
+            <KpiCard icon="gauge" label="Điểm tín nhiệm" value={(p.score * 100).toFixed(1)} sub="trên thang 100" accent="var(--primary)" />
             <KpiCard icon="heart" label="Tỉ lệ tích cực" value={p.pos + "%"} trend={p.trend} accent="var(--pos)" />
             <KpiCard icon="bell" label="Tổng đề cập" value={(p.mentions / 1000).toFixed(1) + "K"} sub="12 tháng gần nhất" accent="var(--v-400)" />
             <KpiCard icon="activity" label="Mức tranh cãi" value={({ low: "Thấp", medium: "Vừa", high: "Cao" })[p.controversy]} sub="chỉ số controversy" accent="var(--neu)" />

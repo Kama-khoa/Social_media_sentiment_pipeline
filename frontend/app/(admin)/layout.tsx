@@ -11,6 +11,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const router = useRouter();
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [hash, setHash] = useState("");
 
   useEffect(() => {
     if (!isLoading) {
@@ -21,6 +22,17 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       }
     }
   }, [user, isLoading, router]);
+
+  useEffect(() => {
+    const syncHash = () => setHash(window.location.hash);
+    syncHash();
+    window.addEventListener("hashchange", syncHash);
+    window.addEventListener("popstate", syncHash);
+    return () => {
+      window.removeEventListener("hashchange", syncHash);
+      window.removeEventListener("popstate", syncHash);
+    };
+  }, [pathname]);
 
   if (isLoading) {
     return (
@@ -33,20 +45,26 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   if (!user || user.role !== "admin") return null;
 
   const titleMap: Record<string, string> = {
-    "/admin": "Tổng quan Dashboard",
+    "/admin": "Tổng quan phân tích",
     "/admin/keywords": "Quản lý từ khóa",
     "/admin/channels": "Quản lý kênh",
     "/admin/products": "Quản lý sản phẩm",
+    "/admin/products/aliases": "Tên gọi khác",
+    "/admin/products/candidates": "Duyệt ánh xạ SP",
+    "/admin/products/spec-templates": "Mẫu thông số",
     "/admin/users": "Quản lý tài khoản",
     "/admin/logs": "Quản lý log pipeline",
-    "/admin/airflow": "Quản lý Airflow",
+    "/admin/airflow": "Tình trạng Pipeline",
+    "/admin/airflow#runs": "Lịch sử DAG Runs",
+    "/admin/airflow#ops": "Chỉ số vận hành",
   };
+  const title = titleMap[`${pathname}${hash}`] ?? titleMap[pathname] ?? "TechChoice Admin";
 
   return (
     <div className="admin-app flex min-h-screen">
       <AdminSidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       <div className="flex min-w-0 flex-1 flex-col">
-        <Header title={titleMap[pathname] ?? "TechChoice Admin"} onMenu={() => setSidebarOpen(true)} />
+        <Header title={title} onMenu={() => setSidebarOpen(true)} />
         <main className="flex-1 p-7"><div key={pathname} className="fade-up">{children}</div></main>
       </div>
     </div>

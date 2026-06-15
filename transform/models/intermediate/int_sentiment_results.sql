@@ -9,6 +9,15 @@ WITH raw AS (
     {% if is_incremental() %}
     WHERE processed_at > (SELECT COALESCE(MAX(processed_at), TIMESTAMP('1970-01-01')) FROM {{ this }})
     {% endif %}
+),
+deduplicated AS (
+    SELECT
+        *,
+        ROW_NUMBER() OVER (
+            PARTITION BY result_id
+            ORDER BY processed_at DESC, confidence_score DESC, dag_run_id DESC
+        ) AS result_rank
+    FROM raw
 )
 
 SELECT
@@ -23,4 +32,5 @@ SELECT
     inference_model,
     dag_run_id,
     processed_at
-FROM raw
+FROM deduplicated
+WHERE result_rank = 1

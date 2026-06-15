@@ -180,7 +180,7 @@ export default function PipelineHealthPage() {
           </Card>
 
           {/* Metrics grid */}
-          <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+          <div id="ops" className="grid grid-cols-2 lg:grid-cols-3 gap-4 scroll-mt-24">
             <QuotaBar used={data.metrics.quota_used_today} limit={data.metrics.quota_limit} />
             <MetricCard
               label="Video thu thập hôm nay"
@@ -203,7 +203,7 @@ export default function PipelineHealthPage() {
           </div>
 
           {/* DAG runs table */}
-          <Card className="overflow-hidden shadow-none">
+          <Card id="runs" className="overflow-hidden shadow-none scroll-mt-24">
             <div className="px-5 py-4 border-b border-slate-200">
               <h2 className="text-sm font-semibold text-slate-700 uppercase tracking-wider">DAG Runs gần đây</h2>
             </div>
