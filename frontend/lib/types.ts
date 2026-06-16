@@ -56,6 +56,9 @@ export interface FavoriteProductItem {
   bayesian_score: number;
   controversy_label: "high" | "medium" | "low";
   total_mentions: number;
+  statement_count: number;
+  positive_pct: number;
+  negative_pct: number;
   created_at: string;
 }
 
@@ -317,6 +320,7 @@ export interface PipelineMetrics {
   comments_crawled_today: number;
   channels_pending_historical: number;
   last_nlp_batch_id: string | null;
+  nlp_fallback_rate?: number | null;
 }
 
 export interface PipelineHealthData {
@@ -324,6 +328,15 @@ export interface PipelineHealthData {
   recent_dag_runs: DagRunDetail[];
   metrics: PipelineMetrics;
   as_of: string;
+}
+
+export interface PipelineOpsSeries {
+  ops_series: number[];
+  nlp_series: number[];
+  videos_today: number;
+  comments_today: number;
+  pipeline_latency: string;
+  nlp_accuracy: string;
 }
 
 export interface LogFileItem {

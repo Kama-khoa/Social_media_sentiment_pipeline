@@ -47,7 +47,7 @@ def search_products(q: str = "", category: str = "", limit: int = 20, response: 
             SELECT
                 product_id,
                 ROW_NUMBER() OVER (
-                    ORDER BY bayesian_score DESC, statement_count DESC, total_mention_count DESC, product_id ASC
+                    ORDER BY CASE WHEN statement_count >= 5 THEN 1 ELSE 0 END DESC, bayesian_score DESC, statement_count DESC, total_mention_count DESC, product_id ASC
                 ) AS rank,
                 bayesian_score,
                 controversy_label,

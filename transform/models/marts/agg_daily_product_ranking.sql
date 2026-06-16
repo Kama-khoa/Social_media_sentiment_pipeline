@@ -160,7 +160,7 @@ SELECT
     sentiment_trend,
     ROW_NUMBER() OVER (
         PARTITION BY ranking_date
-        ORDER BY bayesian_score DESC, statement_count DESC, total_mention_count DESC, product_id ASC
+        ORDER BY CASE WHEN statement_count >= 5 THEN 1 ELSE 0 END DESC, bayesian_score DESC, statement_count DESC, total_mention_count DESC, product_id ASC
     ) AS rank_position,
     CURRENT_TIMESTAMP() AS _dbt_processed_at
 FROM trended_stats

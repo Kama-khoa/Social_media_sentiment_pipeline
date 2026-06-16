@@ -14,6 +14,7 @@ from api.schemas.response_schemas import (
     PipelineHealthResponse,
     PipelineMetrics,
     TaskInstanceDetail,
+    PipelineOpsSeries,
 )
 
 router = APIRouter(prefix="/admin/pipeline", tags=["pipeline"])
@@ -75,11 +76,13 @@ def pipeline_health(_: AppUser = Depends(require_admin)):
                         continue
 
                     run = runs_data["dag_runs"][0]
-                    run_id = run.get("run_id", "")
+                    run_id = run.get("dag_run_id", "")
 
                     tasks: list[TaskInstanceDetail] = []
                     if run_id:
-                        ti_data = _safe_airflow_get(client, f"/api/v1/dags/{dag_id}/dagRuns/{run_id}/taskInstances")
+                        import urllib.parse
+                        run_id_enc = urllib.parse.quote(run_id)
+                        ti_data = _safe_airflow_get(client, f"/api/v1/dags/{dag_id}/dagRuns/{run_id_enc}/taskInstances")
                         if ti_data:
                             for ti in ti_data.get("task_instances", []):
                                 tasks.append(TaskInstanceDetail(
@@ -170,6 +173,26 @@ def trigger_dag(dag_id: str, _: AppUser = Depends(require_admin)):
             raise HTTPException(status_code=exc.response.status_code, detail=f"Airflow error: {exc.response.text[:200]}")
 
 
+@router.get("/dags/{dag_id}/runs/{run_id}/tasks/{task_id}/logs/{try_number}")
+def get_task_log(dag_id: str, run_id: str, task_id: str, try_number: int, _: AppUser = Depends(require_admin)):
+    settings = get_settings()
+    with _airflow_client(settings) as client:
+        try:
+            import urllib.parse
+            run_id_enc = urllib.parse.quote(run_id)
+            # Note: Airflow API returns plain text for logs if Accept is text/plain.
+            # We fetch it and return as JSON wrapper.
+            resp = client.get(f"/api/v1/dags/{dag_id}/dagRuns/{run_id_enc}/taskInstances/{task_id}/logs/{try_number}")
+            resp.raise_for_status()
+            return {"content": resp.text}
+        except httpx.ConnectError:
+            raise HTTPException(status_code=502, detail="Cannot connect to Airflow webserver")
+        except httpx.TimeoutException:
+            raise HTTPException(status_code=504, detail="Airflow request timed out")
+        except httpx.HTTPStatusError as exc:
+            raise HTTPException(status_code=exc.response.status_code, detail=f"Airflow error: {exc.response.text[:200]}")
+
+
 @router.get("/metrics", response_model=PipelineMetrics)
 def pipeline_metrics(_: AppUser = Depends(require_admin)):
     settings = get_settings()
@@ -182,13 +205,13 @@ def _fetch_bq_metrics(settings) -> PipelineMetrics:
         f"""
         SELECT total_units_used, comments_collected, videos_discovered
         FROM `{settings.gcp_project_id}.{settings.bq_dataset}.quota_daily_summary`
-        WHERE summary_date = CURRENT_DATE()
+        ORDER BY summary_date DESC
         LIMIT 1
         """,
         f"""
         SELECT total_units_used, comments_crawled AS comments_collected, videos_discovered
         FROM `{settings.gcp_project_id}.{settings.bq_dataset}.quota_daily_summary`
-        WHERE quota_date = CURRENT_DATE()
+        ORDER BY quota_date DESC
         LIMIT 1
         """,
     ]
@@ -236,6 +259,21 @@ def _fetch_bq_metrics(settings) -> PipelineMetrics:
             logger.warning("Could not fetch NLP metrics with fallback query: %s", exc)
     last_nlp = nlp_rows[0]["dag_run_id"] if nlp_rows else None
 
+    nlp_fallback_rate = None
+    if last_nlp:
+        try:
+            rate_rows = query_to_list(
+                f"""
+                SELECT COUNTIF(inference_model = 'gemini-1.5-flash') / NULLIF(COUNT(*), 0) AS rate
+                FROM `{settings.gcp_project_id}.{settings.bq_dataset}.raw_sentiment_results`
+                WHERE dag_run_id = '{last_nlp}'
+                """
+            )
+            if rate_rows and rate_rows[0]["rate"] is not None:
+                nlp_fallback_rate = float(rate_rows[0]["rate"])
+        except Exception as exc:
+            logger.warning("Could not calculate NLP fallback rate: %s", exc)
+
     return PipelineMetrics(
         quota_used_today=int(quota.get("total_units_used") or 0),
         quota_limit=10000,
@@ -243,4 +281,19 @@ def _fetch_bq_metrics(settings) -> PipelineMetrics:
         comments_crawled_today=int(quota.get("comments_collected") or 0),
         channels_pending_historical=int(pending),
         last_nlp_batch_id=last_nlp,
+        nlp_fallback_rate=nlp_fallback_rate,
+    )
+
+
+@router.get("/series", response_model=PipelineOpsSeries)
+def pipeline_series(_: AppUser = Depends(require_admin)):
+    # Trả về dữ liệu chuỗi 15 ngày cho "Chỉ số vận hành".
+    # Ở bản demo này, chúng ta sử dụng dữ liệu mô phỏng tương tự admin.jsx.
+    return PipelineOpsSeries(
+        ops_series=[11200, 14300, 9500, 18400, 22100, 15000, 13200, 19400, 25600, 17800, 21000, 24500, 28900, 20100, 26700],
+        nlp_series=[85.4, 86.1, 86.8, 87.5, 88.2, 89.0, 91.5, 93.2, 94.8, 95.5, 96.2, 97.0, 97.4, 97.5, 97.7],
+        videos_today=850,
+        comments_today=15400,
+        pipeline_latency="2.1s",
+        nlp_accuracy="97.7%"
     )

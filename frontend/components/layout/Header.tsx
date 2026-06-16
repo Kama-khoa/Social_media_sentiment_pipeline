@@ -20,15 +20,15 @@ export function Header({ title, onMenu }: HeaderProps) {
   const { user, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const router = useRouter();
-  const [quotaPct, setQuotaPct] = useState<number | null>(null);
+  const [quotaRemainingPct, setQuotaRemainingPct] = useState<number | null>(null);
   const [systemHealthy, setSystemHealthy] = useState<boolean | null>(null);
 
   useEffect(() => {
     api.dashboard.admin().then(({ pipeline_status }) => {
-      setQuotaPct(pipeline_status.quota_limit > 0 ? pipeline_status.quota_used_today / pipeline_status.quota_limit * 100 : 0);
+      setQuotaRemainingPct(pipeline_status.quota_limit > 0 ? Math.max(0, 100 - (pipeline_status.quota_used_today / pipeline_status.quota_limit * 100)) : 0);
       setSystemHealthy(pipeline_status.airflow_webserver === "healthy" && pipeline_status.airflow_scheduler === "healthy");
     }).catch(() => {
-      setQuotaPct(null);
+      setQuotaRemainingPct(null);
       setSystemHealthy(null);
     });
   }, []);
@@ -45,7 +45,7 @@ export function Header({ title, onMenu }: HeaderProps) {
         <span className={`h-2 w-2 rounded-full ${systemHealthy === true ? "bg-[var(--pos)] [animation:pulseDot_1.4s_infinite]" : systemHealthy === false ? "bg-[var(--neg)]" : "bg-[var(--neu)]"}`} />
         {systemHealthy === true ? "Hệ thống hoạt động" : systemHealthy === false ? "Hệ thống cần kiểm tra" : "Đang kiểm tra hệ thống"}
       </span>
-      {quotaPct !== null && <span className="chip num">Quota {quotaPct.toFixed(0)}%</span>}
+      {quotaRemainingPct !== null && <span className="chip num">{quotaRemainingPct.toFixed(0)}% quota</span>}
     </div>
     <button className={iconButtonClass} onClick={toggleTheme} title="Sáng/tối" aria-label="Đổi giao diện sáng tối"><Icon name={theme === "dark" ? "sun" : "moon"} size={18} /></button>
     <Link href="/" className="hidden sm:block"><Button variant="outline" size="sm" className="h-9 rounded-[10px] px-3.5"><Icon name="external" size={16} />Trang công khai</Button></Link>

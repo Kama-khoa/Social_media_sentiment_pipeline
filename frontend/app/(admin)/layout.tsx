@@ -55,8 +55,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     "/admin/users": "Quản lý tài khoản",
     "/admin/logs": "Quản lý log pipeline",
     "/admin/airflow": "Tình trạng Pipeline",
-    "/admin/airflow#runs": "Lịch sử DAG Runs",
-    "/admin/airflow#ops": "Chỉ số vận hành",
+    "/admin/airflow/runs": "Lịch sử DAG Runs",
+    "/admin/airflow/ops": "Chỉ số vận hành",
   };
   const title = titleMap[`${pathname}${hash}`] ?? titleMap[pathname] ?? "TechChoice Admin";
 

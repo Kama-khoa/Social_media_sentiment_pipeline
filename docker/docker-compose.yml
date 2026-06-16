@@ -14,6 +14,7 @@ x-airflow-common: &airflow-common
     - GOOGLE_APPLICATION_CREDENTIALS=/opt/airflow/gcp_credentials.json
     - YOUTUBE_COOKIES_DIR=/opt/airflow/config
     - AIRFLOW__CORE__PARALLELISM=4
+    - AIRFLOW__API__AUTH_BACKENDS=airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session
   env_file:
     - ../.env
   volumes:

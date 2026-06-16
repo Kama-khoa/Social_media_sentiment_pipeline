@@ -77,7 +77,7 @@ class ProductDetailChangeRequestItem(BaseModel):
     proposed_official_url: Optional[str]
     proposed_image_url: Optional[str]
     submitted_by: str
-    status: Literal["pending", "approved", "rejected"]
+    status: Literal["pending", "processing", "approved", "rejected"]
     reviewed_by: Optional[str]
     reviewed_at: Optional[datetime]
     review_note: Optional[str]
@@ -185,6 +185,15 @@ class PipelineHealthResponse(BaseModel):
     as_of: datetime
 
 
+class PipelineOpsSeries(BaseModel):
+    ops_series: list[int]
+    nlp_series: list[float]
+    videos_today: int
+    comments_today: int
+    pipeline_latency: str
+    nlp_accuracy: str
+
+
 class LogFileItem(BaseModel):
     path: str
     size_bytes: int
@@ -263,6 +272,9 @@ class FavoriteProductItem(BaseModel):
     bayesian_score: float
     controversy_label: Literal["high", "medium", "low"]
     total_mentions: int
+    statement_count: int
+    positive_pct: float
+    negative_pct: float
     created_at: datetime
 
 

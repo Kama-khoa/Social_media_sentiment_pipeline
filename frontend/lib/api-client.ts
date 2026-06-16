@@ -19,7 +19,10 @@ import type {
   FavoriteProductItem,
   ProductFavoriteStatus,
   TopProduct,
+  CategoryStat,
   UserDashboardData,
+  PipelineOpsSeries,
+  DagRunSummary,
 } from "./types";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
@@ -89,6 +92,7 @@ export const api = {
   products: {
     top: (category: string = "all", limit = 20) =>
       request<TopProduct[]>(`/products/top/${category}?limit=${limit}`),
+    stats: () => request<CategoryStat[]>("/products/stats"),
     aspects: (productId: string) =>
       request<ProductDetail>(`/products/${productId}/aspects`),
     attribution: (productId: string) =>
@@ -116,13 +120,14 @@ export const api = {
 
   admin: {
     channels: {
+      quota: () => request<{ search_remaining: number }>("/admin/channels/quota"),
       list: () => request<ChannelConfigItem[]>("/admin/channels"),
       create: (data: { channel_url: string }) =>
         request<ChannelConfigItem>("/admin/channels", { method: "POST", body: JSON.stringify(data) }),
       update: (id: string, data: { channel_name?: string; channel_url?: string; channel_handle?: string; subscriber_count?: number; is_active?: boolean }) =>
         request<ChannelConfigItem>(`/admin/channels/${id}`, { method: "PUT", body: JSON.stringify(data) }),
       crawl: (id: string, data: { lookback_days: number; preferred_mode?: "auto" | "api" | "ytdlp" }) =>
-        request<{ run_id?: string; crawl_mode: string; quota_remaining: number; lookback_days: number }>(`/admin/channels/${id}/crawl`, {
+        request<{ dag_id?: string; run_id?: string; crawl_mode: string; quota_remaining: number; lookback_days: number }>(`/admin/channels/${id}/crawl`, {
           method: "POST",
           body: JSON.stringify(data),
         }),
@@ -150,12 +155,13 @@ export const api = {
       removeTemplate: (category: string, specKey: string) =>
         request<void>(`/admin/products/templates/${encodeURIComponent(category)}/${encodeURIComponent(specKey)}`, { method: "DELETE" }),
       detailRequests: (status = "pending") => request<ProductDetailChangeRequestItem[]>(`/admin/products/detail-requests?status=${encodeURIComponent(status)}`),
-      reviewDetailRequest: (id: string, action: "approve" | "reject") =>
+      reviewDetailRequest: (id: string, action: "approve" | "reject" | "processing") =>
         request<{ request_id: string; status: string }>(`/admin/products/detail-requests/${id}/review`, {
           method: "POST",
           body: JSON.stringify({ action }),
         }),
-      candidates: (status = "pending") => request<ProductResolutionCandidate[]>(`/admin/products/resolution-candidates?status=${encodeURIComponent(status)}`),
+      candidateCounts: () => request<Record<string, number>>("/admin/products/resolution-candidates/counts"),
+      candidates: (status = "pending", page = 1, limit = 20) => request<ProductResolutionCandidate[]>(`/admin/products/resolution-candidates?status=${encodeURIComponent(status)}&page=${page}&limit=${limit}`),
       reviewCandidate: (id: string, product_id: string, alias_text?: string, sentiment_label?: "POSITIVE" | "NEGATIVE" | "NEUTRAL") =>
         request(`/admin/products/resolution-candidates/${id}/review`, {
           method: "POST",
@@ -175,9 +181,12 @@ export const api = {
       runs: (dagId: string, limit = 5) => request<unknown>(`/admin/pipeline/dags/${dagId}/runs?limit=${limit}`),
       tasks: (dagId: string, runId: string) =>
         request<unknown>(`/admin/pipeline/dags/${dagId}/runs/${runId}/tasks`),
+      taskLog: (dagId: string, runId: string, taskId: string, tryNumber: number = 1) =>
+        request<{ content: string }>(`/admin/pipeline/dags/${dagId}/runs/${runId}/tasks/${taskId}/logs/${tryNumber}`),
       trigger: (dagId: string) =>
         request<unknown>(`/admin/pipeline/dags/${dagId}/trigger`, { method: "POST" }),
       metrics: () => request<unknown>("/admin/pipeline/metrics"),
+      series: () => request<PipelineOpsSeries>("/admin/pipeline/series"),
     },
     logs: {
       list: () => request<LogFileListResponse>("/admin/logs"),

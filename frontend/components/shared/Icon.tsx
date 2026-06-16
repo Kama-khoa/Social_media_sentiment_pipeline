@@ -1,6 +1,6 @@
 import type { CSSProperties } from "react";
 
-export type IconName = "activity" | "arrowDown" | "arrowUp" | "bell" | "box" | "broadcast" | "check" | "chevron" | "clock" | "close" | "edit" | "external" | "filter" | "flow" | "gauge" | "grid" | "heart" | "inbox" | "link" | "logout" | "menu" | "moon" | "play" | "plus" | "refresh" | "search" | "server" | "shield" | "spark" | "spec" | "sun" | "tag" | "trash" | "trophy" | "user" | "users";
+export type IconName = "activity" | "arrowDown" | "arrowUp" | "bell" | "box" | "broadcast" | "check" | "chevron" | "clock" | "close" | "edit" | "external" | "filter" | "flow" | "gauge" | "grid" | "heart" | "heartSolid" | "inbox" | "link" | "logout" | "menu" | "moon" | "play" | "plus" | "refresh" | "search" | "server" | "shield" | "spark" | "spec" | "sun" | "tag" | "trash" | "trophy" | "user" | "users";
 
 interface IconProps {
   name: IconName;
@@ -23,6 +23,7 @@ export function Icon({ name, size = 18, style, className }: IconProps) {
     gauge: <><path d="M12 13l4-3" {...p} /><path d="M4.5 18a9 9 0 1 1 15 0" {...p} /></>, grid: <><rect x="3" y="3" width="7" height="7" rx="1.5" {...p} /><rect x="14" y="3" width="7" height="7" rx="1.5" {...p} /><rect x="3" y="14" width="7" height="7" rx="1.5" {...p} /><rect x="14" y="14" width="7" height="7" rx="1.5" {...p} /></>,
     broadcast: <><circle cx="12" cy="12" r="2" {...p} /><path d="M8.5 8.5a5 5 0 0 0 0 7M15.5 8.5a5 5 0 0 1 0 7M6 6a9 9 0 0 0 0 12M18 6a9 9 0 0 1 0 12" {...p} /></>, tag: <><path d="M3 12V5a2 2 0 0 1 2-2h7l9 9-9 9-9-9Z" {...p} /><circle cx="7.5" cy="7.5" r="1.2" fill="currentColor" /></>,
     box: <><path d="M21 8 12 3 3 8l9 5 9-5Z" {...p} /><path d="M3 8v8l9 5 9-5V8M12 13v8" {...p} /></>, heart: <path d="M19 14c1.5-1.5 3-3.3 3-5.6A3.9 3.9 0 0 0 12 5 3.9 3.9 0 0 0 2 8.4c0 2.3 1.5 4.1 3 5.6l7 7 7-7Z" {...p} />,
+    heartSolid: <path d="M19 14c1.5-1.5 3-3.3 3-5.6A3.9 3.9 0 0 0 12 5 3.9 3.9 0 0 0 2 8.4c0 2.3 1.5 4.1 3 5.6l7 7 7-7Z" fill="currentColor" stroke="none" />,
     flow: <><circle cx="5" cy="6" r="2.4" {...p} /><circle cx="5" cy="18" r="2.4" {...p} /><circle cx="19" cy="12" r="2.4" {...p} /><path d="M7.4 6H13a3.5 3.5 0 0 1 3.5 3.5M7.4 18H13a3.5 3.5 0 0 0 3.5-3.5" {...p} /></>, activity: <path d="M3 12h4l2 7 4-16 2 9h6" {...p} />, shield: <path d="M12 3 4 6v6c0 5 3.5 7.5 8 9 4.5-1.5 8-4 8-9V6l-8-3Z" {...p} />,
     link: <><path d="M10 13a5 5 0 0 0 7.1.1l2-2a5 5 0 0 0-7.1-7.1l-1.1 1.1" {...p} /><path d="M14 11a5 5 0 0 0-7.1-.1l-2 2A5 5 0 0 0 12 20l1.1-1.1" {...p} /></>,
     inbox: <><path d="M4 4h16l2 10v4a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-4L4 4Z" {...p} /><path d="M2 14h6l2 3h4l2-3h6" {...p} /></>,

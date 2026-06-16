@@ -186,6 +186,13 @@ def _airflow_trigger(settings, dag_id: str, conf: dict) -> dict:
 
 # ── Channels ──────────────────────────────────────────────────────────────────
 
+@router.get("/channels/quota")
+def get_channel_quota(_: AppUser = Depends(require_admin)):
+    settings = get_settings()
+    search_remaining = _quota_remaining(settings, "search_videos", 9000)
+    return {"search_remaining": search_remaining}
+
+
 @router.get("/channels", response_model=list[ChannelConfigItem])
 def list_channels(_: AppUser = Depends(require_admin)):
     settings = get_settings()
@@ -223,11 +230,16 @@ def create_channel(body: ChannelCreateRequest, _: AppUser = Depends(require_admi
     settings = get_settings()
     resolved = _resolve_channel_metadata(body.channel_url, settings)
     existing = query_to_list(
-        f"SELECT channel_id FROM `{settings.gcp_project_id}.{settings.bq_dataset}.channel_config` WHERE channel_id = @cid",
+        f"SELECT channel_id, channel_name, is_active FROM `{settings.gcp_project_id}.{settings.bq_dataset}.channel_config` WHERE channel_id = @cid",
         [bigquery.ScalarQueryParameter("cid", "STRING", resolved["channel_id"])],
     )
     if existing:
-        raise HTTPException(status_code=409, detail="Kênh này đã tồn tại trong hệ thống.")
+        row = existing[0]
+        status = "đang hoạt động" if row["is_active"] else "đã bị tắt"
+        raise HTTPException(
+            status_code=409, 
+            detail=f"Kênh này đã tồn tại trong hệ thống với tên '{row['channel_name']}' (trạng thái: {status})."
+        )
 
     now = _bq_now()
     client = _get_bq_client()
@@ -374,7 +386,7 @@ def crawl_channel(channel_id: str, body: ChannelCrawlRequest, _: AppUser = Depen
     result = _airflow_trigger(settings, _YOUTUBE_DAG_ID, conf)
     return {
         "dag_id": _YOUTUBE_DAG_ID,
-        "run_id": result.get("run_id"),
+        "run_id": result.get("dag_run_id") or result.get("run_id"),
         "crawl_mode": crawl_mode,
         "quota_remaining": search_remaining,
         "lookback_days": body.lookback_days,

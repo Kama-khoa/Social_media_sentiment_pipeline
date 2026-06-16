@@ -98,7 +98,7 @@ class ProductDetailChangeRequestCreate(BaseModel):
 
 
 class ProductDetailChangeRequestReview(BaseModel):
-    action: Literal["approve", "reject"]
+    action: Literal["approve", "reject", "processing"]
     review_note: Optional[str] = None
 
 

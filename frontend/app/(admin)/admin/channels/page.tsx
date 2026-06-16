@@ -54,6 +54,7 @@ export default function ChannelsPage() {
   const [formError, setFormError] = useState<string | null>(null);
   const [crawlError, setCrawlError] = useState<string | null>(null);
   const [crawlResult, setCrawlResult] = useState<string | null>(null);
+  const [crawlProgress, setCrawlProgress] = useState<number | null>(null);
   const [quotaRemaining, setQuotaRemaining] = useState<number | null>(null);
 
   const { register, handleSubmit, reset, formState: { errors } } = useForm<ChannelForm>({
@@ -69,17 +70,16 @@ export default function ChannelsPage() {
     setLoading(true);
     setPageError(null);
     try {
-      const [channelRows, metrics] = await Promise.all([
+      const [channelRows, quotaData] = await Promise.all([
         api.admin.channels.list(),
-        api.admin.pipeline.metrics().catch(() => null),
+        api.admin.channels.quota().catch(() => null),
       ]);
       setChannels(channelRows);
       setPage((current) => Math.min(current, Math.max(1, Math.ceil(channelRows.length / PAGE_SIZE))));
-      const m = metrics as { quota_used_today?: number; quota_limit?: number } | null;
-      if (m && typeof m.quota_used_today === "number" && typeof m.quota_limit === "number") {
-        setQuotaRemaining(Math.max(0, m.quota_limit - m.quota_used_today));
+      if (quotaData && typeof quotaData.search_remaining === "number") {
+        setQuotaRemaining(quotaData.search_remaining);
       }
-    } catch {
+    } catch (err: unknown) {
       setPageError("Không thể tải danh sách kênh. Vui lòng thử lại.");
     } finally {
       setLoading(false);
@@ -112,6 +112,7 @@ export default function ChannelsPage() {
     setCrawlTarget(ch);
     setCrawlError(null);
     setCrawlResult(null);
+    setCrawlProgress(null);
   }
 
   async function onSubmit(data: ChannelForm) {
@@ -143,21 +144,93 @@ export default function ChannelsPage() {
     setCrawling(true);
     setCrawlError(null);
     setCrawlResult(null);
+    setCrawlProgress(0);
+    
+    let runIdToPoll: string | null = null;
+    let dagIdToPoll: string | null = null;
+    
     try {
       const lookback = parseInt(data.lookback_days, 10);
       const result = await api.admin.channels.crawl(crawlTarget.channel_id, {
         lookback_days: lookback,
         preferred_mode: "auto",
       });
-      const modeLabel = result.crawl_mode === "ytdlp" ? "yt-dlp" : "API/yt-dlp tự động";
-      setCrawlResult(`Đã trigger crawl ${lookback} ngày bằng ${modeLabel}. Run ID: ${result.run_id ?? "unknown"}`);
+      runIdToPoll = result.run_id ?? null;
+      dagIdToPoll = result.dag_id ?? null;
       setQuotaRemaining(result.quota_remaining);
     } catch (err: unknown) {
       const e = err as { detail?: string };
       setCrawlError(e?.detail ?? "Không thể trigger crawl.");
-    } finally {
       setCrawling(false);
+      setCrawlProgress(null);
+      return;
     }
+
+    if (!runIdToPoll || !dagIdToPoll) {
+      setCrawlError("Đã trigger crawl nhưng không lấy được ID tiến trình.");
+      setCrawling(false);
+      setCrawlProgress(null);
+      return;
+    }
+
+    let progress = 0;
+    while (progress < 100) {
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+      
+      try {
+        const tiData: any = await api.admin.pipeline.tasks(dagIdToPoll, runIdToPoll);
+        const tasks = tiData?.task_instances || [];
+        
+        const getTaskState = (id: string) => tasks.find((t: any) => t.task_id === id)?.state;
+        const eltState = getTaskState("run_youtube_elt");
+        const dbtState = getTaskState("prepare_downstream_models");
+
+        console.log(`[DAG Polling] Run ID: ${runIdToPoll} | Tasks: ${tasks.length} | ELT: ${eltState || 'N/A'} | DBT: ${dbtState || 'N/A'}`);
+
+        if (eltState === "failed" || dbtState === "failed" || eltState === "upstream_failed" || dbtState === "upstream_failed") {
+          setCrawlError("Thu thập dữ liệu thất bại. Task trong tiến trình đã bị lỗi.");
+          break;
+        }
+
+        let newProgress = 10;
+        if (tasks.length === 0) {
+           newProgress = 5;
+        } else if (eltState === "success") {
+          newProgress = 60;
+          if (dbtState === "success") {
+            newProgress = 100;
+          } else if (dbtState === "running") {
+            newProgress = 80;
+          }
+        } else if (eltState === "running") {
+          newProgress = Math.min(50, progress + 5); 
+        }
+
+        setCrawlProgress(newProgress);
+        progress = newProgress;
+
+        if (newProgress === 100) {
+          setCrawlResult("Đã hoàn thành thu thập dữ liệu kênh.");
+          break;
+        }
+
+        const runsData: any = await api.admin.pipeline.runs(dagIdToPoll, 5);
+        const currentRun = runsData?.dag_runs?.find((r: any) => r.dag_run_id === runIdToPoll);
+        if (currentRun) {
+          if (currentRun.state === "failed") {
+            setCrawlError("Tiến trình thu thập đã bị ngừng hoặc lỗi.");
+            break;
+          } else if (currentRun.state === "success") {
+            setCrawlProgress(100);
+            setCrawlResult("Đã hoàn thành thu thập dữ liệu kênh.");
+            break;
+          }
+        }
+      } catch (err) {
+        // silent fail on polling error, continue trying
+      }
+    }
+    setCrawling(false);
   }
 
   async function handleToggleActive(ch: ChannelConfigItem) {
@@ -165,7 +238,7 @@ export default function ChannelsPage() {
     setPageError(null);
     try {
       await api.admin.channels.update(ch.channel_id, { is_active: !ch.is_active });
-      await load();
+      setChannels((prev) => prev.map((c) => c.channel_id === ch.channel_id ? { ...c, is_active: !ch.is_active } : c));
     } catch (err: unknown) {
       const e = err as { detail?: string };
       setPageError(e?.detail ?? "Không thể cập nhật trạng thái kênh. Vui lòng thử lại.");
@@ -352,9 +425,24 @@ export default function ChannelsPage() {
           {crawlError && <div className="bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-lg px-3 py-2">{crawlError}</div>}
           {crawlResult && <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs rounded-lg px-3 py-2">{crawlResult}</div>}
 
+          {crawlProgress !== null && (
+            <div className="space-y-1.5 mt-2 mb-4">
+              <div className="flex justify-between text-xs font-medium text-slate-500">
+                <span>Tiến trình thu thập & transform</span>
+                <span>{crawlProgress}%</span>
+              </div>
+              <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+                <div 
+                  className={`h-2 rounded-full transition-all duration-500 ${crawlError ? 'bg-rose-500' : crawlProgress === 100 ? 'bg-emerald-500' : 'bg-indigo-500'}`} 
+                  style={{ width: `${crawlProgress}%` }}
+                />
+              </div>
+            </div>
+          )}
+
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">Khoảng thời gian</label>
-            <Select {...registerCrawl("lookback_days")}>
+            <Select {...registerCrawl("lookback_days")} disabled={crawling}>
               {LOOKBACK_PRESETS.map((days) => (
                 <option key={days} value={days}>{days} ngày gần nhất</option>
               ))}
@@ -362,9 +450,9 @@ export default function ChannelsPage() {
           </div>
 
           <div className="flex justify-end gap-3">
-            <Button type="button" onClick={() => setCrawlTarget(null)} variant="outline">Đóng</Button>
-            <Button type="submit" disabled={crawling}>
-              <Icon name="play" size={14} />{crawling ? "Đang trigger..." : quotaRemaining !== null && quotaRemaining < 100 ? "Crawl bằng yt-dlp" : "Thu thập dữ liệu"}
+            <Button type="button" onClick={() => setCrawlTarget(null)} variant="outline" disabled={crawling}>Đóng</Button>
+            <Button type="submit" disabled={crawling || crawlProgress === 100}>
+              <Icon name="play" size={14} />{crawling ? "Đang thu thập..." : crawlProgress === 100 ? "Hoàn tất" : quotaRemaining !== null && quotaRemaining < 100 ? "Crawl bằng yt-dlp" : "Thu thập dữ liệu"}
             </Button>
           </div>
         </form>

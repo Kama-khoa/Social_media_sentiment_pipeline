@@ -10,6 +10,7 @@ from api.routers.product_helpers import json_value
 from api.schemas.response_schemas import (
     AspectSentiment,
     AttributionResponse,
+    CategoryStat,
     CausalEventSummary,
     ProductDetailResponse,
     ProductDetails,
@@ -25,6 +26,78 @@ _CACHE_TTL = 300
 
 def _cache_key(path: str) -> str:
     return f"products:v2:{path}"
+
+
+@router.get("/stats", response_model=list[CategoryStat])
+def get_category_stats(response: Response):
+    cache_key = _cache_key("stats")
+    cached = get_cached(cache_key)
+    if cached is not None:
+        response.headers["X-Cache"] = "HIT"
+        return cached
+
+    response.headers["X-Cache"] = "MISS"
+    settings = get_settings()
+
+    rows = query_to_list(f"""
+        WITH current_date_cte AS (
+            SELECT MAX(ranking_date) AS max_date FROM `{settings.gcp_project_id}.{settings.bq_marts_dataset}.agg_daily_product_ranking`
+        ),
+        current_stats AS (
+            SELECT category, SUM(total_mention_count) AS mention_count
+            FROM `{settings.gcp_project_id}.{settings.bq_marts_dataset}.agg_daily_product_ranking`
+            WHERE ranking_date = (SELECT max_date FROM current_date_cte)
+            GROUP BY category
+        ),
+        prev_stats AS (
+            SELECT category, SUM(total_mention_count) AS mention_count
+            FROM `{settings.gcp_project_id}.{settings.bq_marts_dataset}.agg_daily_product_ranking`
+            WHERE ranking_date = (SELECT DATE_SUB(max_date, INTERVAL 7 DAY) FROM current_date_cte)
+            GROUP BY category
+        )
+        SELECT 
+            c.category, 
+            c.mention_count,
+            p.mention_count AS prev_mention_count
+        FROM current_stats c
+        LEFT JOIN prev_stats p ON c.category = p.category
+    """)
+
+    result = []
+    total_curr = sum((r["mention_count"] or 0) for r in rows)
+    total_prev = sum((r["prev_mention_count"] or 0) for r in rows)
+    all_pct = 0.0
+    if total_prev > 0:
+        all_pct = round(((total_curr - total_prev) / total_prev) * 100, 1)
+    elif total_curr > 0:
+        all_pct = 100.0
+        
+    result.append(CategoryStat(category="all", label="Tất cả", mention_count=total_curr, week_change_pct=all_pct))
+
+    for r in sorted(rows, key=lambda x: x["mention_count"] or 0, reverse=True):
+        slug = next((k for k, v in CATEGORY_SLUG_MAP.items() if v == r["category"]), None)
+        if slug is None:
+            slug = r["category"].lower().replace(" ", "_")
+            
+        curr = r["mention_count"] or 0
+        prev = r["prev_mention_count"] or 0
+        pct = 0.0
+        if prev > 0:
+            pct = round(((curr - prev) / prev) * 100, 1)
+        elif curr > 0:
+            pct = 100.0
+            
+        result.append(
+            CategoryStat(
+                category=slug,
+                label=r["category"],
+                mention_count=curr,
+                week_change_pct=pct,
+            )
+        )
+
+    set_cached(cache_key, [item.model_dump(mode="json") for item in result], _CACHE_TTL)
+    return result
 
 
 @router.get("/top/{category}", response_model=list[TopProduct])
@@ -67,7 +140,7 @@ def get_top_products(category: str, response: Response, limit: int = 20):
         ranked_products AS (
             SELECT
                 ROW_NUMBER() OVER (
-                    ORDER BY bayesian_score DESC, statement_count DESC, total_mention_count DESC, product_id ASC
+                    ORDER BY CASE WHEN statement_count >= 5 THEN 1 ELSE 0 END DESC, bayesian_score DESC, statement_count DESC, total_mention_count DESC, product_id ASC
                 ) AS rank,
                 *
             FROM filtered_products

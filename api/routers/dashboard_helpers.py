@@ -43,7 +43,7 @@ def _get_top_products(project: str, marts: str, limit: int = 5) -> list[TopProdu
         ranked_products AS (
             SELECT
                 ROW_NUMBER() OVER (
-                    ORDER BY bayesian_score DESC, statement_count DESC, total_mention_count DESC, product_id ASC
+                    ORDER BY CASE WHEN statement_count >= 5 THEN 1 ELSE 0 END DESC, bayesian_score DESC, statement_count DESC, total_mention_count DESC, product_id ASC
                 ) AS rank,
                 *
             FROM filtered_products
@@ -176,10 +176,10 @@ def _get_quick_stats(project: str, dataset: str, marts: str) -> QuickStat:
                 (SELECT COUNT(*) FROM `{project}.{dataset}.keyword_config` WHERE is_active = TRUE) AS active_keywords,
                 (SELECT COALESCE(SUM(videos_discovered), 0)
                  FROM `{project}.{dataset}.quota_daily_summary`
-                 WHERE summary_date = CURRENT_DATE()) AS videos_today,
+                 WHERE summary_date = (SELECT MAX(summary_date) FROM `{project}.{dataset}.quota_daily_summary`)) AS videos_today,
                 (SELECT COALESCE(SUM(comments_collected), 0)
                  FROM `{project}.{dataset}.quota_daily_summary`
-                 WHERE summary_date = CURRENT_DATE()) AS comments_today
+                 WHERE summary_date = (SELECT MAX(summary_date) FROM `{project}.{dataset}.quota_daily_summary`)) AS comments_today
         """)
         r = rows[0] if rows else {}
         return QuickStat(
@@ -197,10 +197,9 @@ def _get_quick_stats(project: str, dataset: str, marts: str) -> QuickStat:
 def _get_quota_today(project: str, dataset: str) -> tuple[int, int]:
     try:
         rows = query_to_list(f"""
-            SELECT total_units_used
-            FROM `{project}.{dataset}.quota_daily_summary`
-            WHERE summary_date = CURRENT_DATE()
-            LIMIT 1
+            SELECT SUM(units_used) AS total_units_used
+            FROM `{project}.{dataset}.quota_operation_log`
+            WHERE DATE(created_at) = CURRENT_DATE()
         """)
         if rows:
             return int(rows[0].get("total_units_used") or 0), 10000

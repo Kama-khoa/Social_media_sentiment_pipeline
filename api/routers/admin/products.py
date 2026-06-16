@@ -58,11 +58,17 @@ def create_product(body: ProductCreateRequest, _: AppUser = Depends(require_admi
     product_id = _slugify(body.product_id or body.product_name)
     if not product_id:
         raise HTTPException(status_code=422, detail="product_id is empty after normalization")
-    if query_to_list(
-        f"SELECT product_id FROM `{settings.gcp_project_id}.{settings.bq_dataset}.product_config` WHERE product_id = @product_id",
+    existing = query_to_list(
+        f"SELECT product_id, product_name, is_active FROM `{settings.gcp_project_id}.{settings.bq_dataset}.product_config` WHERE product_id = @product_id",
         [bigquery.ScalarQueryParameter("product_id", "STRING", product_id)],
-    ):
-        raise HTTPException(status_code=409, detail="product_id already exists")
+    )
+    if existing:
+        row = existing[0]
+        status = "đang hoạt động" if row["is_active"] else "đã bị tắt"
+        raise HTTPException(
+            status_code=409, 
+            detail=f"Sản phẩm với mã '{product_id}' đã tồn tại dưới tên '{row['product_name']}' (trạng thái: {status})."
+        )
     now = _now()
     get_bq_client().query(
         f"""
@@ -252,12 +258,28 @@ def review_detail_request(
 ):
     settings = get_settings()
     rows = query_to_list(
-        f"SELECT * FROM `{settings.gcp_project_id}.{settings.bq_dataset}.product_detail_change_requests` WHERE request_id=@request_id AND status='pending'",
+        f"SELECT * FROM `{settings.gcp_project_id}.{settings.bq_dataset}.product_detail_change_requests` WHERE request_id=@request_id AND status IN ('pending', 'processing')",
         [bigquery.ScalarQueryParameter("request_id", "STRING", request_id)],
     )
     if not rows:
-        raise HTTPException(status_code=404, detail="Pending request not found")
+        raise HTTPException(status_code=404, detail="Pending or processing request not found")
     request = rows[0]
+    
+    if body.action == "processing":
+        get_bq_client().query(
+            f"""
+            UPDATE `{settings.gcp_project_id}.{settings.bq_dataset}.product_detail_change_requests`
+            SET status='processing', reviewed_by=@admin_id, reviewed_at=CURRENT_TIMESTAMP()
+            WHERE request_id=@request_id
+            """,
+            job_config=bigquery.QueryJobConfig(query_parameters=[
+                bigquery.ScalarQueryParameter("request_id", "STRING", request_id),
+                bigquery.ScalarQueryParameter("admin_id", "STRING", admin.id),
+            ]),
+        ).result()
+        invalidate_prefix("products:")
+        return {"request_id": request_id, "status": "processing"}
+
     specs = json_value(request.get("proposed_specs"))
     if body.action == "approve":
         validate_specs(request["product_id"], specs)
@@ -341,33 +363,87 @@ def override_video_mapping(
     return {"video_id": video_id, "product_id": body.product_id, "role": body.role}
 
 
-@router.get("/resolution-candidates")
-def list_resolution_candidates(status: str = "pending", _: AppUser = Depends(require_admin)):
+@router.get("/resolution-candidates/counts")
+def get_resolution_candidate_counts(_: AppUser = Depends(require_admin)):
     settings = get_settings()
-    reviewed = query_to_list(
-        f"SELECT * FROM `{settings.gcp_project_id}.{settings.bq_dataset}.product_resolution_candidates` WHERE status=@status ORDER BY created_at DESC",
-        [bigquery.ScalarQueryParameter("status", "STRING", status)],
-    )
-    if status != "pending":
-        return reviewed
-    computed = query_to_list(f"""
-        SELECT c.*
+    
+    reviewed_counts = query_to_list(f"""
+        SELECT status, COUNT(*) as cnt 
+        FROM `{settings.gcp_project_id}.{settings.bq_dataset}.product_resolution_candidates`
+        GROUP BY status
+    """)
+    
+    pending_computed_result = query_to_list(f"""
+        SELECT COUNT(*) as cnt
         FROM `{settings.gcp_project_id}.{settings.bq_dataset}_intermediate.int_product_resolution_candidates` c
         LEFT JOIN `{settings.gcp_project_id}.{settings.bq_dataset}.product_resolution_candidates` r
           ON c.candidate_id = r.candidate_id
         WHERE r.candidate_id IS NULL
-        ORDER BY c.created_at DESC
     """)
-    merged = reviewed + computed
-    seen: set[str] = set()
-    deduped = []
-    for item in merged:
-        candidate_id = item.get("candidate_id")
-        if candidate_id in seen:
-            continue
-        seen.add(candidate_id)
-        deduped.append(item)
-    return deduped
+    
+    counts = {"pending": 0, "approved": 0, "rejected": 0}
+    for row in reviewed_counts:
+        st = row.get("status")
+        if st in counts:
+            counts[st] = row.get("cnt", 0)
+            
+    pending_computed = pending_computed_result[0].get("cnt", 0) if pending_computed_result else 0
+    counts["pending"] += pending_computed
+    
+    return counts
+
+@router.get("/resolution-candidates")
+def list_resolution_candidates(status: str = "pending", page: int = 1, limit: int = 20, _: AppUser = Depends(require_admin)):
+    settings = get_settings()
+    offset = (page - 1) * limit
+    
+    if status != "pending":
+        query = f"""
+            SELECT * FROM `{settings.gcp_project_id}.{settings.bq_dataset}.product_resolution_candidates`
+            WHERE status=@status
+            ORDER BY created_at DESC
+            LIMIT @limit OFFSET @offset
+        """
+        return query_to_list(
+            query,
+            [
+                bigquery.ScalarQueryParameter("status", "STRING", status),
+                bigquery.ScalarQueryParameter("limit", "INT64", limit),
+                bigquery.ScalarQueryParameter("offset", "INT64", offset),
+            ],
+        )
+
+    query = f"""
+        SELECT * FROM (
+            SELECT candidate_id, source_type, source_id, candidate_text, status,
+                   resolved_product_id, reviewed_by, reviewed_at, created_at,
+                   resolver_confidence, resolver_reason, resolution_method
+            FROM `{settings.gcp_project_id}.{settings.bq_dataset}.product_resolution_candidates`
+            WHERE status='pending'
+            
+            UNION ALL
+            
+            SELECT c.candidate_id, c.source_type, c.source_id, c.candidate_text, 'pending' as status,
+                   CAST(NULL AS STRING) as resolved_product_id, CAST(NULL AS STRING) as reviewed_by, 
+                   CAST(NULL AS TIMESTAMP) as reviewed_at, c.created_at, 
+                   CAST(NULL AS FLOAT64) as resolver_confidence, CAST(NULL AS STRING) as resolver_reason, 
+                   CAST(NULL AS STRING) as resolution_method
+            FROM `{settings.gcp_project_id}.{settings.bq_dataset}_intermediate.int_product_resolution_candidates` c
+            LEFT JOIN `{settings.gcp_project_id}.{settings.bq_dataset}.product_resolution_candidates` r
+              ON c.candidate_id = r.candidate_id
+            WHERE r.candidate_id IS NULL
+        )
+        ORDER BY created_at DESC
+        LIMIT @limit OFFSET @offset
+    """
+    
+    return query_to_list(
+        query,
+        [
+            bigquery.ScalarQueryParameter("limit", "INT64", limit),
+            bigquery.ScalarQueryParameter("offset", "INT64", offset),
+        ],
+    )
 
 
 @router.post("/resolution-candidates/{candidate_id}/review")

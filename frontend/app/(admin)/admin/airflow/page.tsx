@@ -3,72 +3,16 @@
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api-client";
 import type { PipelineHealthData } from "@/lib/types";
-import { Modal } from "@/components/admin/Modal";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Select } from "@/components/ui/select";
 import { PageHeader } from "@/components/shared/PageHeader";
+import { Icon } from "@/components/shared/Icon";
 
-const DAG_IDS = [
-  { id: "youtube_daily_extraction_dag", label: "Thu thập video hằng ngày" },
-  { id: "sentiment_analysis_dag", label: "Phân tích NLP" },
-  { id: "seed_sync_dag", label: "Đồng bộ seed data" },
+const PIPELINE_DAGS = [
+  { id: "youtube_daily_extraction_dag", label: "Thu thập video YouTube", desc: "ELT extract + dbt staging" },
+  { id: "sentiment_analysis_dag", label: "Phân tích cảm xúc NLP", desc: "PhoBERT + vELECTRA batch" },
+  { id: "analytics_dag", label: "Tính toán Analytics", desc: "Bayesian ranking + controversy" },
+  { id: "dbt_transform_dag", label: "Biến đổi dữ liệu (dbt)", desc: "Toàn bộ dbt models" },
 ];
-
-function HealthDot({ status }: { status: string }) {
-  const isHealthy = status === "healthy";
-  return (
-    <span className={`inline-flex items-center gap-1.5 text-sm font-medium ${
-      isHealthy ? "text-emerald-600" : "text-rose-600"
-    }`}>
-      <span className={`w-2 h-2 rounded-full ${isHealthy ? "bg-emerald-500" : "bg-rose-500"}`} />
-      {isHealthy ? "Healthy" : status}
-    </span>
-  );
-}
-
-function DagRunBadge({ state }: { state: string }) {
-  const config: Record<string, React.ComponentProps<typeof Badge>["variant"]> = {
-    success: "success",
-    failed: "destructive",
-    running: "brand",
-    queued: "warning",
-  };
-  return (
-    <Badge variant={config[state] ?? "secondary"}>
-      {state === "running" && <span className="w-1.5 h-1.5 rounded-full bg-blue-500 mr-1.5 animate-pulse" />}
-      {state}
-    </Badge>
-  );
-}
-
-function MetricCard({ label, value, sub }: { label: string; value: string | number; sub?: string }) {
-  return (
-    <Card className="p-4 shadow-none">
-      <p className="text-xs text-slate-500 font-medium uppercase tracking-wider">{label}</p>
-      <p className="text-2xl font-bold text-slate-800 mt-1">{value}</p>
-      {sub && <p className="text-xs text-slate-400 mt-0.5">{sub}</p>}
-    </Card>
-  );
-}
-
-function QuotaBar({ used, limit }: { used: number; limit: number }) {
-  const pct = Math.min((used / limit) * 100, 100);
-  const color = pct > 80 ? "bg-rose-500" : pct > 60 ? "bg-amber-500" : "bg-emerald-500";
-  return (
-    <Card className="p-4 shadow-none">
-      <div className="flex items-center justify-between mb-2">
-        <p className="text-xs text-slate-500 font-medium uppercase tracking-wider">Quota hôm nay</p>
-        <span className="text-xs text-slate-500">{used.toLocaleString()} / {limit.toLocaleString()}</span>
-      </div>
-      <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-        <div className={`h-full rounded-full transition-all ${color}`} style={{ width: `${pct}%` }} />
-      </div>
-      <p className="text-xs text-slate-400 mt-1.5">{pct.toFixed(1)}% đã dùng</p>
-    </Card>
-  );
-}
 
 function formatDuration(seconds: number | null): string {
   if (!seconds) return "—";
@@ -76,26 +20,42 @@ function formatDuration(seconds: number | null): string {
   return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
 }
 
+function stateChip(state: string) {
+  const map: Record<string, [string, string, string]> = {
+    success: ["Thành công", "bg-emerald-50 text-emerald-700 border-emerald-200", "bg-emerald-500"],
+    running: ["Đang chạy", "bg-violet-50 text-violet-700 border-violet-200", "bg-violet-500 animate-pulse"],
+    queued: ["Đang chờ", "bg-slate-50 text-slate-600 border-slate-200", "bg-slate-400"],
+    failed: ["Thất bại", "bg-rose-50 text-rose-700 border-rose-200", "bg-rose-500"],
+  };
+  const [t, cls, dot] = map[state] || [state, "bg-slate-50 text-slate-600 border-slate-200", "bg-slate-400"];
+  return (
+    <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md border text-xs font-semibold ${cls}`}>
+      <span className={`w-1.5 h-1.5 rounded-full ${dot}`} />
+      {t}
+    </span>
+  );
+}
+
 export default function PipelineHealthPage() {
   const [data, setData] = useState<PipelineHealthData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [triggerDagId, setTriggerDagId] = useState(DAG_IDS[0].id);
-  const [confirmTrigger, setConfirmTrigger] = useState(false);
-  const [triggering, setTriggering] = useState(false);
-  const [triggerResult, setTriggerResult] = useState<string | null>(null);
+
+  const [selectedDag, setSelectedDag] = useState(PIPELINE_DAGS[0].id);
+  const [triggerStatus, setTriggerStatus] = useState<"loading" | "success" | "error" | null>(null);
 
   async function load() {
     setLoading(true);
     setError(null);
     try {
-      setData(await api.admin.pipeline.health());
+      const h = await api.admin.pipeline.health();
+      setData(h);
     } catch (err: unknown) {
-      const e = err as { status?: number };
+      const e = err as { status?: number; detail?: string };
       if (e?.status === 502) {
         setError("Không thể kết nối tới Airflow. Kiểm tra xem Airflow có đang chạy không.");
       } else {
-        setError("Không thể tải dữ liệu pipeline. Vui lòng thử lại.");
+        setError(e?.detail || "Không thể tải dữ liệu pipeline. Vui lòng thử lại.");
       }
     } finally {
       setLoading(false);
@@ -104,30 +64,27 @@ export default function PipelineHealthPage() {
 
   useEffect(() => { load(); }, []);
 
-  async function handleTrigger() {
-    setTriggering(true);
+  async function doTrigger() {
+    setTriggerStatus("loading");
     try {
-      const result = await api.admin.pipeline.trigger(triggerDagId) as { run_id?: string };
-      setTriggerResult(`Đã trigger thành công. Run ID: ${result?.run_id ?? "unknown"}`);
-      setConfirmTrigger(false);
+      await api.admin.pipeline.trigger(selectedDag);
+      setTriggerStatus("success");
+      setTimeout(() => setTriggerStatus(null), 4500);
       await load();
-    } catch (err: unknown) {
-      const e = err as { detail?: string };
-      setTriggerResult(`Lỗi: ${e?.detail ?? "Không thể trigger DAG."}`);
-      setConfirmTrigger(false);
-    } finally {
-      setTriggering(false);
+    } catch (err) {
+      setTriggerStatus("error");
+      setTimeout(() => setTriggerStatus(null), 4500);
     }
   }
 
-  if (loading) {
+  const selectedInfo = PIPELINE_DAGS.find(d => d.id === selectedDag);
+
+  if (loading && !data) {
     return (
       <div className="space-y-6">
         <div className="h-6 bg-slate-200 rounded animate-pulse w-48" />
-        <div className="grid grid-cols-2 gap-4">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="h-24 bg-slate-100 rounded-xl animate-pulse" />
-          ))}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {Array.from({ length: 4 }).map((_, i) => <div key={i} className="h-24 bg-slate-100 rounded-xl animate-pulse" />)}
         </div>
         <div className="h-64 bg-slate-100 rounded-xl animate-pulse" />
       </div>
@@ -135,190 +92,143 @@ export default function PipelineHealthPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-5 relative">
       <PageHeader
-        title="Vận hành Pipeline"
-        description={data ? `Cập nhật lúc ${new Date(data.as_of).toLocaleTimeString("vi-VN")}` : ""}
-        action={<Button
-          onClick={load}
-          variant="outline"
-          size="sm"
-        >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-          </svg>
-          Làm mới
-        </Button>}
+        title="Tình trạng Pipeline"
+        description="Giám sát sức khỏe Airflow, hạn ngạch API và batch NLP gần nhất."
+        action={
+          <button onClick={load} className="text-[13.5px] font-semibold text-slate-600 bg-white border border-slate-200 rounded-lg px-3 py-1.5 hover:bg-slate-50 transition flex items-center gap-2">
+            <Icon name="refresh" size={16} /> Làm mới
+          </button>
+        }
       />
 
       {error && (
-        <div className="bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded-xl px-4 py-4">
+        <div className="bg-rose-50 border border-rose-200 text-rose-700 text-[13.5px] rounded-xl p-4">
           <strong>Lỗi kết nối:</strong> {error}
         </div>
       )}
 
       {data && (
         <>
-          {/* Airflow status */}
-          <Card className="p-5 shadow-none">
-            <h2 className="text-sm font-semibold text-slate-700 uppercase tracking-wider mb-4">Trạng thái Airflow</h2>
-            {data.airflow.message && (
-              <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                {data.airflow.message}
+          {/* KPI cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-[14px]">
+            <Card className="p-5 shadow-sm border-slate-200 rounded-[14px]">
+              <div className="text-slate-500 text-[12.5px] font-semibold mb-2.5">Airflow Webserver</div>
+              <div className="flex items-center gap-2.5">
+                <span className={`w-3 h-3 rounded-full ${data.airflow.webserver === "healthy" ? "bg-emerald-500 animate-pulse" : "bg-rose-500"}`} />
+                <span className="font-bold text-lg">{data.airflow.webserver === "healthy" ? "Hoạt động tốt" : "Có lỗi"}</span>
               </div>
-            )}
-            <div className="flex items-center gap-8">
-              <div>
-                <p className="text-xs text-slate-500 mb-1">Webserver</p>
-                <HealthDot status={data.airflow.webserver} />
+            </Card>
+            <Card className="p-5 shadow-sm border-slate-200 rounded-[14px]">
+              <div className="text-slate-500 text-[12.5px] font-semibold mb-2.5">Airflow Scheduler</div>
+              <div className="flex items-center gap-2.5">
+                <span className={`w-3 h-3 rounded-full ${data.airflow.scheduler === "healthy" ? "bg-emerald-500 animate-pulse" : "bg-rose-500"}`} />
+                <span className="font-bold text-lg">{data.airflow.scheduler === "healthy" ? "Hoạt động tốt" : "Có lỗi"}</span>
               </div>
-              <div>
-                <p className="text-xs text-slate-500 mb-1">Scheduler</p>
-                <HealthDot status={data.airflow.scheduler} />
+            </Card>
+            <Card className="p-5 shadow-sm border-slate-200 rounded-[14px]">
+              <div className="text-slate-500 text-[12.5px] font-semibold mb-2.5">Quota DAG sử dụng gần nhất</div>
+              <div className="flex items-baseline gap-1.5">
+                <span className="font-bold text-[22px] font-mono text-slate-900">{data.metrics.quota_used_today.toLocaleString("vi-VN")}</span>
+                <span className="text-slate-400 text-[13.5px]">/ {data.metrics.quota_limit.toLocaleString("vi-VN")}</span>
               </div>
-            </div>
-          </Card>
-
-          {/* Metrics grid */}
-          <div id="ops" className="grid grid-cols-2 lg:grid-cols-3 gap-4 scroll-mt-24">
-            <QuotaBar used={data.metrics.quota_used_today} limit={data.metrics.quota_limit} />
-            <MetricCard
-              label="Video thu thập hôm nay"
-              value={data.metrics.videos_crawled_today.toLocaleString()}
-            />
-            <MetricCard
-              label="Bình luận thu thập hôm nay"
-              value={data.metrics.comments_crawled_today.toLocaleString()}
-            />
-            <MetricCard
-              label="Kênh chờ historical scan"
-              value={data.metrics.channels_pending_historical}
-              sub="Cần chạy Phase B"
-            />
-            <MetricCard
-              label="NLP batch cuối"
-              value={data.metrics.last_nlp_batch_id ? "Đã chạy" : "Chưa có"}
-              sub={data.metrics.last_nlp_batch_id ?? "—"}
-            />
+              <div className="h-2 rounded-full bg-indigo-50 mt-2.5 overflow-hidden">
+                <div
+                  className="h-full bg-amber-500 rounded-full"
+                  style={{ width: `${Math.min(100, (data.metrics.quota_used_today / (data.metrics.quota_limit || 1)) * 100)}%` }}
+                />
+              </div>
+            </Card>
+            <Card className="p-5 shadow-sm border-slate-200 rounded-[14px]">
+              <div className="text-slate-500 text-[12.5px] font-semibold mb-2.5">NLP Fallback Rate</div>
+              <div className="font-bold text-[22px] font-mono text-emerald-500">
+                {data.metrics.nlp_fallback_rate != null ? `${(data.metrics.nlp_fallback_rate * 100).toFixed(1)}%` : "—"}
+              </div>
+              <div className="text-slate-400 text-[12.5px] mt-1.5 truncate">
+                {data.metrics.last_nlp_batch_id || "chưa có"}
+              </div>
+            </Card>
           </div>
 
-          {/* DAG runs table */}
-          <Card id="runs" className="overflow-hidden shadow-none scroll-mt-24">
-            <div className="px-5 py-4 border-b border-slate-200">
-              <h2 className="text-sm font-semibold text-slate-700 uppercase tracking-wider">DAG Runs gần đây</h2>
-            </div>
-            {data.recent_dag_runs.length === 0 ? (
-              <div className="px-5 py-10 text-center text-slate-400 text-sm">
-                Không có DAG run nào gần đây
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-[14px]">
+            {/* DAG Trigger */}
+            <Card className="p-[22px] shadow-sm border-slate-200 rounded-[14px]">
+              <div className="mb-[18px]">
+                <h3 className="m-0 text-base font-bold mb-1">Kích hoạt DAG thủ công</h3>
+                <p className="text-slate-500 m-0 text-[12.5px]">Trigger một DAG run ngay lập tức qua Airflow REST API.</p>
               </div>
-            ) : (
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-slate-200 bg-slate-50">
-                    <th className="px-4 py-3 text-left text-xs text-slate-500 font-medium uppercase tracking-wider">DAG</th>
-                    <th className="px-4 py-3 text-left text-xs text-slate-500 font-medium uppercase tracking-wider">Run ID</th>
-                    <th className="px-4 py-3 text-left text-xs text-slate-500 font-medium uppercase tracking-wider">Trạng thái</th>
-                    <th className="px-4 py-3 text-left text-xs text-slate-500 font-medium uppercase tracking-wider">Bắt đầu</th>
-                    <th className="px-4 py-3 text-right text-xs text-slate-500 font-medium uppercase tracking-wider">Thời gian</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.recent_dag_runs.map((run) => (
-                    <tr key={run.run_id} className="border-b border-slate-100 hover:bg-slate-50/50 transition-colors">
-                      <td className="px-4 py-3.5">
-                        <span className="text-xs font-mono text-slate-600">{run.dag_id}</span>
-                      </td>
-                      <td className="px-4 py-3.5">
-                        <span className="text-xs font-mono text-slate-400 truncate max-w-[160px] block">{run.run_id}</span>
-                      </td>
-                      <td className="px-4 py-3.5"><DagRunBadge state={run.state} /></td>
-                      <td className="px-4 py-3.5 text-xs text-slate-400">
-                        {run.start_date ? new Date(run.start_date).toLocaleString("vi-VN") : "—"}
-                      </td>
-                      <td className="px-4 py-3.5 text-right text-xs text-slate-400">
-                        {formatDuration(run.duration_seconds)}
-                      </td>
-                    </tr>
+              <div className="flex flex-col gap-[14px]">
+                <div className="flex flex-col gap-2">
+                  {PIPELINE_DAGS.map(d => (
+                    <label key={d.id} onClick={() => setSelectedDag(d.id)} className={`flex items-center gap-3.5 p-3 px-4 rounded-[11px] cursor-pointer transition-all border ${selectedDag === d.id ? "bg-violet-50 border-violet-600" : "bg-slate-50 border-transparent hover:bg-slate-100"
+                      }`}>
+                      <input type="radio" name="pipeline_dag" value={d.id} checked={selectedDag === d.id}
+                        onChange={() => setSelectedDag(d.id)}
+                        className="w-4 h-4 accent-violet-600 shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <div className={`font-bold text-[14px] ${selectedDag === d.id ? "text-violet-600" : "text-slate-800"}`}>{d.label}</div>
+                        <div className="text-xs font-mono text-slate-400 mt-0.5">{d.id}</div>
+                      </div>
+                      <span className="text-slate-500 text-xs shrink-0 hidden sm:block">{d.desc}</span>
+                    </label>
                   ))}
-                </tbody>
-              </table>
-            )}
-          </Card>
-
-          {/* Trigger section */}
-          <Card className="p-5 shadow-none">
-            <h2 className="text-sm font-semibold text-slate-700 uppercase tracking-wider mb-4">Trigger thủ công</h2>
-
-            {triggerResult && (
-              <div className={`mb-4 text-sm rounded-lg px-4 py-3 ${
-                triggerResult.startsWith("Lỗi")
-                  ? "bg-rose-50 border border-rose-200 text-rose-700"
-                  : "bg-emerald-50 border border-emerald-200 text-emerald-700"
-              }`}>
-                {triggerResult}
+                </div>
+                <div className="flex flex-col gap-2.5">
+                  <button
+                    disabled={triggerStatus === "loading"}
+                    onClick={doTrigger}
+                    className="bg-violet-600 hover:bg-violet-700 text-white font-semibold rounded-[10px] w-full p-3 flex items-center justify-center gap-2 text-[13.5px] transition disabled:opacity-70 disabled:cursor-not-allowed"
+                  >
+                    {triggerStatus === "loading"
+                      ? <><span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />Đang trigger...</>
+                      : <><Icon name="play" size={16} />Trigger DAG</>}
+                  </button>
+                  {triggerStatus === "success" && (
+                    <div className="p-2.5 px-3.5 rounded-[10px] bg-emerald-50 text-emerald-600 font-semibold text-[13px] flex items-center gap-2">
+                      <Icon name="check" size={16} /> Run đã được tạo!
+                    </div>
+                  )}
+                  {triggerStatus === "error" && (
+                    <div className="p-2.5 px-3.5 rounded-[10px] bg-rose-50 text-rose-600 font-semibold text-[13px] flex items-center gap-2">
+                      <Icon name="close" size={16} /> Lỗi kết nối Airflow!
+                    </div>
+                  )}
+                </div>
               </div>
-            )}
+            </Card>
 
-            <div className="flex items-center gap-3">
-              <Select
-                value={triggerDagId}
-                onChange={(e) => setTriggerDagId(e.target.value)}
-                className="flex-1"
-              >
-                {DAG_IDS.map((d) => (
-                  <option key={d.id} value={d.id}>{d.label} ({d.id})</option>
-                ))}
-              </Select>
-              <Button
-                onClick={() => { setTriggerResult(null); setConfirmTrigger(true); }}
-                className="whitespace-nowrap bg-violet-600 hover:bg-violet-700"
-              >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 3l14 9-14 9V3z" />
-                </svg>
-                Trigger DAG
-              </Button>
-            </div>
-            <p className="text-xs text-slate-400 mt-2">
-              Trigger sẽ tạo một DAG run mới ngay lập tức. Chỉ nên dùng khi cần chạy thủ công ngoài lịch.
-            </p>
-          </Card>
+            {/* Current DAG Progress */}
+            <Card className="p-[22px] shadow-sm border-slate-200 rounded-[14px]">
+              <div className="mb-[18px]">
+                <h3 className="m-0 text-base font-bold mb-1">Tiến trình DAG hiện tại</h3>
+                <p className="text-slate-500 m-0 text-[12.5px]">Trạng thái các task của {selectedInfo?.label || selectedDag}.</p>
+              </div>
+              <div className="flex flex-col gap-2">
+                {(() => {
+                  const run = data.recent_dag_runs.find(r => r.dag_id === selectedDag);
+                  if (!run || !run.tasks || run.tasks.length === 0) {
+                    return <div className="text-slate-400 text-[13px] text-center p-6 bg-slate-50 rounded-xl">Chưa có task nào chạy gần đây.</div>;
+                  }
+                  return run.tasks.map((t, i) => (
+                    <div key={i} className="flex items-center gap-3 p-3 px-4 rounded-[10px] bg-slate-50 border border-slate-100">
+                      <span className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 text-white ${t.state === "success" ? "bg-emerald-500" : t.state === "running" ? "bg-violet-600" : t.state === "failed" ? "bg-rose-500" : "bg-slate-400"
+                        }`}>
+                        {t.state === "success" ? <Icon name="check" size={14} /> :
+                          t.state === "running" ? <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> :
+                            t.state === "failed" ? <Icon name="close" size={14} /> : <Icon name="clock" size={14} />}
+                      </span>
+                      <span className="flex-1 font-semibold text-[13.5px] font-mono text-slate-700 truncate">{t.task_id}</span>
+                      <span className="text-slate-400 font-mono text-xs">{formatDuration(t.duration)}</span>
+                      {stateChip(t.state)}
+                    </div>
+                  ));
+                })()}
+              </div>
+            </Card>
+          </div>
         </>
       )}
-
-      {/* Confirm trigger dialog */}
-      <Modal
-        open={confirmTrigger}
-        title="Xác nhận Trigger DAG"
-        onClose={() => setConfirmTrigger(false)}
-      >
-        <div className="space-y-5">
-          <div>
-            <p className="text-sm text-slate-600">Bạn sắp trigger DAG:</p>
-            <p className="mt-2 font-mono text-sm bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-slate-800">
-              {triggerDagId}
-            </p>
-            <p className="text-xs text-slate-400 mt-2">
-              DAG sẽ chạy ngay lập tức, song song với các run đang có nếu có.
-            </p>
-          </div>
-          <div className="flex justify-end gap-3">
-            <Button
-              onClick={() => setConfirmTrigger(false)}
-              variant="outline"
-            >
-              Hủy
-            </Button>
-            <Button
-              onClick={handleTrigger}
-              disabled={triggering}
-              className="bg-violet-600 hover:bg-violet-700"
-            >
-              {triggering ? "Đang trigger…" : "Xác nhận Trigger"}
-            </Button>
-          </div>
-        </div>
-      </Modal>
     </div>
   );
 }

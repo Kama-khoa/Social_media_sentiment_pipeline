@@ -16,7 +16,7 @@ with DAG(
     default_args=default_args,
     description='Run NLP sentiment analysis on comment sentences',
     schedule_interval='0 20 * * *', # Run at 3:00 AM UTC+7, after extraction
-    start_date=datetime(2025, 1, 1),
+    start_date=datetime(2026, 6, 16),
     catchup=False,
     max_active_runs=1,
     max_active_tasks=1,

@@ -25,6 +25,8 @@ export default function AdminUsersPage() {
   const [loading, setLoading] = useState(true);
   const [pageError, setPageError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 10;
   const [mode, setMode] = useState<"create" | "edit" | null>(null);
   const [target, setTarget] = useState<AdminUserItem | null>(null);
   const [saving, setSaving] = useState(false);
@@ -100,6 +102,11 @@ export default function AdminUsersPage() {
     }
   }
 
+  const activeCount = users.filter((u) => u.is_active).length;
+  const pageCount = Math.max(1, Math.ceil(users.length / PAGE_SIZE));
+  const pageStart = (page - 1) * PAGE_SIZE;
+  const paginatedUsers = users.slice(pageStart, pageStart + PAGE_SIZE);
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -129,7 +136,7 @@ export default function AdminUsersPage() {
                 </tr>
               )) : users.length === 0 ? (
                 <tr><td colSpan={5} className="px-4 py-12 text-center text-sm text-slate-400">Chưa có tài khoản nào.</td></tr>
-              ) : users.map((user) => (
+              ) : paginatedUsers.map((user) => (
                 <tr key={user.id} className={`border-b border-slate-100 transition-colors hover:bg-slate-50/50 ${!user.is_active ? "opacity-60" : ""}`}>
                   <td className="px-4 py-3.5">
                     <div className="font-semibold text-slate-800">{user.display_name}</div>
@@ -144,6 +151,19 @@ export default function AdminUsersPage() {
             </tbody>
           </table>
         </div>
+        
+        {!loading && users.length > 0 && (
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 px-4 py-3 text-xs text-[var(--text-3)]">
+            <span>
+              {activeCount} tài khoản đang hoạt động · {users.length} tổng cộng · Hiển thị {pageStart + 1}-{Math.min(pageStart + PAGE_SIZE, users.length)}
+            </span>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))}>Trước</Button>
+              <span className="num text-[var(--text-2)] font-medium text-slate-500">Trang {page}/{pageCount}</span>
+              <Button variant="outline" size="sm" disabled={page >= pageCount} onClick={() => setPage((current) => Math.min(pageCount, current + 1))}>Sau</Button>
+            </div>
+          </div>
+        )}
       </Card>
 
       <Modal open={mode !== null} title={mode === "create" ? "Thêm tài khoản" : "Sửa tài khoản"} onClose={() => setMode(null)}>

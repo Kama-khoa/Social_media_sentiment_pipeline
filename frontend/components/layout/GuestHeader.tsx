@@ -80,6 +80,9 @@ export function GuestHeader({ title }: GuestHeaderProps) {
             const active = pathname === "/" && (tab.href === "/#search" ? hash === "#search" : hash !== "#search");
             return <Link key={tab.label} href={tab.href} onClick={(event) => handleTabClick(event, tab.href)} className={`focusable flex items-center gap-2 rounded-[11px] px-[18px] py-2.5 text-[14.5px] font-semibold transition-all ${active ? "bg-[var(--primary-soft)] text-[var(--primary)]" : "text-[var(--text-2)] hover:bg-[var(--surface-3)]"}`}><Icon name={tab.icon} size={17} />{tab.label}</Link>;
           })}
+          {user && (
+            <Link key="favorites" href="/favorites" onClick={() => setHash("")} className={`focusable flex items-center gap-2 rounded-[11px] px-[18px] py-2.5 text-[14.5px] font-semibold transition-all ${pathname === "/favorites" ? "bg-[var(--primary-soft)] text-[var(--primary)]" : "text-[var(--text-2)] hover:bg-[var(--surface-3)]"}`}><Icon name="heart" size={17} />Sản phẩm yêu thích</Link>
+          )}
         </nav>
 
         <div className="ml-auto flex items-center gap-2.5">
@@ -111,7 +114,13 @@ export function GuestHeader({ title }: GuestHeaderProps) {
           <Button variant="outline" size="icon" onClick={() => setMobileOpen((open) => !open)} className="md:hidden"><Icon name={mobileOpen ? "close" : "menu"} size={20} /></Button>
         </div>
       </div>
-      {mobileOpen && <div className="flex flex-col gap-1 border-t border-[var(--border)] bg-[var(--surface)] p-3 md:hidden">{tabs.map((tab) => <Link key={tab.label} href={tab.href} onClick={(event) => handleTabClick(event, tab.href)} className="flex items-center gap-2.5 rounded-[10px] px-3.5 py-3 text-[15px] font-semibold text-[var(--text)] hover:bg-[var(--primary-soft)] hover:text-[var(--primary)]"><Icon name={tab.icon} size={18} />{tab.label}</Link>)}{!user && <div className="mt-1.5 flex gap-2"><Link href="/login" className="flex-1"><Button variant="outline" className="w-full">Đăng nhập</Button></Link><Link href="/register" className="flex-1"><Button className="w-full">Đăng ký</Button></Link></div>}</div>}
+      {mobileOpen && <div className="flex flex-col gap-1 border-t border-[var(--border)] bg-[var(--surface)] p-3 md:hidden">
+        {tabs.map((tab) => <Link key={tab.label} href={tab.href} onClick={(event) => handleTabClick(event, tab.href)} className="flex items-center gap-2.5 rounded-[10px] px-3.5 py-3 text-[15px] font-semibold text-[var(--text)] hover:bg-[var(--primary-soft)] hover:text-[var(--primary)]"><Icon name={tab.icon} size={18} />{tab.label}</Link>)}
+        {user && (
+          <Link key="favorites" href="/favorites" onClick={() => setMobileOpen(false)} className={`flex items-center gap-2.5 rounded-[10px] px-3.5 py-3 text-[15px] font-semibold transition-all ${pathname === "/favorites" ? "bg-[var(--primary-soft)] text-[var(--primary)]" : "text-[var(--text)] hover:bg-[var(--primary-soft)] hover:text-[var(--primary)]"}`}><Icon name="heart" size={18} />Sản phẩm đã lưu</Link>
+        )}
+        {!user && <div className="mt-1.5 flex gap-2"><Link href="/login" className="flex-1"><Button variant="outline" className="w-full">Đăng nhập</Button></Link><Link href="/register" className="flex-1"><Button className="w-full">Đăng ký</Button></Link></div>}
+      </div>}
     </header>
   );
 }

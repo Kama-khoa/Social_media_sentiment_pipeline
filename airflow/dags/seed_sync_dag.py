@@ -16,7 +16,7 @@ with DAG(
     default_args=default_args,
     description='Sync channels and keywords to BigQuery configs',
     schedule_interval=None, # Run manually
-    start_date=datetime(2025, 1, 1),
+    start_date=datetime(2026, 6, 16),
     catchup=False,
     tags=['elt', 'seed'],
 ) as dag:

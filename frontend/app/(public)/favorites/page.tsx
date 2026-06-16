@@ -8,6 +8,8 @@ import { useAuth } from "@/lib/auth-context";
 import type { FavoriteProductItem } from "@/lib/types";
 import { ControversyBadge } from "@/components/shared/ControversyBadge";
 import { Icon } from "@/components/shared/Icon";
+import { ScoreRing, hasEnoughBayesData } from "@/components/shared/MockVisuals";
+import { SentimentBar } from "@/components/charts/SentimentBar";
 import { Button } from "@/components/ui/button";
 
 export default function FavoritesPage() {
@@ -62,41 +64,44 @@ export default function FavoritesPage() {
           <h1 className="m-0 text-[30px] font-extrabold tracking-[-.02em]">Danh sách yêu thích của bạn</h1>
           <p className="muted mt-1.5 text-[15px]">{favorites.length} sản phẩm đang được theo dõi.</p>
         </div>
-        <Link href="/"><Button variant="outline"><Icon name="search" size={16} />Khám phá thêm</Button></Link>
+        {favorites.length > 0 && <Link href="/"><Button variant="outline"><Icon name="search" size={16} />Khám phá thêm</Button></Link>}
       </div>
 
       {error ? (
         <div className="card border-[var(--neg)] p-4 text-sm text-[var(--neg)]">{error}</div>
       ) : favorites.length ? (
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-[18px]">
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-[18px]">
           {favorites.map((product) => (
-            <div key={product.product_id} className="card flex flex-col gap-3.5 p-[18px]">
-              <div className="flex items-start justify-between gap-3">
+            <Link href={`/product/${product.product_id}`} key={product.product_id} className="card focusable fade-up relative flex flex-col gap-3.5 p-[18px] transition-all hover:-translate-y-[3px] hover:shadow-[var(--shadow-md)]">
+              <button
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  removeFavorite(product.product_id);
+                }}
+                className={`focusable absolute right-3 top-3 grid h-9 w-9 place-items-center rounded-full border transition-colors border-transparent bg-transparent text-[var(--neg)]`}
+                title="Bỏ lưu sản phẩm"
+              >
+                <Icon name="heartSolid" size={16} />
+              </button>
+              <div className="flex items-start justify-between gap-3 pr-10">
                 <div className="min-w-0">
-                  <div className="mb-2 flex flex-wrap gap-2">
-                    {product.category && <span className="chip brand">{product.category}</span>}
+                  <div className="mb-1.5 flex gap-2">
                     <ControversyBadge label={product.controversy_label} />
                   </div>
-                  <Link href={`/product/${product.product_id}`} className="block truncate text-[17px] font-bold hover:text-[var(--primary)]">
-                    {product.product_name}
-                  </Link>
-                  <p className="faint mt-1 text-[13px]">{product.brand ?? "Chưa rõ thương hiệu"}</p>
+                  <h3 className="truncate text-[16.5px] font-bold">{product.product_name}</h3>
+                  <p className="faint mt-1 text-[13px]">{product.brand ?? "Chưa rõ"} • {product.category ?? "Khác"}</p>
                 </div>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => removeFavorite(product.product_id)}
-                  title="Bỏ lưu sản phẩm"
-                  className="text-[var(--neg)]"
-                >
-                  <Icon name="heart" size={17} />
-                </Button>
+                <ScoreRing score={product.bayesian_score} statementCount={product.statement_count} size={64} />
               </div>
-              <div className="flex items-center justify-between border-t border-[var(--border)] pt-3 text-[12.5px]">
-                <span className="num font-bold text-[var(--primary)]">Bayes {product.bayesian_score.toFixed(2)}</span>
+              <SentimentBar positivePct={product.positive_pct} negativePct={product.negative_pct} height={10} />
+              {!hasEnoughBayesData(product.statement_count) && <div className="faint text-[12.5px] font-semibold">Chưa đủ dữ liệu Bayes</div>}
+              <div className="flex justify-between text-[12.5px]">
+                <span className="font-semibold text-[var(--pos)]">{product.positive_pct.toFixed(0)}% tích cực</span>
                 <span className="num faint">{product.total_mentions.toLocaleString("vi-VN")} đề cập</span>
+                <span className="font-semibold text-[var(--neg)]">{product.negative_pct.toFixed(0)}% tiêu cực</span>
               </div>
-            </div>
+            </Link>
           ))}
         </div>
       ) : (

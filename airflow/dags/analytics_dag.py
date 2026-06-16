@@ -17,7 +17,7 @@ with DAG(
     default_args=default_args,
     description="Run Bayesian ranking, controversy index, and PELT attribution after NLP phase",
     schedule_interval="0 22 * * *",
-    start_date=datetime(2025, 1, 1),
+    start_date=datetime(2026, 6, 16),
     catchup=False,
     max_active_runs=1,
     max_active_tasks=1,

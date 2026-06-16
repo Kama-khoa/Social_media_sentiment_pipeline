@@ -15,8 +15,9 @@ import { Icon } from "@/components/shared/Icon";
 const PAGE_SIZE = 10;
 const requestStatuses = [
   { value: "pending", label: "Đang chờ", variant: "warning" },
-  { value: "approved", label: "Đã duyệt", variant: "success" },
-  { value: "rejected", label: "Từ chối", variant: "destructive" },
+  { value: "processing", label: "Đang xử lý", variant: "default" },
+  { value: "approved", label: "Đã tiếp nhận", variant: "success" },
+  { value: "rejected", label: "Đã từ chối", variant: "destructive" },
 ] as const;
 
 type ProductForm = {
@@ -55,7 +56,7 @@ function formatDate(value: string | null | undefined) {
 export default function ProductsAdminPage() {
   const [tab, setTab] = useState<"catalog" | "requests">("catalog");
   const [products, setProducts] = useState<ProductConfigItem[]>([]);
-  const [requests, setRequests] = useState<Record<string, ProductDetailChangeRequestItem[]>>({ pending: [], approved: [], rejected: [] });
+  const [requests, setRequests] = useState<Record<string, ProductDetailChangeRequestItem[]>>({ pending: [], processing: [], approved: [], rejected: [] });
   const [categoryFilter, setCategoryFilter] = useState("");
   const [page, setPage] = useState(1);
   const [productModalOpen, setProductModalOpen] = useState(false);
@@ -65,6 +66,7 @@ export default function ProductsAdminPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [productForm, setProductForm] = useState<ProductForm>(emptyProductForm);
+  const [draggingId, setDraggingId] = useState<string | null>(null);
 
   const categories = useMemo(
     () => Array.from(new Set(products.map((item) => item.category).filter(Boolean) as string[])).sort((a, b) => a.localeCompare(b, "vi")),
@@ -79,20 +81,23 @@ export default function ProductsAdminPage() {
     [categoryFilter, products],
   );
   const totalPages = pageCount(filteredProducts.length);
-  const visibleProducts = filteredProducts.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const pageStart = (page - 1) * PAGE_SIZE;
+  const visibleProducts = filteredProducts.slice(pageStart, pageStart + PAGE_SIZE);
+  const activeCount = filteredProducts.filter((p) => p.is_active).length;
   const pendingRequestCount = requests.pending?.length ?? 0;
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [nextProducts, pending, approved, rejected] = await Promise.all([
+      const [nextProducts, pending, processing, approved, rejected] = await Promise.all([
         api.admin.products.list(),
         api.admin.products.detailRequests("pending"),
+        api.admin.products.detailRequests("processing"),
         api.admin.products.detailRequests("approved"),
         api.admin.products.detailRequests("rejected"),
       ]);
       setProducts(nextProducts);
-      setRequests({ pending, approved, rejected });
+      setRequests({ pending, processing, approved, rejected });
       setError(null);
     } catch (err: unknown) {
       const e = err as { detail?: string };
@@ -139,6 +144,57 @@ export default function ProductsAdminPage() {
       setError(e?.detail ?? "Không thể xử lý phiếu chỉnh sửa.");
     } finally {
       setReviewingId(null);
+    }
+  }
+
+  async function handleDrop(e: React.DragEvent, newStatus: string) {
+    e.preventDefault();
+    if (!draggingId) return;
+
+    let currentStatus = "";
+    let draggedRequest: ProductDetailChangeRequestItem | undefined;
+
+    for (const [status, items] of Object.entries(requests)) {
+      const found = items.find((r) => r.request_id === draggingId);
+      if (found) {
+        currentStatus = status;
+        draggedRequest = found;
+        break;
+      }
+    }
+
+    if (!draggedRequest || currentStatus === newStatus) {
+      setDraggingId(null);
+      return;
+    }
+
+    if (newStatus === "pending") {
+      setDraggingId(null);
+      return;
+    }
+
+    let action: "approve" | "reject" | "processing";
+    if (newStatus === "processing") action = "processing";
+    else if (newStatus === "approved") action = "approve";
+    else if (newStatus === "rejected") action = "reject";
+    else return;
+
+    // Optimistic UI Update
+    setRequests((prev) => {
+      const next = { ...prev };
+      next[currentStatus] = next[currentStatus].filter((r) => r.request_id !== draggingId);
+      next[newStatus] = [{ ...draggedRequest!, status: newStatus as any }, ...next[newStatus]];
+      return next;
+    });
+
+    setDraggingId(null);
+
+    try {
+      await api.admin.products.reviewDetailRequest(draggingId, action);
+    } catch (err) {
+      console.error(err);
+      alert("Lỗi khi chuyển trạng thái phiếu");
+      await load();
     }
   }
 
@@ -197,23 +253,36 @@ export default function ProductsAdminPage() {
               </tbody>
             </table>
           </div>
-          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--border)] px-4 py-3 text-xs text-[var(--text-3)]">
-            <span>Trang {page}/{totalPages}</span>
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))}>Trước</Button>
-              <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => setPage((current) => Math.min(totalPages, current + 1))}>Sau</Button>
+          {!loading && filteredProducts.length > 0 && (
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--border)] px-4 py-3 text-xs text-[var(--text-3)]">
+              <span>
+                {activeCount} sản phẩm đang hiển thị · {filteredProducts.length} tổng cộng · Hiển thị {pageStart + 1}-{Math.min(pageStart + PAGE_SIZE, filteredProducts.length)}
+              </span>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))}>Trước</Button>
+                <span className="num text-[var(--text-2)] font-medium">Trang {page}/{totalPages}</span>
+                <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => setPage((current) => Math.min(totalPages, current + 1))}>Sau</Button>
+              </div>
             </div>
-          </div>
+          )}
         </Card>
       ) : (
-        <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-4">
           {requestStatuses.map((status) => {
             const rows = requests[status.value] ?? [];
             return (
-              <section key={status.value} className="rounded-[14px] border-2 border-dashed border-transparent bg-[var(--surface-2)] p-3.5">
+              <section 
+                key={status.value} 
+                className={`rounded-[14px] border-2 border-dashed ${draggingId ? "border-[var(--border)]" : "border-transparent"} bg-[var(--surface-2)] p-3.5 transition-colors`}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = "move";
+                }}
+                onDrop={(e) => void handleDrop(e, status.value)}
+              >
                 <div className="mb-3 flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2">
-                    <span className={`h-2.5 w-2.5 rounded-full ${status.value === "pending" ? "bg-[var(--neu)]" : status.value === "approved" ? "bg-[var(--pos)]" : "bg-[var(--neg)]"}`} />
+                    <span className={`h-2.5 w-2.5 rounded-full ${status.value === "pending" ? "bg-[#d97706]" : status.value === "processing" ? "bg-[var(--primary)]" : status.value === "approved" ? "bg-[var(--pos)]" : "bg-[var(--neg)]"}`} />
                     <span className="text-[13.5px] font-bold">{status.label}</span>
                   </div>
                   <span className="grid h-6 min-w-6 place-items-center rounded-full bg-[var(--surface)] px-2 text-xs font-extrabold text-[var(--text-2)]">{rows.length}</span>
@@ -222,8 +291,14 @@ export default function ProductsAdminPage() {
                   {loading ? Array.from({ length: 2 }).map((_, index) => <Card key={index} className="h-24 animate-pulse bg-[var(--surface)] shadow-none" />) : rows.length ? rows.map((request) => (
                     <button
                       key={request.request_id}
+                      draggable={request.status === "pending" || request.status === "processing"}
+                      onDragStart={(e) => {
+                        setDraggingId(request.request_id);
+                        e.dataTransfer.effectAllowed = "move";
+                      }}
+                      onDragEnd={() => setDraggingId(null)}
                       onClick={() => setRequestModal(request)}
-                      className="w-full rounded-[11px] border border-[var(--border)] bg-[var(--surface)] p-3 text-left shadow-[var(--shadow-sm)] transition-all hover:-translate-y-0.5 hover:shadow-[var(--shadow-md)]"
+                      className={`w-full rounded-[11px] border border-[var(--border)] bg-[var(--surface)] p-3 text-left shadow-[var(--shadow-sm)] transition-all hover:-translate-y-0.5 hover:shadow-[var(--shadow-md)] ${draggingId === request.request_id ? "opacity-50" : ""} ${(request.status === "pending" || request.status === "processing") ? "cursor-grab active:cursor-grabbing" : ""}`}
                     >
                       <div className="mb-1 truncate text-[11.5px] font-bold text-[var(--primary)]">{request.product_id}</div>
                       <div className="line-clamp-2 text-[13.5px] font-bold leading-snug text-[var(--text)]">
@@ -274,46 +349,103 @@ export default function ProductsAdminPage() {
         </form>
       </Modal>
 
-      <Modal open={!!requestModal} title="Chi tiết phiếu chỉnh sửa" onClose={() => setRequestModal(null)}>
+      <Modal open={!!requestModal} title="" onClose={() => setRequestModal(null)}>
         {requestModal && (
-          <div className="space-y-4">
-            <div className="rounded-[10px] bg-[var(--surface-2)] p-3">
-              <div className="mb-1 text-xs text-[var(--text-3)]">Sản phẩm</div>
-              <div className="num font-bold text-[var(--primary)]">{requestModal.product_id}</div>
-              <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-[var(--text-3)]">
-                <Badge variant={statusVariant(requestModal.status)}>{statusLabel(requestModal.status)}</Badge>
-                <span>{requestModal.submitted_by}</span>
-                <span className="num">{formatDate(requestModal.created_at)}</span>
-              </div>
+          <div className="p-1">
+            {/* Header */}
+            <div className="mb-[26px] flex items-start justify-between border-b border-[var(--border)] pb-5">
+              <h3 className="m-0 text-[16.5px] font-extrabold text-[var(--text)]">Chi tiết phiếu chỉnh sửa</h3>
             </div>
-            {requestModal.proposed_description && (
-              <div>
-                <div className="mb-1 text-[12.5px] font-bold text-[var(--text-2)]">Mô tả đề xuất</div>
-                <p className="rounded-[10px] bg-[var(--surface-2)] p-3 text-sm text-[var(--text)]">{requestModal.proposed_description}</p>
-              </div>
-            )}
-            {(requestModal.proposed_official_url || requestModal.proposed_image_url) && (
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div>
-                  <div className="mb-1 text-[12.5px] font-bold text-[var(--text-2)]">Official URL</div>
-                  <div className="num break-all rounded-[10px] bg-[var(--surface-2)] p-3 text-xs text-[var(--text-2)]">{requestModal.proposed_official_url || "—"}</div>
+
+            <div className="flex flex-col gap-5">
+              {/* Product Info Block */}
+              <div className="rounded-[11px] bg-[var(--surface-2)] p-[20px]">
+                <div className="mb-1 text-[11.5px] font-bold text-[var(--text-3)]">Sản phẩm</div>
+                <div className="mb-4 text-[15px] font-bold text-[var(--primary)]">{requestModal.product_id}</div>
+                <div className="mb-3 flex items-center gap-2.5">
+                  <Badge variant={statusVariant(requestModal.status)} className="px-2.5 py-0.5 text-xs font-bold rounded-full">{statusLabel(requestModal.status)}</Badge>
+                  <span className="font-mono text-[12.5px] text-[var(--text-3)]">{requestModal.request_id}</span>
                 </div>
-                <div>
-                  <div className="mb-1 text-[12.5px] font-bold text-[var(--text-2)]">Image URL</div>
-                  <div className="num break-all rounded-[10px] bg-[var(--surface-2)] p-3 text-xs text-[var(--text-2)]">{requestModal.proposed_image_url || "—"}</div>
-                </div>
+                <div className="text-[12.5px] font-medium text-[var(--text-3)]">{formatDate(requestModal.created_at)}</div>
               </div>
-            )}
-            <div>
-              <div className="mb-1 text-[12.5px] font-bold text-[var(--text-2)]">Thông số đề xuất</div>
-              <pre className="max-h-64 overflow-auto rounded-[10px] bg-[var(--code-bg)] p-3 text-xs text-[var(--text-2)]">{JSON.stringify(requestModal.proposed_specs ?? {}, null, 2)}</pre>
+
+              {requestModal.proposed_description && (
+                <div>
+                  <div className="mb-2 text-[12px] font-bold text-[var(--text-2)]">Mô tả đề xuất</div>
+                  <div className="rounded-[10px] bg-[var(--surface-2)] p-[14px] text-[13px] text-[var(--text)] font-medium leading-relaxed">{requestModal.proposed_description}</div>
+                </div>
+              )}
+
+              {(requestModal.proposed_official_url || requestModal.proposed_image_url) && (
+                <div className="grid grid-cols-2 gap-4">
+                  {requestModal.proposed_official_url && (
+                    <div>
+                      <div className="mb-2 text-[12px] font-bold text-[var(--text-2)]">Official URL</div>
+                      <div className="break-all rounded-[10px] bg-[var(--surface-2)] p-3 font-mono text-[11.5px] text-[var(--primary)]">{requestModal.proposed_official_url}</div>
+                    </div>
+                  )}
+                  {requestModal.proposed_image_url && (
+                    <div>
+                      <div className="mb-2 text-[12px] font-bold text-[var(--text-2)]">Image URL</div>
+                      <div className="break-all rounded-[10px] bg-[var(--surface-2)] p-3 font-mono text-[11.5px] text-[var(--primary)]">{requestModal.proposed_image_url}</div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {requestModal.proposed_specs && Object.keys(requestModal.proposed_specs).length > 0 && (
+                <div>
+                  <div className="mb-2 text-[13px] font-bold text-[var(--text-2)]">Thông số đề xuất</div>
+                  <pre className="block rounded-[10px] bg-[var(--surface-2)] px-[18px] py-[16px] font-mono text-[13px] leading-[1.7] text-[var(--text)] whitespace-pre-wrap break-words">
+                    {JSON.stringify(requestModal.proposed_specs, null, 2)}
+                  </pre>
+                </div>
+              )}
+
+              {requestModal.status === "pending" && (
+                <div className="mt-2 flex justify-end gap-3">
+                  <Button 
+                    disabled={reviewingId === requestModal.request_id} 
+                    onClick={() => void reviewRequest(requestModal.request_id, "processing")}
+                    className="bg-[var(--surface)] text-[var(--text)] hover:bg-[var(--surface-3)] border border-[var(--border)] rounded-[10px] px-[22px] py-[22px] text-[14.5px] font-bold shadow-sm transition-all mr-auto"
+                  >
+                    Chuyển sang Xử lý
+                  </Button>
+                  <Button 
+                    disabled={reviewingId === requestModal.request_id} 
+                    onClick={() => void reviewRequest(requestModal.request_id, "reject")}
+                    className="bg-[#f43f5e] hover:bg-[#e11d48] text-white rounded-[10px] px-[22px] py-[22px] text-[14.5px] font-bold shadow-sm transition-all"
+                  >
+                    Từ chối
+                  </Button>
+                  <Button 
+                    disabled={reviewingId === requestModal.request_id} 
+                    onClick={() => void reviewRequest(requestModal.request_id, "approve")}
+                    className="bg-[#10b981] hover:bg-[#059669] text-white rounded-[10px] px-[22px] py-[22px] text-[14.5px] font-bold shadow-sm transition-all"
+                  >
+                    Duyệt
+                  </Button>
+                </div>
+              )}
+              {requestModal.status === "processing" && (
+                <div className="mt-2 flex justify-end gap-3">
+                  <Button 
+                    disabled={reviewingId === requestModal.request_id} 
+                    onClick={() => void reviewRequest(requestModal.request_id, "reject")}
+                    className="bg-[#f43f5e] hover:bg-[#e11d48] text-white rounded-[10px] px-[22px] py-[22px] text-[14.5px] font-bold shadow-sm transition-all"
+                  >
+                    Từ chối
+                  </Button>
+                  <Button 
+                    disabled={reviewingId === requestModal.request_id} 
+                    onClick={() => void reviewRequest(requestModal.request_id, "approve")}
+                    className="bg-[#10b981] hover:bg-[#059669] text-white rounded-[10px] px-[22px] py-[22px] text-[14.5px] font-bold shadow-sm transition-all"
+                  >
+                    Duyệt
+                  </Button>
+                </div>
+              )}
             </div>
-            {requestModal.status === "pending" && (
-              <div className="flex justify-end gap-3 pt-2">
-                <Button variant="destructive" disabled={reviewingId === requestModal.request_id} onClick={() => void reviewRequest(requestModal.request_id, "reject")}>Từ chối</Button>
-                <Button variant="success" disabled={reviewingId === requestModal.request_id} onClick={() => void reviewRequest(requestModal.request_id, "approve")}>Duyệt</Button>
-              </div>
-            )}
           </div>
         )}
       </Modal>

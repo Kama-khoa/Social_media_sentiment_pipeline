@@ -5,14 +5,14 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
-import type { SearchResultItem, TopProduct } from "@/lib/types";
+import type { SearchResultItem, TopProduct, CategoryStat } from "@/lib/types";
 import { Icon } from "@/components/shared/Icon";
 import { ScoreRing, bayesScore100, hasEnoughBayesData } from "@/components/shared/MockVisuals";
 import { SentimentBar } from "@/components/charts/SentimentBar";
 import { ControversyBadge } from "@/components/shared/ControversyBadge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Select } from "@/components/ui/select";
+import { CustomSelect } from "@/components/ui/custom-select";
 
 const categories = [
   { slug: "all", label: "Tất cả" },
@@ -44,7 +44,7 @@ export default function ExplorePage() {
   const { user } = useAuth();
   const [category, setCategory] = useState("all");
   const [products, setProducts] = useState<TopProduct[]>([]);
-  const [overviewProducts, setOverviewProducts] = useState<TopProduct[]>([]);
+  const [stats, setStats] = useState<Record<string, CategoryStat>>({});
   const [topProductsCache, setTopProductsCache] = useState<Record<string, TopProduct[]>>({});
   const topRequestsRef = useRef<Partial<Record<string, Promise<TopProduct[]>>>>({});
   const [loading, setLoading] = useState(true);
@@ -99,7 +99,6 @@ export default function ExplorePage() {
       setProducts(cached);
       setError(null);
       setLoading(false);
-      if (category === "all") setOverviewProducts(cached);
       return;
     }
 
@@ -110,7 +109,6 @@ export default function ExplorePage() {
       .then((items) => {
         if (!active) return;
         setProducts(items);
-        if (category === "all") setOverviewProducts(items);
       })
       .catch(() => {
         if (active) setError("Không thể tải dữ liệu. Vui lòng thử lại.");
@@ -150,9 +148,18 @@ export default function ExplorePage() {
   }, [user]);
 
   useEffect(() => {
-    if (category === "all" || overviewProducts.length > 0) return;
-    loadTopProducts("all").then(setOverviewProducts).catch(() => undefined);
-  }, [category, overviewProducts.length, topProductsCache]);
+    let active = true;
+    api.products.stats().then((data) => {
+      if (active) {
+        const statsMap: Record<string, CategoryStat> = {};
+        data.forEach((stat) => {
+          statsMap[stat.category] = stat;
+        });
+        setStats(statsMap);
+      }
+    }).catch(() => undefined);
+    return () => { active = false; };
+  }, []);
 
   useEffect(() => {
     if (view !== "search") return;
@@ -208,10 +215,24 @@ export default function ExplorePage() {
 
   const categoryCards = useMemo(() => categories.map((item) => ({
     ...item,
-    mentions: item.slug === "all" ? overviewProducts.reduce((sum, product) => sum + product.total_mentions, 0) : overviewProducts.filter((product) => product.category.toLocaleLowerCase("vi").includes(item.label.toLocaleLowerCase("vi"))).reduce((sum, product) => sum + product.total_mentions, 0),
-  })), [overviewProducts]);
+    mentions: stats[item.slug]?.mention_count || 0,
+    week_change_pct: stats[item.slug]?.week_change_pct || 0,
+  })), [stats]);
 
-  const searchProducts = useMemo(() => [...searchResults].sort((a, b) => sort === "mentions" ? b.total_mentions - a.total_mentions : sort === "positive" ? b.positive_pct - a.positive_pct : b.bayesian_score - a.bayesian_score), [searchResults, sort]);
+  const searchProducts = useMemo(() => {
+    return [...searchResults].sort((a, b) => {
+      if (sort === "mentions") return b.total_mentions - a.total_mentions;
+      if (sort === "positive") return b.positive_pct - a.positive_pct;
+      
+      const aHasEnough = hasEnoughBayesData(a.statement_count);
+      const bHasEnough = hasEnoughBayesData(b.statement_count);
+      
+      if (aHasEnough && !bHasEnough) return -1;
+      if (!aHasEnough && bHasEnough) return 1;
+      
+      return b.bayesian_score - a.bayesian_score;
+    });
+  }, [searchResults, sort]);
 
   async function toggleFavorite(productId: string, event?: { preventDefault: () => void; stopPropagation: () => void }) {
     event?.preventDefault();
@@ -248,14 +269,28 @@ export default function ExplorePage() {
       </div>
 
       {error && <div className="card my-6 border-[var(--neg)] p-4 text-sm text-[var(--neg)]">{error}</div>}
-      <div className="my-6 grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-3.5">{categoryCards.map((item) => <div key={item.slug} className="card flex flex-col gap-1.5 p-4"><span className="muted text-[13px] font-semibold">{item.label}</span><span className="num text-2xl font-bold">{item.mentions.toLocaleString("vi-VN")}</span><span className="faint text-xs">lượt đề cập từ BigQuery</span></div>)}</div>
+      <div className="my-6 grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-3.5">
+        {categoryCards.map((item) => (
+          <div key={item.slug} className="card flex flex-col items-start gap-1 p-4">
+            <span className="muted text-[13px] font-semibold">{item.label}</span>
+            <span className="num text-2xl font-bold">{item.mentions.toLocaleString("vi-VN")}</span>
+            {item.week_change_pct !== undefined && item.week_change_pct !== 0 && (
+              <div className={`mt-0.5 inline-flex w-fit items-center gap-1 rounded-full px-2.5 py-0.5 text-[13px] font-medium ${item.week_change_pct > 0 ? "bg-[#bde8d9] text-[#059669] dark:bg-[#059669]/20 dark:text-[#34d399]" : "bg-[#dfb8c2] text-[#ff4d6d] dark:bg-[#e11d48]/20 dark:text-[#fb7185]"}`}>
+                <Icon name={item.week_change_pct > 0 ? "arrowUp" : "arrowDown"} size={14} />
+                {Math.abs(item.week_change_pct)} % tuần
+              </div>
+            )}
+            {(!item.week_change_pct) && <span className="faint mt-1.5 text-xs">lượt đề cập từ BigQuery</span>}
+          </div>
+        ))}
+      </div>
 
       {loading && products.length === 0 ? <div className="grid min-h-72 place-items-center"><div className="spinner" /></div> : <>
         {loading && <div className="muted mb-3 text-[13px] font-semibold">Đang cập nhật dữ liệu...</div>}
         <div className="mb-[22px] grid grid-cols-[repeat(auto-fit,minmax(280px,1fr))] gap-[18px]">
-          {products.slice(0, 3).map((product, index) => <Link key={product.product_id} href={`/product/${product.product_id}`} className="card focusable fade-up relative p-5 text-left transition-all hover:-translate-y-[3px] hover:shadow-[var(--shadow-md)]" style={{ borderTop: `3px solid ${["#f5b50a", "#9aa3b2", "#cd7f32"][index]}` }}><button onClick={(event) => toggleFavorite(product.product_id, event)} disabled={favoriteLoadingId === product.product_id} className={`focusable absolute right-3 top-3 grid h-9 w-9 place-items-center rounded-full border transition-colors ${favoriteIds.has(product.product_id) ? "border-transparent bg-[var(--primary)] text-[var(--on-primary)]" : "border-[var(--border-strong)] bg-[var(--surface)] text-[var(--text-2)] hover:text-[var(--primary)]"}`} title={favoriteIds.has(product.product_id) ? "Bỏ lưu sản phẩm" : "Lưu sản phẩm"}><Icon name={favoriteIds.has(product.product_id) ? "check" : "heart"} size={16} /></button><div className="flex items-center justify-between pr-10"><span className="num text-[34px] font-extrabold text-[var(--text-3)]">#{product.rank}</span><ScoreRing score={product.bayesian_score} statementCount={product.statement_count} size={72} /></div><h3 className="mb-0.5 mt-2.5 text-lg font-bold">{product.product_name}</h3><p className="faint mb-3 text-[13px]">{product.brand}</p><SentimentBar positivePct={product.positive_pct} negativePct={product.negative_pct} height={8} />{!hasEnoughBayesData(product.statement_count) && <p className="faint mt-2 text-xs font-semibold">Chưa đủ dữ liệu Bayes</p>}</Link>)}
+          {products.slice(0, 3).map((product, index) => <Link key={product.product_id} href={`/product/${product.product_id}`} className="card focusable fade-up relative p-5 text-left transition-all hover:-translate-y-[3px] hover:shadow-[var(--shadow-md)]" style={{ borderTop: `3px solid ${["#f5b50a", "#9aa3b2", "#cd7f32"][index]}` }}><button onClick={(event) => toggleFavorite(product.product_id, event)} disabled={favoriteLoadingId === product.product_id} className={`focusable absolute right-3 top-3 grid h-9 w-9 place-items-center rounded-full border transition-colors ${favoriteIds.has(product.product_id) ? "border-rose-200 bg-rose-50 text-[var(--neg)] dark:border-rose-900/50 dark:bg-rose-900/20" : "border-[var(--border-strong)] bg-[var(--surface)] text-[var(--text-2)] hover:text-[var(--neg)]"}`} title={favoriteIds.has(product.product_id) ? "Bỏ lưu sản phẩm" : "Lưu sản phẩm"}><Icon name={favoriteIds.has(product.product_id) ? "heartSolid" : "heart"} size={16} /></button><div className="flex items-center justify-between pr-10"><span className="num text-[34px] font-extrabold text-[var(--text-3)]">#{product.rank}</span><ScoreRing score={product.bayesian_score} statementCount={product.statement_count} size={72} /></div><h3 className="mb-0.5 mt-2.5 text-lg font-bold">{product.product_name}</h3><p className="faint mb-3 text-[13px]">{product.brand}</p><SentimentBar positivePct={product.positive_pct} negativePct={product.negative_pct} height={8} />{!hasEnoughBayesData(product.statement_count) && <p className="faint mt-2 text-xs font-semibold">Chưa đủ dữ liệu Bayes</p>}</Link>)}
         </div>
-        <div className="card overflow-hidden"><div className="overflow-x-auto"><table className="tbl"><thead><tr><th className="w-14">#</th><th>Sản phẩm</th><th>Thương hiệu</th><th>Điểm Bayes</th><th className="min-w-36">Cảm xúc</th><th>Đề cập</th><th>Tranh cãi</th><th className="w-14"></th></tr></thead><tbody>{products.map((product) => <tr key={product.product_id}><td className="num font-bold text-[var(--primary)]">{product.rank}</td><td><Link href={`/product/${product.product_id}`} className="font-bold hover:text-[var(--primary)]">{product.product_name} {product.rank <= 3 && <span className="text-xs">🔥</span>}</Link></td><td className="muted">{product.brand}</td><td className="num font-bold text-[var(--primary)]">{hasEnoughBayesData(product.statement_count) ? bayesScore100(product.bayesian_score).toFixed(1) : "Chưa đủ dữ liệu"}</td><td><SentimentBar positivePct={product.positive_pct} negativePct={product.negative_pct} height={8} /></td><td className="num muted">{product.total_mentions.toLocaleString("vi-VN")}</td><td><ControversyBadge label={product.controversy_label} /></td><td><Button variant={favoriteIds.has(product.product_id) ? "success" : "ghost"} size="icon" onClick={() => toggleFavorite(product.product_id)} disabled={favoriteLoadingId === product.product_id} title={favoriteIds.has(product.product_id) ? "Bỏ lưu sản phẩm" : "Lưu sản phẩm"}><Icon name={favoriteIds.has(product.product_id) ? "check" : "heart"} size={16} /></Button></td></tr>)}</tbody></table></div></div>
+        <div className="card overflow-hidden"><div className="overflow-x-auto"><table className="tbl"><thead><tr><th className="w-14">#</th><th>Sản phẩm</th><th>Thương hiệu</th><th>Điểm Bayes</th><th className="min-w-36">Cảm xúc</th><th>Đề cập</th><th>Tranh cãi</th><th className="w-14"></th></tr></thead><tbody>{products.map((product) => <tr key={product.product_id}><td className="num font-bold text-[var(--primary)]">{product.rank}</td><td><Link href={`/product/${product.product_id}`} className="font-bold hover:text-[var(--primary)]">{product.product_name} {product.rank <= 3 && <span className="text-xs">🔥</span>}</Link></td><td className="muted">{product.brand}</td><td className="num font-bold text-[var(--primary)]">{hasEnoughBayesData(product.statement_count) ? bayesScore100(product.bayesian_score).toFixed(1) : "Chưa đủ dữ liệu"}</td><td><SentimentBar positivePct={product.positive_pct} negativePct={product.negative_pct} height={8} /></td><td className="num muted">{product.total_mentions.toLocaleString("vi-VN")}</td><td><ControversyBadge label={product.controversy_label} /></td><td><Button variant="ghost" className={favoriteIds.has(product.product_id) ? "text-[var(--neg)] hover:bg-transparent" : "text-[var(--text-2)]"} size="icon" onClick={() => toggleFavorite(product.product_id)} disabled={favoriteLoadingId === product.product_id} title={favoriteIds.has(product.product_id) ? "Bỏ lưu sản phẩm" : "Lưu sản phẩm"}><Icon name={favoriteIds.has(product.product_id) ? "heartSolid" : "heart"} size={16} /></Button></td></tr>)}</tbody></table></div></div>
       </>}
     </main>
   );
@@ -263,10 +298,10 @@ export default function ExplorePage() {
 
 function SearchView({ products, query, setQuery, category, setCategory, sort, setSort, loading, error, favoriteIds, favoriteLoadingId, toggleFavorite }: { products: SearchResultItem[]; query: string; setQuery: (value: string) => void; category: string; setCategory: (value: string) => void; sort: "score" | "mentions" | "positive"; setSort: (value: "score" | "mentions" | "positive") => void; loading: boolean; error: string | null; favoriteIds: Set<string>; favoriteLoadingId: string | null; toggleFavorite: (productId: string, event?: { preventDefault: () => void; stopPropagation: () => void }) => void }) {
   return <main className="mx-auto max-w-[1240px] px-6 py-10 pb-20">
-    <div className="mb-8 text-center"><span className="chip brand mb-3.5"><Icon name="spark" size={13} />Phân tích cảm xúc từ cộng đồng YouTube Việt</span><h1 className="m-0 text-[38px] font-extrabold leading-[1.1] tracking-[-.03em]">Tìm hiểu người dùng thực sự<br />nói gì về thiết bị công nghệ</h1><p className="muted mx-auto mt-2 max-w-xl text-base">Tổng hợp hàng chục nghìn bình luận, điểm Bayes và phân tích theo 6 khía cạnh.</p></div>
+    <div className="mb-8 text-center"><span className="chip brand mb-3.5"><Icon name="spark" size={13} />Phân tích cảm xúc từ cộng đồng YouTube Việt</span><h1 className="m-0 text-[38px] font-extrabold leading-[1.1] tracking-[-.03em]">Tìm hiểu người dùng thực sự nghĩ gì?</h1><p className="muted mx-auto mt-2 max-w-xl text-base">Đưa ra phân tích dựa trên bình luận và xếp hạng theo điểm tín nhiệm.</p></div>
     <div className="mx-auto mb-[18px] flex max-w-[720px] items-center gap-2.5 rounded-full border border-[var(--border-strong)] bg-[var(--surface)] p-2 pl-5 shadow-[var(--shadow-md)]"><Icon name="search" size={20} style={{ color: "var(--text-3)" }} /><Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Tìm kiếm sản phẩm — vd: iPhone 17 Pro Max, Galaxy S25..." className="h-auto border-0 bg-transparent px-0 focus-visible:ring-0" /><Button className="rounded-full">Tìm kiếm</Button></div>
-    <div className="mb-7 flex flex-wrap justify-center gap-3.5"><div className="flex flex-wrap justify-center gap-[7px]">{categories.map((item) => <button key={item.slug} onClick={() => setCategory(item.slug)} className={`focusable rounded-full border px-[15px] py-2 text-[13.5px] font-semibold transition-all ${category === item.slug ? "border-transparent bg-[var(--primary)] text-[var(--on-primary)]" : "border-[var(--border-strong)] bg-[var(--surface)] text-[var(--text-2)] hover:bg-[var(--surface-3)]"}`}>{item.label}</button>)}</div><div className="flex items-center gap-2 text-[var(--text-3)]"><Icon name="filter" size={15} /><Select value={sort} onChange={(event) => setSort(event.target.value as "score" | "mentions" | "positive")} className="w-auto"><option value="score">Điểm Bayes cao nhất</option><option value="mentions">Nhiều đề cập nhất</option><option value="positive">Tích cực nhất</option></Select></div></div>
+    <div className="mb-7 flex flex-wrap justify-center gap-3.5"><div className="flex flex-wrap justify-center gap-[7px]">{categories.map((item) => <button key={item.slug} onClick={() => setCategory(item.slug)} className={`focusable rounded-full border px-[15px] py-2 text-[13.5px] font-semibold transition-all ${category === item.slug ? "border-transparent bg-[var(--primary)] text-[var(--on-primary)]" : "border-[var(--border-strong)] bg-[var(--surface)] text-[var(--text-2)] hover:bg-[var(--surface-3)]"}`}>{item.label}</button>)}</div><div className="flex items-center gap-2"><CustomSelect value={sort} onChange={(val) => setSort(val as "score" | "mentions" | "positive")} options={[{ value: "score", label: "Điểm tín nhiệm cao nhất" }, { value: "mentions", label: "Nhiều đề cập nhất" }, { value: "positive", label: "Tích cực nhất" }]} /></div></div>
     <div className="muted mb-3.5 text-[13.5px] font-semibold">{products.length} kết quả</div>
-    {error ? <div className="card border-[var(--neg)] p-4 text-sm text-[var(--neg)]">{error}</div> : loading ? <div className="grid min-h-72 place-items-center"><div className="spinner" /></div> : products.length ? <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-[18px]">{products.map((product) => <Link href={`/product/${product.product_id}`} key={product.product_id} className="card focusable fade-up relative flex flex-col gap-3.5 p-[18px] transition-all hover:-translate-y-[3px] hover:shadow-[var(--shadow-md)]"><button onClick={(event) => toggleFavorite(product.product_id, event)} disabled={favoriteLoadingId === product.product_id} className={`focusable absolute right-3 top-3 grid h-9 w-9 place-items-center rounded-full border transition-colors ${favoriteIds.has(product.product_id) ? "border-transparent bg-[var(--primary)] text-[var(--on-primary)]" : "border-[var(--border-strong)] bg-[var(--surface)] text-[var(--text-2)] hover:text-[var(--primary)]"}`} title={favoriteIds.has(product.product_id) ? "Bỏ lưu sản phẩm" : "Lưu sản phẩm"}><Icon name={favoriteIds.has(product.product_id) ? "check" : "heart"} size={16} /></button><div className="flex items-start justify-between gap-3 pr-10"><div className="min-w-0"><div className="mb-1.5 flex gap-2">{product.rank > 0 && product.rank <= 3 && <span className="num text-[13px] font-extrabold text-[var(--primary)]">#{product.rank}</span>}{product.rank > 0 && product.rank <= 3 && <span className="chip neg px-2 py-0.5">🔥 Nổi bật</span>}</div><h3 className="truncate text-[16.5px] font-bold">{product.product_name}</h3><p className="faint mt-1 text-[13px]">{product.brand} • {product.category}</p></div><ScoreRing score={product.bayesian_score} statementCount={product.statement_count} size={64} /></div><SentimentBar positivePct={product.positive_pct} negativePct={product.negative_pct} height={10} />{!hasEnoughBayesData(product.statement_count) && <div className="faint text-[12.5px] font-semibold">Chưa đủ dữ liệu Bayes</div>}<div className="flex justify-between text-[12.5px]"><span className="font-semibold text-[var(--pos)]">{product.positive_pct.toFixed(0)}% tích cực</span><span className="num faint">{product.total_mentions.toLocaleString("vi-VN")} đề cập</span><span className="font-semibold text-[var(--neg)]">{product.negative_pct.toFixed(0)}% tiêu cực</span></div></Link>)}</div> : <div className="card p-14 text-center text-[var(--text-3)]">Không tìm thấy sản phẩm phù hợp với &ldquo;{query}&rdquo;.</div>}
+    {error ? <div className="card border-[var(--neg)] p-4 text-sm text-[var(--neg)]">{error}</div> : loading ? <div className="grid min-h-72 place-items-center"><div className="spinner" /></div> : products.length ? <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-[18px]">{products.map((product) => <Link href={`/product/${product.product_id}`} key={product.product_id} className="card focusable fade-up relative flex flex-col gap-3.5 p-[18px] transition-all hover:-translate-y-[3px] hover:shadow-[var(--shadow-md)]"><button onClick={(event) => toggleFavorite(product.product_id, event)} disabled={favoriteLoadingId === product.product_id} className={`focusable absolute right-3 top-3 grid h-9 w-9 place-items-center rounded-full border transition-colors ${favoriteIds.has(product.product_id) ? "border-rose-200 bg-rose-50 text-[var(--neg)] dark:border-rose-900/50 dark:bg-rose-900/20" : "border-[var(--border-strong)] bg-[var(--surface)] text-[var(--text-2)] hover:text-[var(--neg)]"}`} title={favoriteIds.has(product.product_id) ? "Bỏ lưu sản phẩm" : "Lưu sản phẩm"}><Icon name={favoriteIds.has(product.product_id) ? "heartSolid" : "heart"} size={16} /></button><div className="flex items-start justify-between gap-3 pr-10"><div className="min-w-0"><div className="mb-1.5 flex gap-2">{product.rank > 0 && product.rank <= 3 && <span className="num text-[13px] font-extrabold text-[var(--primary)]">#{product.rank}</span>}{product.rank > 0 && product.rank <= 3 && <span className="chip neg px-2 py-0.5">🔥 Nổi bật</span>}</div><h3 className="truncate text-[16.5px] font-bold">{product.product_name}</h3><p className="faint mt-1 text-[13px]">{product.brand} • {product.category}</p></div><ScoreRing score={product.bayesian_score} statementCount={product.statement_count} size={64} /></div><SentimentBar positivePct={product.positive_pct} negativePct={product.negative_pct} height={10} />{!hasEnoughBayesData(product.statement_count) && <div className="faint text-[12.5px] font-semibold">Chưa đủ dữ liệu Bayes</div>}<div className="flex justify-between text-[12.5px]"><span className="font-semibold text-[var(--pos)]">{product.positive_pct.toFixed(0)}% tích cực</span><span className="num faint">{product.total_mentions.toLocaleString("vi-VN")} đề cập</span><span className="font-semibold text-[var(--neg)]">{product.negative_pct.toFixed(0)}% tiêu cực</span></div></Link>)}</div> : <div className="card p-14 text-center text-[var(--text-3)]">Không tìm thấy sản phẩm phù hợp với &ldquo;{query}&rdquo;.</div>}
   </main>;
 }

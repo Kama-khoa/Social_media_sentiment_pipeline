@@ -55,7 +55,7 @@ def list_favorite_products(
             FROM UNNEST(@product_ids) AS product_id
         ),
         latest_ranking AS (
-            SELECT product_id, bayesian_score, controversy_label, total_mention_count, total_mentions
+            SELECT product_id, bayesian_score, controversy_label, total_mention_count, total_mentions, statement_count, positive_count, negative_count
             FROM `{settings.gcp_project_id}.{settings.bq_marts_dataset}.agg_daily_product_ranking`
             WHERE ranking_date = (
                 SELECT MAX(ranking_date)
@@ -69,7 +69,10 @@ def list_favorite_products(
             p.category,
             r.bayesian_score,
             r.controversy_label,
-            COALESCE(r.total_mention_count, r.total_mentions, 0) AS total_mentions
+            COALESCE(r.total_mention_count, r.total_mentions, 0) AS total_mentions,
+            COALESCE(r.statement_count, 0) AS statement_count,
+            SAFE_DIVIDE(COALESCE(r.positive_count, 0) * 100.0, r.statement_count) AS positive_pct,
+            SAFE_DIVIDE(COALESCE(r.negative_count, 0) * 100.0, r.statement_count) AS negative_pct
         FROM requested_products requested
         JOIN `{settings.gcp_project_id}.{settings.bq_marts_dataset}.dim_products` p
           ON requested.product_id = p.product_id
@@ -90,6 +93,9 @@ def list_favorite_products(
             bayesian_score=round(float(row.get("bayesian_score") or 0), 4),
             controversy_label=normalize_controversy(row.get("controversy_label")),
             total_mentions=int(row.get("total_mentions") or 0),
+            statement_count=int(row.get("statement_count") or 0),
+            positive_pct=round(float(row.get("positive_pct") or 0), 1),
+            negative_pct=round(float(row.get("negative_pct") or 0), 1),
             created_at=created_at_by_id[row["product_id"]],
         )
         for product_id in product_ids

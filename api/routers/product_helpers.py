@@ -31,13 +31,26 @@ def validate_specs(product_id: str, specs: dict | None) -> None:
     unknown = sorted(set(specs) - set(types))
     if unknown:
         raise HTTPException(status_code=422, detail=f"Unknown specification keys: {', '.join(unknown)}")
-    expected_types = {"string": str, "number": (int, float), "boolean": bool}
-    for key, value in specs.items():
-        if (
-            value is not None
-            and (
-                not isinstance(value, expected_types[types[key]])
-                or (types[key] == "number" and isinstance(value, bool))
-            )
-        ):
-            raise HTTPException(status_code=422, detail=f"Invalid value type for specification: {key}")
+    for key, value in list(specs.items()):
+        if value is None:
+            continue
+        expected = types[key]
+        if expected == "number":
+            if isinstance(value, bool):
+                raise HTTPException(status_code=422, detail=f"Invalid value type for specification: {key}")
+            if not isinstance(value, (int, float)):
+                try:
+                    specs[key] = float(value) if "." in str(value) else int(value)
+                except ValueError:
+                    raise HTTPException(status_code=422, detail=f"Invalid value type for specification: {key}")
+        elif expected == "boolean":
+            if not isinstance(value, bool):
+                if str(value).lower() in ("true", "1", "yes", "có"):
+                    specs[key] = True
+                elif str(value).lower() in ("false", "0", "no", "không"):
+                    specs[key] = False
+                else:
+                    raise HTTPException(status_code=422, detail=f"Invalid value type for specification: {key}")
+        elif expected == "string":
+            if not isinstance(value, str):
+                specs[key] = str(value)

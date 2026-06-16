@@ -280,18 +280,31 @@ class GeminiAnnotator:
 
         last_exc: Exception | None = None
 
-        for model_name in list(self._available_models):
+        models_to_try = list(self._available_models)
+        
+        for model_name in models_to_try.copy():
             budget = self._daily_budgets.get(model_name)
             if budget and not budget.can_use():
                 self._available_models.remove(model_name)
+                models_to_try.remove(model_name)
                 logger.warning(
                     "Model %s hết RPD quota hôm nay — loại khỏi session. "
                     "Còn lại: [%s]",
                     model_name,
                     ", ".join(self._available_models) if self._available_models else "không còn model nào",
                 )
-                continue
 
+        if not models_to_try:
+            raise RuntimeError("All Gemini models exhausted RPD quota.")
+
+        now = time.monotonic()
+        available_now = [m for m in models_to_try if m not in self._limiters or self._limiters[m]._blocked_until <= now]
+        blocked = [m for m in models_to_try if m in self._limiters and self._limiters[m]._blocked_until > now]
+        
+        blocked.sort(key=lambda m: self._limiters[m]._blocked_until)
+        ordered_models = available_now + blocked
+
+        for model_name in ordered_models:
             limiter = self._limiters.get(model_name)
             if limiter:
                 limiter.wait(model_name)
@@ -301,7 +314,8 @@ class GeminiAnnotator:
                     model=model_name,
                     contents=prompt,
                 )
-                if budget:
+                if model_name in self._daily_budgets:
+                    budget = self._daily_budgets[model_name]
                     budget.increment()
                     remaining = budget.remaining
                     if remaining <= 100 or remaining % 200 == 0:
