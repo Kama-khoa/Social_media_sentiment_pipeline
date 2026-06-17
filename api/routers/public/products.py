@@ -334,10 +334,38 @@ def get_product_attribution(product_id: str, response: Response):
         for e in event_rows
     ]
 
+    trend_rows = query_to_list(
+        f"""
+        SELECT
+            mention_date,
+            AVG(CASE
+                WHEN UPPER(sentiment_label) = 'POSITIVE' THEN 1.0
+                WHEN UPPER(sentiment_label) = 'NEGATIVE' THEN -1.0
+                ELSE 0.0
+            END) AS avg_sentiment
+        FROM `{settings.gcp_project_id}.{settings.bq_marts_dataset}.fact_product_mentions`
+        WHERE product_id = @product_id
+          AND aspect_label != 'NONE'
+        GROUP BY mention_date
+        ORDER BY mention_date ASC
+        """,
+        [bigquery.ScalarQueryParameter("product_id", "STRING", product_id)],
+    )
+
+    from api.schemas.response_schemas import AttributionPoint
+    trend = [
+        AttributionPoint(
+            date=str(row["mention_date"]),
+            sentiment_score=float(row["avg_sentiment"])
+        )
+        for row in trend_rows
+    ]
+
     result = AttributionResponse(
         product_id=product_id,
         product_name=product_rows[0]["product_name"],
         events=events,
+        trend=trend,
     )
     set_cached(cache_key, result.model_dump(mode="json"), _CACHE_TTL)
     return result
@@ -355,27 +383,34 @@ def get_product_comments(product_id: str, response: Response, limit: int = 30):
     settings = get_settings()
     rows = query_to_list(
         f"""
-        SELECT
-            f.comment_id,
-            COALESCE(c.author_display_name, 'Người dùng YouTube') AS author,
-            s.sentence_text AS text,
-            f.aspect_label,
-            UPPER(f.sentiment_label) AS sentiment_label,
-            f.confidence_score,
-            s.published_at
-        FROM `{settings.gcp_project_id}.{settings.bq_marts_dataset}.fact_product_mentions` f
-        JOIN `{settings.gcp_project_id}.{settings.bq_dataset}_intermediate.int_comment_sentences` s
-          ON f.sentence_id = s.sentence_id
-        LEFT JOIN `{settings.gcp_project_id}.{settings.bq_dataset}_staging.stg_youtube_comments` c
-          ON f.comment_id = c.comment_id
-        WHERE f.product_id = @product_id
-          AND f.aspect_label != 'NONE'
+        WITH deduplicated AS (
+            SELECT
+                f.comment_id,
+                COALESCE(c.author_display_name, 'Người dùng YouTube') AS author,
+                s.sentence_text AS text,
+                f.aspect_label,
+                UPPER(f.sentiment_label) AS sentiment_label,
+                f.confidence_score,
+                s.published_at
+            FROM `{settings.gcp_project_id}.{settings.bq_marts_dataset}.fact_product_mentions` f
+            JOIN `{settings.gcp_project_id}.{settings.bq_dataset}_intermediate.int_comment_sentences` s
+              ON f.sentence_id = s.sentence_id
+            LEFT JOIN `{settings.gcp_project_id}.{settings.bq_dataset}_staging.stg_youtube_comments` c
+              ON f.comment_id = c.comment_id
+            WHERE f.product_id = @product_id
+              AND f.aspect_label != 'NONE'
+            QUALIFY ROW_NUMBER() OVER (
+                PARTITION BY f.sentence_id, f.aspect_label
+                ORDER BY f.confidence_score DESC
+            ) = 1
+        )
+        SELECT *
+        FROM deduplicated
         QUALIFY ROW_NUMBER() OVER (
-            PARTITION BY f.sentence_id, f.aspect_label
-            ORDER BY f.confidence_score DESC
-        ) = 1
-        ORDER BY s.published_at DESC, f.confidence_score DESC
-        LIMIT @limit
+            PARTITION BY sentiment_label
+            ORDER BY published_at DESC, confidence_score DESC
+        ) <= @limit
+        ORDER BY sentiment_label, published_at DESC, confidence_score DESC
         """,
         [
             bigquery.ScalarQueryParameter("product_id", "STRING", product_id),

@@ -1,9 +1,12 @@
 import hashlib
 import json
+import logging
 import re
+import uuid
 from datetime import datetime, timezone
+from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from google.cloud import bigquery
 
 from api.bq_client import get_bq_client, query_to_list
@@ -21,6 +24,7 @@ from api.schemas.request_schemas import (
     ProductResolutionCandidateReview,
     VideoProductMappingOverride,
 )
+from api.services.keyword_service import KeywordService
 from api.schemas.response_schemas import (
     ProductAliasItem,
     ProductConfigItem,
@@ -43,17 +47,82 @@ def _now() -> str:
 
 
 @router.get("", response_model=list[ProductConfigItem])
-def list_products(_: AppUser = Depends(require_admin)):
+def list_products(
+    limit: Optional[int] = None,
+    offset: Optional[int] = None,
+    category: Optional[str] = None,
+    q: Optional[str] = None,
+    _: AppUser = Depends(require_admin)
+):
     settings = get_settings()
+    where_clauses = []
+    params = []
+    if category:
+        where_clauses.append("category = @category")
+        params.append(bigquery.ScalarQueryParameter("category", "STRING", category))
+    if q:
+        q_clean = f"%{q.strip().lower()}%"
+        where_clauses.append("(LOWER(product_name) LIKE @q OR LOWER(product_id) LIKE @q OR LOWER(brand) LIKE @q)")
+        params.append(bigquery.ScalarQueryParameter("q", "STRING", q_clean))
+        
+    where_sql = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
+    
+    limit_sql = ""
+    if limit is not None:
+        limit_sql = f"LIMIT @limit"
+        params.append(bigquery.ScalarQueryParameter("limit", "INT64", limit))
+    if offset is not None:
+        limit_sql += f" OFFSET @offset"
+        params.append(bigquery.ScalarQueryParameter("offset", "INT64", offset))
+        
     return query_to_list(f"""
-        SELECT product_id, product_name, brand, category, release_year, is_active, created_at, updated_at
+        SELECT 
+            *,
+            (SELECT COUNT(1) FROM `{settings.gcp_project_id}.{settings.bq_marts_dataset}.dim_products` dp WHERE dp.product_id = t.product_id) > 0 AS is_synced,
+            EXISTS(
+                SELECT 1 
+                FROM `{settings.gcp_project_id}.{settings.bq_dataset}.keyword_config` k 
+                WHERE k.search_cluster = t.product_id AND k.is_active = TRUE
+            ) AS has_keyword
+        FROM (
+            SELECT product_id, product_name, brand, category, release_year, is_active, created_at, updated_at
+            FROM `{settings.gcp_project_id}.{settings.bq_dataset}.product_config`
+            {where_sql}
+        ) t
+        ORDER BY t.created_at DESC
+        {limit_sql}
+    """, params)
+
+
+@router.get("/count", response_model=dict[str, int])
+def get_products_count(
+    category: Optional[str] = None,
+    q: Optional[str] = None,
+    _: AppUser = Depends(require_admin)
+):
+    settings = get_settings()
+    where_clauses = []
+    params = []
+    if category:
+        where_clauses.append("category = @category")
+        params.append(bigquery.ScalarQueryParameter("category", "STRING", category))
+    if q:
+        q_clean = f"%{q.strip().lower()}%"
+        where_clauses.append("(LOWER(product_name) LIKE @q OR LOWER(product_id) LIKE @q OR LOWER(brand) LIKE @q)")
+        params.append(bigquery.ScalarQueryParameter("q", "STRING", q_clean))
+        
+    where_sql = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
+    
+    rows = query_to_list(f"""
+        SELECT COUNT(*) as cnt
         FROM `{settings.gcp_project_id}.{settings.bq_dataset}.product_config`
-        ORDER BY is_active DESC, product_name
-    """)
+        {where_sql}
+    """, params)
+    return {"count": rows[0]["cnt"] if rows else 0}
 
 
 @router.post("", response_model=ProductConfigItem, status_code=201)
-def create_product(body: ProductCreateRequest, _: AppUser = Depends(require_admin)):
+def create_product(body: ProductCreateRequest, admin: AppUser = Depends(require_admin)):
     settings = get_settings()
     product_id = _slugify(body.product_id or body.product_name)
     if not product_id:
@@ -85,6 +154,22 @@ def create_product(body: ProductCreateRequest, _: AppUser = Depends(require_admi
             bigquery.ScalarQueryParameter("now", "TIMESTAMP", now),
         ]),
     ).result()
+    
+    if body.specs is not None:
+        get_bq_client().query(
+            f"""
+            INSERT INTO `{settings.gcp_project_id}.{settings.bq_dataset}.product_details`
+            (product_id, specs, updated_at, updated_by)
+            VALUES (@product_id, PARSE_JSON(@specs), CURRENT_TIMESTAMP(), @admin_id)
+            """,
+            job_config=bigquery.QueryJobConfig(query_parameters=[
+                bigquery.ScalarQueryParameter("product_id", "STRING", product_id),
+                bigquery.ScalarQueryParameter("specs", "STRING", json.dumps(body.specs)),
+                bigquery.ScalarQueryParameter("admin_id", "STRING", admin.id),
+            ])
+        ).result()
+        
+    invalidate_prefix("products:")
     return ProductConfigItem(
         product_id=product_id, product_name=body.product_name.strip(), brand=body.brand,
         category=body.category, release_year=body.release_year, is_active=True,
@@ -107,12 +192,13 @@ def update_product(product_id: str, body: ProductUpdateRequest, _: AppUser = Dep
         "brand": body.brand if body.brand is not None else row.get("brand"),
         "category": body.category if body.category is not None else row.get("category"),
         "release_year": body.release_year if body.release_year is not None else row.get("release_year"),
+        "is_active": body.is_active if body.is_active is not None else row.get("is_active"),
     }
     get_bq_client().query(
         f"""
         UPDATE `{settings.gcp_project_id}.{settings.bq_dataset}.product_config`
         SET product_name=@product_name, brand=@brand, category=@category,
-            release_year=@release_year, updated_at=CURRENT_TIMESTAMP()
+            release_year=@release_year, is_active=@is_active, updated_at=CURRENT_TIMESTAMP()
         WHERE product_id=@product_id
         """,
         job_config=bigquery.QueryJobConfig(query_parameters=[
@@ -121,11 +207,12 @@ def update_product(product_id: str, body: ProductUpdateRequest, _: AppUser = Dep
             bigquery.ScalarQueryParameter("brand", "STRING", values["brand"]),
             bigquery.ScalarQueryParameter("category", "STRING", values["category"]),
             bigquery.ScalarQueryParameter("release_year", "INT64", values["release_year"]),
+            bigquery.ScalarQueryParameter("is_active", "BOOL", values["is_active"]),
         ]),
     ).result()
     invalidate_prefix("products:")
     return ProductConfigItem(
-        product_id=product_id, is_active=row["is_active"], created_at=row["created_at"],
+        product_id=product_id, created_at=row["created_at"],
         updated_at=datetime.now(timezone.utc), **values,
     )
 
@@ -133,13 +220,19 @@ def update_product(product_id: str, body: ProductUpdateRequest, _: AppUser = Dep
 @router.delete("/{product_id}", status_code=204)
 def deactivate_product(product_id: str, _: AppUser = Depends(require_admin)):
     settings = get_settings()
-    get_bq_client().query(
+    bq_client = get_bq_client()
+    bq_client.query(
         f"UPDATE `{settings.gcp_project_id}.{settings.bq_dataset}.product_config` SET is_active=FALSE, updated_at=CURRENT_TIMESTAMP() WHERE product_id=@product_id",
         job_config=bigquery.QueryJobConfig(query_parameters=[
             bigquery.ScalarQueryParameter("product_id", "STRING", product_id),
-        ]),
+        ])
     ).result()
     invalidate_prefix("products:")
+    
+    keyword_service = KeywordService(bq_client, settings.gcp_project_id, settings.bq_dataset)
+    keywords_deactivated = keyword_service.deactivate_by_product(product_id)
+    
+    return {"message": "Product deactivated successfully", "keywords_deactivated": keywords_deactivated}
 
 
 @router.get("/aliases", response_model=list[ProductAliasItem])
@@ -554,3 +647,153 @@ def reject_resolution_candidate(
         ]),
     ).result()
     return {"candidate_id": candidate_id, "status": "rejected"}
+
+
+@router.post("/{product_id}/sync")
+def sync_product(
+    product_id: str,
+    background_tasks: BackgroundTasks,
+    admin: AppUser = Depends(require_admin),
+):
+    settings = get_settings()
+    bq_client = get_bq_client()
+    products = query_to_list(
+        f"SELECT product_id, product_name FROM `{settings.gcp_project_id}.{settings.bq_dataset}.product_config` WHERE product_id = @product_id",
+        [bigquery.ScalarQueryParameter("product_id", "STRING", product_id)],
+    )
+    if not products:
+        raise HTTPException(status_code=404, detail="Sản phẩm không tồn tại")
+    product = products[0]
+    product_name = product["product_name"]
+
+    # Check if keyword already exists
+    existing_kws = query_to_list(
+        f"SELECT keyword_id FROM `{settings.gcp_project_id}.{settings.bq_dataset}.keyword_config` WHERE search_cluster = @product_id AND LOWER(keyword_text) = @kw_text AND is_active = TRUE",
+        [
+            bigquery.ScalarQueryParameter("product_id", "STRING", product_id),
+            bigquery.ScalarQueryParameter("kw_text", "STRING", product_name.strip().lower()),
+        ],
+    )
+    if not existing_kws:
+        keyword_service = KeywordService(bq_client, settings.gcp_project_id, settings.bq_dataset)
+        from api.schemas.keyword_schemas import KeywordCreateRequest
+        keyword_service.create_keyword(
+            KeywordCreateRequest(
+                keyword_text=product_name.strip(),
+                search_cluster=product_id
+            )
+        )
+
+    def run_dbt_sync():
+        import subprocess
+        import sys
+        from pathlib import Path
+        
+        logger = logging.getLogger("api.products.sync")
+        logger.info(f"Background sync task started for product {product_id}")
+        
+        project_root = Path(__file__).resolve().parent.parent.parent.parent
+        dbt_runner_path = project_root / "scripts" / "dbt" / "dbt_runner.py"
+        
+        cmd = [sys.executable, str(dbt_runner_path), "run", "--select", "dim_products agg_daily_product_ranking"]
+        logger.info(f"Running cmd: {' '.join(cmd)}")
+        result = subprocess.run(cmd, cwd=str(project_root), capture_output=True, text=True)
+        if result.returncode != 0:
+            logger.error(f"DBT sync failed: {result.stderr or result.stdout}")
+        else:
+            logger.info("DBT sync completed successfully")
+            from api.cache import invalidate_prefix
+            invalidate_prefix("products:")
+
+    background_tasks.add_task(run_dbt_sync)
+    return {"message": "Đã bắt đầu tiến trình đồng bộ sản phẩm", "product_id": product_id}
+
+
+@router.post("/{product_id}/crawl")
+def crawl_product(
+    product_id: str,
+    background_tasks: BackgroundTasks,
+    use_ytdlp: bool = False,
+    admin: AppUser = Depends(require_admin),
+):
+    settings = get_settings()
+    bq_client = get_bq_client()
+    
+    products = query_to_list(
+        f"SELECT product_id, product_name FROM `{settings.gcp_project_id}.{settings.bq_dataset}.product_config` WHERE product_id = @product_id",
+        [bigquery.ScalarQueryParameter("product_id", "STRING", product_id)],
+    )
+    if not products:
+        raise HTTPException(status_code=404, detail="Sản phẩm không tồn tại")
+    product = products[0]
+    product_name = product["product_name"]
+
+    if not use_ytdlp:
+        quota_logs = query_to_list(f"""
+            SELECT SUM(units_used) AS total
+            FROM `{settings.gcp_project_id}.{settings.bq_dataset}.quota_operation_log`
+            WHERE DATE(created_at) = CURRENT_DATE()
+        """)
+        quota_used = quota_logs[0]["total"] if quota_logs and quota_logs[0]["total"] is not None else 0
+        
+        if quota_used >= 10000:
+            return {
+                "status": "quota_exhausted",
+                "message": "Đã hết quota YouTube API trong ngày (10,000 units). Bạn có muốn sử dụng chế độ tìm kiếm dự phòng bằng yt-dlp (0 quota) không?"
+            }
+
+    task_id = f"task_{uuid.uuid4().hex[:8]}"
+    
+    from pathlib import Path
+    task_dir = Path(__file__).resolve().parent.parent.parent.parent / "data" / "crawl_tasks"
+    task_dir.mkdir(parents=True, exist_ok=True)
+    
+    with open(task_dir / f"{task_id}.json", "w", encoding="utf-8") as f:
+        json.dump({
+            "task_id": task_id,
+            "status": "pending",
+            "progress": 0,
+            "message": "Đang xếp hàng tiến trình...",
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }, f, ensure_ascii=False, indent=2)
+
+    def run_crawl_script():
+        import subprocess
+        import sys
+        from pathlib import Path
+        project_root = Path(__file__).resolve().parent.parent.parent.parent
+        script_path = project_root / "scripts" / "run_product_crawl.py"
+        
+        cmd = [
+            sys.executable,
+            str(script_path),
+            "--product-id", product_id,
+            "--keyword", product_name,
+            "--method", "ytdlp" if use_ytdlp else "api",
+            "--task-id", task_id
+        ]
+        
+        logger = logging.getLogger("api.products.crawl")
+        logger.info(f"Starting product crawl background task: {' '.join(cmd)}")
+        
+        result = subprocess.run(cmd, cwd=str(project_root), capture_output=True, text=True)
+        if result.returncode != 0:
+            logger.error(f"Crawl script failed: {result.stderr or result.stdout}")
+        else:
+            logger.info("Crawl script completed successfully")
+            from api.cache import invalidate_prefix
+            invalidate_prefix("products:")
+
+    background_tasks.add_task(run_crawl_script)
+    return {"status": "accepted", "task_id": task_id, "message": "Đã tiếp nhận yêu cầu thu thập dữ liệu"}
+
+
+@router.get("/crawl-tasks/{task_id}")
+def get_crawl_task_status(task_id: str, _: AppUser = Depends(require_admin)):
+    from pathlib import Path
+    task_file = Path(__file__).resolve().parent.parent.parent.parent / "data" / "crawl_tasks" / f"{task_id}.json"
+    if not task_file.exists():
+        raise HTTPException(status_code=404, detail="Task không tồn tại")
+        
+    with open(task_file, "r", encoding="utf-8") as f:
+        return json.load(f)

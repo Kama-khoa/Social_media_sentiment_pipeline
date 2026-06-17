@@ -38,6 +38,7 @@ def main() -> None:
     parser.add_argument("--max-comments-per-video", type=int, default=None)
     parser.add_argument("--max-pages-per-video", type=int, default=None)
     parser.add_argument("--quota-units", type=int, default=None)
+    parser.add_argument("--product-id", type=str, default=None, help="Filter candidate videos by product_id")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
@@ -63,6 +64,7 @@ def main() -> None:
         quota_units=args.quota_units,
         budget=budget,
         dry_run=args.dry_run,
+        product_id=args.product_id,
     )
     quota_repo.upsert_daily_summary(date.today(), dag_run_id)
     logger.info("API comment backfill result: %s", result)

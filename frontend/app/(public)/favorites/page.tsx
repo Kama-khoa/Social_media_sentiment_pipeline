@@ -11,6 +11,7 @@ import { Icon } from "@/components/shared/Icon";
 import { ScoreRing, hasEnoughBayesData } from "@/components/shared/MockVisuals";
 import { SentimentBar } from "@/components/charts/SentimentBar";
 import { Button } from "@/components/ui/button";
+import { calculateControversyLabel } from "@/lib/utils";
 
 export default function FavoritesPage() {
   const router = useRouter();
@@ -87,7 +88,7 @@ export default function FavoritesPage() {
               <div className="flex items-start justify-between gap-3 pr-10">
                 <div className="min-w-0">
                   <div className="mb-1.5 flex gap-2">
-                    <ControversyBadge label={product.controversy_label} />
+                    <ControversyBadge label={calculateControversyLabel(product.positive_pct, product.negative_pct)} />
                   </div>
                   <h3 className="truncate text-[16.5px] font-bold">{product.product_name}</h3>
                   <p className="faint mt-1 text-[13px]">{product.brand ?? "Chưa rõ"} • {product.category ?? "Khác"}</p>

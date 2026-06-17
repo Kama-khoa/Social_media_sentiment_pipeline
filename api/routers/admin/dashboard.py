@@ -12,6 +12,9 @@ from api.routers.dashboard_helpers import (
     _get_mention_series,
     _get_quick_stats,
     _get_quota_today,
+    _get_aspect_distribution,
+    _get_global_aspect_sentiment,
+    _get_global_aspects,
 )
 from api.schemas.response_schemas import AdminDashboardResponse, PipelineStatus
 
@@ -31,6 +34,9 @@ async def admin_dashboard(_: AppUser = Depends(require_admin)):
     quick_stats = _get_quick_stats(project, dataset, marts)
     mention_series = _get_mention_series(project, marts)
     attention_items = _build_attention_items(project, dataset, marts)
+    aspect_distribution = _get_aspect_distribution(project, marts)
+    global_aspect_sentiment = _get_global_aspect_sentiment(project, marts)
+    global_aspects = _get_global_aspects(project, marts)
 
     pipeline_status = PipelineStatus(
         airflow_webserver=webserver_status if webserver_status in ("healthy", "unhealthy") else "unknown",
@@ -47,5 +53,8 @@ async def admin_dashboard(_: AppUser = Depends(require_admin)):
         mention_series=mention_series,
         recent_dag_runs=dag_runs,
         attention_items=attention_items,
+        aspect_distribution=aspect_distribution,
+        global_aspect_sentiment=global_aspect_sentiment,
+        global_aspects=global_aspects,
         as_of_date=date.today(),
     )

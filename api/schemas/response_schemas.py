@@ -49,6 +49,8 @@ class ProductConfigItem(BaseModel):
     is_active: bool
     created_at: datetime
     updated_at: datetime
+    is_synced: Optional[bool] = None
+    has_keyword: Optional[bool] = None
 
 
 class ProductAliasItem(BaseModel):
@@ -84,10 +86,16 @@ class ProductDetailChangeRequestItem(BaseModel):
     created_at: datetime
 
 
+class AttributionPoint(BaseModel):
+    date: str
+    sentiment_score: float
+
+
 class AttributionResponse(BaseModel):
     product_id: str
     product_name: str
     events: list["CausalEventSummary"]
+    trend: list[AttributionPoint] = []
 
 
 class ProductCommentItem(BaseModel):
@@ -329,10 +337,24 @@ class AttentionItem(BaseModel):
     message: str
 
 
+class AspectDistributionItem(BaseModel):
+    aspect_label: str
+    mention_count: int
+
+
+class GlobalAspectSentiment(BaseModel):
+    positive_count: int
+    negative_count: int
+    neutral_count: int
+
+
 class AdminDashboardResponse(BaseModel):
     pipeline_status: PipelineStatus
     quick_stats: QuickStat
     mention_series: list[DailyMentionStat]
     recent_dag_runs: list[DagRunSummary]
     attention_items: list[AttentionItem]
+    aspect_distribution: list[AspectDistributionItem] = Field(default_factory=list)
+    global_aspect_sentiment: Optional[GlobalAspectSentiment] = None
+    global_aspects: list[AspectSentiment] = Field(default_factory=list)
     as_of_date: date

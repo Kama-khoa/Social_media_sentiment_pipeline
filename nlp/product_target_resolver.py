@@ -112,17 +112,36 @@ class ProductTargetResolver:
                 aliases.add(_normalize_alias(item["alias_text"]))
         return aliases
 
-    def _candidates(self, limit: int) -> list[dict]:
-        rows = self.client.query(f"""
+    def _candidates(self, limit: int, product_id: str | None = None) -> list[dict]:
+        product_filter = ""
+        params = [bigquery.ScalarQueryParameter("limit", "INT64", limit)]
+        if product_id:
+            product_filter = """
+            AND (
+                (c.source_type = 'video' AND EXISTS(
+                    SELECT 1 FROM `{project_id}.{dataset}_intermediate.int_video_product_mentions` m
+                    WHERE m.video_id = c.source_id AND m.product_id = @product_id
+                ))
+                OR
+                (c.source_type = 'sentence' AND EXISTS(
+                    SELECT 1 FROM `{project_id}.{dataset}_intermediate.int_sentence_product_targets` t
+                    WHERE t.sentence_id = c.source_id AND t.product_id = @product_id
+                ))
+            )
+            """
+            params.append(bigquery.ScalarQueryParameter("product_id", "STRING", product_id))
+
+        query = f"""
             SELECT c.*
             FROM {self._intermediate("int_product_resolution_candidates")} c
             LEFT JOIN {self._table("product_resolution_candidates")} r USING (candidate_id)
-            WHERE r.candidate_id IS NULL OR r.status = 'pending'
-            ORDER BY c.created_at
+            WHERE (r.candidate_id IS NULL OR r.status = 'pending')
+              {product_filter}
+            ORDER BY c.created_at DESC
             LIMIT @limit
-        """, job_config=bigquery.QueryJobConfig(query_parameters=[
-            bigquery.ScalarQueryParameter("limit", "INT64", limit),
-        ])).result()
+        """
+        query = query.replace("{project_id}", self.project_id).replace("{dataset}", self.dataset)
+        rows = self.client.query(query, job_config=bigquery.QueryJobConfig(query_parameters=params)).result()
         return [dict(row) for row in rows]
 
     def _ask_gemini_batch(self, candidates: list[dict], catalog: list[dict]) -> dict[str, dict]:
@@ -326,7 +345,7 @@ class ProductTargetResolver:
         ])).result()
         alias_index.add(_normalize_alias(alias))
 
-    def run(self, limit: int, batch_size: int = _DEFAULT_BATCH_SIZE) -> dict[str, int]:
+    def run(self, limit: int, batch_size: int = _DEFAULT_BATCH_SIZE, product_id: str | None = None) -> dict[str, int]:
         if batch_size <= 0:
             raise ValueError("batch_size must be greater than zero")
         if self.recheck_batch_size <= 0:
@@ -336,7 +355,7 @@ class ProductTargetResolver:
         alias_index = self._active_aliases()
         resolved = 0
         pending = 0
-        candidates = self._candidates(limit)
+        candidates = self._candidates(limit, product_id=product_id)
         recheck_candidates: list[dict] = []
         for offset in range(0, len(candidates), batch_size):
             batch = candidates[offset:offset + batch_size]
@@ -388,8 +407,9 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--limit", type=int, default=100)
     parser.add_argument("--batch-size", type=int, default=_DEFAULT_BATCH_SIZE)
+    parser.add_argument("--product-id", type=str, default=None, help="Filter candidates by product_id")
     args = parser.parse_args()
-    print(ProductTargetResolver().run(args.limit, args.batch_size))
+    print(ProductTargetResolver().run(args.limit, args.batch_size, product_id=args.product_id))
 
 
 if __name__ == "__main__":

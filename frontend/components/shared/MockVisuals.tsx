@@ -63,12 +63,20 @@ export function Sparkline({ data, color = "var(--primary)", width = 200, height 
 
 export function KpiCard({ icon, label, value, sub, trend, spark, accent = "var(--primary)" }: { icon: IconName; label: string; value: string | number; sub?: string; trend?: number; spark?: number[]; accent?: string }) {
   return (
-    <div className="card fade-up flex flex-col gap-3 p-5">
-      <div className="flex items-start justify-between">
-        <div className="grid h-10 w-10 place-items-center rounded-xl" style={{ background: `color-mix(in oklab, ${accent} 14%, transparent)`, color: accent }}><Icon name={icon} size={20} /></div>
-        {trend !== undefined && <span className={`chip ${trend >= 0 ? "pos" : "neg"}`}><Icon name={trend >= 0 ? "arrowUp" : "arrowDown"} size={12} />{Math.abs(trend)}%</span>}
+    <div className="card fade-up flex flex-col gap-3.5 p-5 justify-between">
+      <div className="flex items-center gap-3">
+        <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl" style={{ background: `color-mix(in oklab, ${accent} 14%, transparent)`, color: accent }}>
+          <Icon name={icon} size={20} />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="text-[15px] font-extrabold text-[var(--text)] leading-tight">{label}</div>
+        </div>
+        {trend !== undefined && <span className={`chip shrink-0 ${trend >= 0 ? "pos" : "neg"}`}><Icon name={trend >= 0 ? "arrowUp" : "arrowDown"} size={12} />{Math.abs(trend)}%</span>}
       </div>
-      <div><div className="num text-[28px] font-bold leading-none">{value}</div><div className="muted mt-1 text-[13px] font-medium">{label}</div>{sub && <div className="faint mt-0.5 text-xs">{sub}</div>}</div>
+      <div>
+        <div className="num text-[28px] font-bold leading-none">{value}</div>
+        {sub && <div className="faint mt-1.5 text-xs font-semibold">{sub}</div>}
+      </div>
       {spark && <Sparkline data={spark} color={accent} />}
     </div>
   );

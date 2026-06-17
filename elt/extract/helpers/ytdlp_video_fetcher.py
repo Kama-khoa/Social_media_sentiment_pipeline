@@ -103,6 +103,36 @@ class YtdlpVideoFetcher:
             })
         return videos
 
+    def search_by_keyword(
+        self,
+        keyword: str,
+        max_results: int = 50,
+    ) -> list[dict]:
+        url = f"ytsearch{max_results}:{keyword}"
+        result = self._session_pool.execute(
+            lambda cookies_path: self._fetch_channel(url, cookies_path, max_results)
+        )
+
+        if result is None:
+            raise YtdlpFetchError(f"yt-dlp returned no search results for {keyword}")
+
+        entries = result.get("entries") or []
+        videos = []
+        for entry in entries:
+            if entry is None:
+                continue
+            videos.append({
+                "id": entry.get("id", ""),
+                "title": entry.get("title", ""),
+                "description": entry.get("description") or "",
+                "upload_date": entry.get("upload_date"),
+                "view_count": entry.get("view_count"),
+                "duration": entry.get("duration"),
+                "thumbnail": entry.get("thumbnail"),
+                "channel_id": entry.get("channel_id") or "",
+            })
+        return videos
+
     def filter_by_keywords(self, videos: list[dict]) -> list[dict]:
         matched: list[dict] = []
         for video in videos:

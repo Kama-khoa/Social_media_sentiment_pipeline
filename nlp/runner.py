@@ -288,6 +288,60 @@ def fetch_unprocessed_sentences(limit: int, reprocess: bool = False) -> list[Sen
     return [_normalize_sentence_record(dict(row.items())) for row in rows]
 
 
+def fetch_unprocessed_sentences_by_product_id(
+    product_id: str, limit: int, reprocess: bool = False
+) -> list[SentenceRecord]:
+    from google.cloud import bigquery
+
+    project_id = os.environ["GCP_PROJECT_ID"]
+    base_dataset = os.environ["BQ_DATASET"]
+    dataset = _intermediate_dataset(base_dataset)
+    client = bigquery.Client(project=project_id)
+    limit_clause = ""
+    query_parameters = [
+        bigquery.ScalarQueryParameter("product_id", "STRING", product_id)
+    ]
+    if limit > 0:
+        limit_clause = "LIMIT @limit"
+        query_parameters.append(bigquery.ScalarQueryParameter("limit", "INT64", limit))
+
+    processed_filter = ""
+    processed_joins = ""
+    if not reprocess:
+        processed_joins = f"""
+        LEFT JOIN `{project_id}.{dataset}.int_sentiment_results` int_results
+          ON s.sentence_id = int_results.sentence_id
+        LEFT JOIN `{project_id}.{base_dataset}.raw_sentiment_results` raw_results
+          ON s.sentence_id = raw_results.sentence_id
+        """
+        processed_filter = """
+          AND int_results.sentence_id IS NULL
+          AND raw_results.sentence_id IS NULL
+        """
+
+    query = f"""
+        SELECT
+          s.sentence_id,
+          s.comment_id,
+          s.video_id,
+          COALESCE(NULLIF(s.sentence_text_normalized, ''), s.sentence_text) AS sentence_text
+        FROM `{project_id}.{dataset}.int_comment_sentences` s
+        JOIN `{project_id}.{dataset}.int_video_product_mentions` m
+          ON s.video_id = m.video_id
+        {processed_joins}
+        WHERE m.product_id = @product_id
+          {processed_filter}
+          AND s.is_vietnamese = TRUE
+          AND s.data_quality_score >= 0.8
+          AND s.word_count BETWEEN 2 AND 80
+        ORDER BY s.published_at DESC
+        {limit_clause}
+    """
+    job_config = bigquery.QueryJobConfig(query_parameters=query_parameters)
+    rows = client.query(query, job_config=job_config).result()
+    return [_normalize_sentence_record(dict(row.items())) for row in rows]
+
+
 def _raw_results_schema():
     from google.cloud import bigquery
 
@@ -555,12 +609,15 @@ def run(
     dag_run_id: str = _DEFAULT_DAG_RUN_ID,
     reprocess: bool = False,
     router: ConfidenceRouter | None = None,
+    product_id: str | None = None,
 ) -> list[dict]:
-    records = (
-        rows_from_jsonl(input_jsonl)
-        if input_jsonl
-        else fetch_unprocessed_sentences(limit, reprocess=reprocess)
-    )
+    if input_jsonl:
+        records = rows_from_jsonl(input_jsonl)
+    elif product_id:
+        records = fetch_unprocessed_sentences_by_product_id(product_id, limit, reprocess=reprocess)
+    else:
+        records = fetch_unprocessed_sentences(limit, reprocess=reprocess)
+
     if limit and input_jsonl:
         records = records[:limit]
 
@@ -593,12 +650,15 @@ def debug_local_confidence(
     output_jsonl: Path | None = None,
     reprocess: bool = False,
     router: ConfidenceRouter | None = None,
+    product_id: str | None = None,
 ) -> list[dict]:
-    records = (
-        rows_from_jsonl(input_jsonl)
-        if input_jsonl
-        else fetch_unprocessed_sentences(limit, reprocess=reprocess)
-    )
+    if input_jsonl:
+        records = rows_from_jsonl(input_jsonl)
+    elif product_id:
+        records = fetch_unprocessed_sentences_by_product_id(product_id, limit, reprocess=reprocess)
+    else:
+        records = fetch_unprocessed_sentences(limit, reprocess=reprocess)
+
     if limit and input_jsonl:
         records = records[:limit]
 
@@ -629,6 +689,7 @@ def _parse_args() -> argparse.Namespace:
         help="Allow selecting already processed sentences and upsert by result_id.",
     )
     parser.add_argument("--dag-run-id", default=os.environ.get("AIRFLOW_CTX_DAG_RUN_ID", _DEFAULT_DAG_RUN_ID))
+    parser.add_argument("--product-id", default=None, help="Only process comments for a specific product ID")
     return parser.parse_args()
 
 
@@ -641,6 +702,7 @@ def main() -> None:
             input_jsonl=args.input_jsonl,
             output_jsonl=args.output_jsonl,
             reprocess=args.reprocess,
+            product_id=args.product_id,
         )
         return
 
@@ -651,6 +713,7 @@ def main() -> None:
         write_bq=not args.no_write_bq,
         dag_run_id=args.dag_run_id,
         reprocess=args.reprocess,
+        product_id=args.product_id,
     )
 
 

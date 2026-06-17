@@ -67,6 +67,7 @@ class ProductCreateRequest(BaseModel):
     brand: Optional[str] = None
     category: Optional[str] = None
     release_year: Optional[int] = None
+    specs: Optional[dict[str, Any]] = None
 
 
 class ProductUpdateRequest(BaseModel):
@@ -74,6 +75,7 @@ class ProductUpdateRequest(BaseModel):
     brand: Optional[str] = None
     category: Optional[str] = None
     release_year: Optional[int] = None
+    is_active: Optional[bool] = None
 
 
 class ProductAliasCreateRequest(BaseModel):

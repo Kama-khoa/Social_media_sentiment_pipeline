@@ -47,6 +47,7 @@ class ApiCommentBackfill:
         quota_units: int | None = None,
         budget: QuotaBudget | None = None,
         dry_run: bool = False,
+        product_id: str | None = None,
     ) -> ApiCommentBackfillResult:
         settings = self._config.api_comment_backfill
         max_videos = max_videos or settings.max_videos_per_run
@@ -65,7 +66,7 @@ class ApiCommentBackfill:
                 dry_run=dry_run,
             )
 
-        candidates = self._comment_repo.get_candidate_videos(max_videos)
+        candidates = self._comment_repo.get_candidate_videos(max_videos, product_id=product_id)
         logger.info("API comment backfill candidates: %d", len(candidates))
         if dry_run:
             estimated_units = min(len(candidates) * max_pages_per_video, available_units)

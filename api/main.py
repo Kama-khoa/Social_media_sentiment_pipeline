@@ -8,6 +8,9 @@ from api.routers.admin import logs as admin_logs
 from api.routers.admin import pipeline as admin_pipeline
 from api.routers.admin import products as admin_products
 from api.routers.admin import users as admin_users
+from api.routers.admin.keywords import router as admin_keywords
+from api.routers.admin.channels_suggestion import router as admin_channels_suggestion
+from api.routers.admin.backfill import router as admin_backfill
 from api.routers.public import auth, products, search
 from api.routers.user import auth as user_auth
 from api.routers.user import dashboard as user_dashboard
@@ -46,3 +49,6 @@ app.include_router(admin_products.router)
 app.include_router(admin_logs.router)
 app.include_router(admin_pipeline.router)
 app.include_router(admin_users.router)
+app.include_router(admin_keywords)
+app.include_router(admin_channels_suggestion)
+app.include_router(admin_backfill)

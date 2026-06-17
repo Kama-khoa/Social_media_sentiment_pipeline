@@ -11,6 +11,9 @@ from api.schemas.response_schemas import (
     DagRunSummary,
     QuickStat,
     TopProduct,
+    AspectDistributionItem,
+    GlobalAspectSentiment,
+    AspectSentiment,
 )
 
 logger = logging.getLogger(__name__)
@@ -289,3 +292,84 @@ def _build_attention_items(project: str, dataset: str, marts: str) -> list[Atten
         ))
 
     return items
+
+
+def _get_aspect_distribution(project: str, marts: str) -> list[AspectDistributionItem]:
+    try:
+        rows = query_to_list(f"""
+            SELECT aspect_label, COUNT(*) AS mention_count
+            FROM `{project}.{marts}.fact_product_mentions`
+            WHERE aspect_label != 'NONE'
+            GROUP BY aspect_label
+            ORDER BY mention_count DESC
+        """)
+        return [
+            AspectDistributionItem(
+                aspect_label=r["aspect_label"],
+                mention_count=int(r["mention_count"] or 0)
+            )
+            for r in rows
+        ]
+    except Exception as e:
+        logger.warning("Could not fetch aspect distribution from BQ: %s", e)
+        return []
+
+
+def _get_global_aspect_sentiment(project: str, marts: str) -> GlobalAspectSentiment:
+    try:
+        rows = query_to_list(f"""
+            SELECT UPPER(sentiment_label) AS sentiment, COUNT(*) AS cnt
+            FROM `{project}.{marts}.fact_product_mentions`
+            WHERE aspect_label != 'NONE'
+            GROUP BY sentiment
+        """)
+        pos, neg, neu = 0, 0, 0
+        for r in rows:
+            sent = r["sentiment"]
+            cnt = int(r["cnt"] or 0)
+            if sent == "POSITIVE":
+                pos = cnt
+            elif sent == "NEGATIVE":
+                neg = cnt
+            elif sent == "NEUTRAL":
+                neu = cnt
+        return GlobalAspectSentiment(
+            positive_count=pos,
+            negative_count=neg,
+            neutral_count=neu
+        )
+    except Exception as e:
+        logger.warning("Could not fetch global aspect sentiment from BQ: %s", e)
+        return GlobalAspectSentiment(positive_count=0, negative_count=0, neutral_count=0)
+
+
+def _get_global_aspects(project: str, marts: str) -> list[AspectSentiment]:
+    try:
+        rows = query_to_list(f"""
+            SELECT
+                aspect_label,
+                COUNTIF(UPPER(sentiment_label) = 'POSITIVE') AS positive_count,
+                COUNTIF(UPPER(sentiment_label) = 'NEGATIVE') AS negative_count,
+                COUNTIF(UPPER(sentiment_label) = 'NEUTRAL') AS neutral_count,
+                COUNT(*) AS total_mentions
+            FROM `{project}.{marts}.fact_product_mentions`
+            WHERE aspect_label != 'NONE'
+              AND sentence_type = 'statement'
+            GROUP BY aspect_label
+            ORDER BY total_mentions DESC
+        """)
+        return [
+            AspectSentiment(
+                aspect_label=r["aspect_label"],
+                positive_count=int(r["positive_count"] or 0),
+                negative_count=int(r["negative_count"] or 0),
+                neutral_count=int(r["neutral_count"] or 0),
+                total_mentions=int(r["total_mentions"] or 0),
+                positive_pct=round(r["positive_count"] * 100.0 / r["total_mentions"], 1) if r["total_mentions"] else 0.0,
+                negative_pct=round(r["negative_count"] * 100.0 / r["total_mentions"], 1) if r["total_mentions"] else 0.0,
+            )
+            for r in rows
+        ]
+    except Exception as e:
+        logger.warning("Could not fetch global aspects from BQ: %s", e)
+        return []

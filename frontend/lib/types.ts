@@ -106,10 +106,16 @@ export interface CausalEventSummary {
   explanation_text: string;
 }
 
+export interface AttributionPoint {
+  date: string;
+  sentiment_score: number;
+}
+
 export interface AttributionData {
   product_id: string;
   product_name: string;
   events: CausalEventSummary[];
+  trend: AttributionPoint[];
 }
 
 export interface ProductComment {
@@ -195,12 +201,26 @@ export interface AttentionItem {
   message: string;
 }
 
+export interface AspectDistributionItem {
+  aspect_label: string;
+  mention_count: number;
+}
+
+export interface GlobalAspectSentiment {
+  positive_count: number;
+  negative_count: number;
+  neutral_count: number;
+}
+
 export interface AdminDashboardData {
   pipeline_status: PipelineStatus;
   quick_stats: QuickStat;
   mention_series: DailyMentionStat[];
   recent_dag_runs: DagRunSummary[];
   attention_items: AttentionItem[];
+  aspect_distribution: AspectDistributionItem[];
+  global_aspect_sentiment: GlobalAspectSentiment | null;
+  global_aspects: AspectSentiment[];
   as_of_date: string;
 }
 
