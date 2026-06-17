@@ -1,6 +1,13 @@
+import os
+import pendulum
 from datetime import datetime, timedelta
+from pathlib import Path
 from airflow import DAG
 from airflow.operators.bash import BashOperator
+
+# Thư mục gốc dự án (hoạt động tốt cả trên local và Docker)
+PROJECT_ROOT = str(Path(__file__).resolve().parent.parent.parent)
+local_tz = pendulum.timezone("Asia/Ho_Chi_Minh")
 
 default_args = {
     'owner': 'elt_pipeline',
@@ -16,7 +23,7 @@ with DAG(
     default_args=default_args,
     description='Sync channels and keywords to BigQuery configs',
     schedule_interval=None, # Run manually
-    start_date=datetime(2026, 6, 16),
+    start_date=datetime(2026, 6, 16, tzinfo=local_tz),
     catchup=False,
     tags=['elt', 'seed'],
 ) as dag:
@@ -26,7 +33,7 @@ with DAG(
     run_seed_sync = BashOperator(
         task_id='run_seed_sync',
         bash_command='python -m elt.seed_data.seed_loader',
-        cwd='/opt/airflow',
+        cwd=PROJECT_ROOT,
     )
 
     run_seed_sync

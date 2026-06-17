@@ -389,7 +389,7 @@ export default function ProductsAdminPage() {
         }
     }
 
-    async function reviewRequest(requestId: string, action: "approve" | "reject") {
+    async function reviewRequest(requestId: string, action: "approve" | "reject" | "processing") {
         setReviewingId(requestId);
         try {
             await api.admin.products.reviewDetailRequest(requestId, action);

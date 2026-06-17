@@ -256,6 +256,8 @@ export interface ProductConfigItem {
   is_active: boolean;
   created_at: string;
   updated_at: string;
+  is_synced?: boolean;
+  has_keyword?: boolean;
 }
 
 export interface ProductAliasItem {
@@ -284,7 +286,7 @@ export interface ProductDetailChangeRequestItem {
   proposed_official_url: string | null;
   proposed_image_url: string | null;
   submitted_by: string;
-  status: "pending" | "approved" | "rejected";
+  status: "pending" | "processing" | "approved" | "rejected";
   created_at: string;
 }
 
@@ -325,6 +327,11 @@ export interface DagRunDetail {
   start_date: string | null;
   duration_seconds: number | null;
   tasks: TaskInstanceDetail[];
+}
+
+export interface DagRunsListResponse {
+  runs: DagRunDetail[];
+  total_count: number;
 }
 
 export interface AirflowHealth {

@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import FileResponse
 
 from api.dependencies import require_admin
 from api.models import AppUser
@@ -70,4 +71,15 @@ def tail_log(
         lines=text.splitlines()[-lines:],
         truncated=truncated,
         size_bytes=stat.st_size,
+    )
+
+
+@router.get("/download")
+def download_log(path: str = Query(..., min_length=1), _: AppUser = Depends(require_admin)):
+    _ensure_log_root()
+    log_path = _resolve_log_path(path)
+    return FileResponse(
+        path=log_path,
+        filename=log_path.name,
+        media_type="text/plain",
     )

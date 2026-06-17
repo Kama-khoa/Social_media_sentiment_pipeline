@@ -23,6 +23,9 @@ import type {
     UserDashboardData,
     PipelineOpsSeries,
     DagRunSummary,
+    DagRunDetail,
+    DagRunsListResponse,
+    TaskInstanceDetail,
 } from "./types";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
@@ -173,7 +176,7 @@ export const api = {
                 const qs = query.toString() ? `?${query.toString()}` : "";
                 return request<{ count: number }>(`/admin/products/count${qs}`);
             },
-            create: (data: { product_id?: string; product_name: string; brand?: string; category?: string; release_year?: number }) =>
+            create: (data: { product_id?: string; product_name: string; brand?: string; category?: string; release_year?: number; specs?: Record<string, any> }) =>
                 request<ProductConfigItem>("/admin/products", { method: "POST", body: JSON.stringify(data) }),
             update: (id: string, data: { product_name?: string; brand?: string; category?: string; release_year?: number; is_active?: boolean }) =>
                 request<ProductConfigItem>(`/admin/products/${id}`, { method: "PUT", body: JSON.stringify(data) }),
@@ -219,8 +222,17 @@ export const api = {
             health: () => request<PipelineHealthData>("/admin/pipeline/health"),
             dags: () => request<unknown>("/admin/pipeline/dags"),
             runs: (dagId: string, limit = 5) => request<unknown>(`/admin/pipeline/dags/${dagId}/runs?limit=${limit}`),
+            allRuns: (params?: { dagId?: string; state?: string; limit?: number; offset?: number }) => {
+                const query = new URLSearchParams();
+                if (params?.dagId) query.append("dag_id", params.dagId);
+                if (params?.state) query.append("state", params.state);
+                if (params?.limit) query.append("limit", String(params.limit));
+                if (params?.offset !== undefined) query.append("offset", String(params.offset));
+                const qs = query.toString() ? `?${query.toString()}` : "";
+                return request<DagRunsListResponse>(`/admin/pipeline/runs${qs}`);
+            },
             tasks: (dagId: string, runId: string) =>
-                request<unknown>(`/admin/pipeline/dags/${dagId}/runs/${runId}/tasks`),
+                request<TaskInstanceDetail[]>(`/admin/pipeline/dags/${dagId}/runs/${runId}/tasks`),
             taskLog: (dagId: string, runId: string, taskId: string, tryNumber: number = 1) =>
                 request<{ content: string }>(`/admin/pipeline/dags/${dagId}/runs/${runId}/tasks/${taskId}/logs/${tryNumber}`),
             trigger: (dagId: string) =>

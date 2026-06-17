@@ -103,7 +103,7 @@ export function KeywordSuggestionModal({ open, productId, onClose }: { open: boo
 
         {loading ? (
           <div className="py-8 flex justify-center text-slate-400">
-            <Icon name="loader" size={24} className="animate-spin" />
+            <div className="h-6 w-6 animate-spin rounded-full border-2 border-current border-t-transparent" />
           </div>
         ) : suggestions.length === 0 ? (
           <div className="py-8 text-center text-sm text-slate-500 space-y-4">

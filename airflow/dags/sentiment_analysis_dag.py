@@ -1,6 +1,13 @@
+import os
+import pendulum
 from datetime import datetime, timedelta
+from pathlib import Path
 from airflow import DAG
 from airflow.operators.bash import BashOperator
+
+# Thư mục gốc dự án (hoạt động tốt cả trên local và Docker)
+PROJECT_ROOT = str(Path(__file__).resolve().parent.parent.parent)
+local_tz = pendulum.timezone("Asia/Ho_Chi_Minh")
 
 default_args = {
     'owner': 'nlp_pipeline',
@@ -15,8 +22,8 @@ with DAG(
     'sentiment_analysis_dag',
     default_args=default_args,
     description='Run NLP sentiment analysis on comment sentences',
-    schedule_interval='0 20 * * *', # Run at 3:00 AM UTC+7, after extraction
-    start_date=datetime(2026, 6, 16),
+    schedule_interval='0 3 * * *', # Run at 3:00 AM local time (Asia/Ho_Chi_Minh), after extraction
+    start_date=datetime(2026, 6, 16, tzinfo=local_tz),
     catchup=False,
     max_active_runs=1,
     max_active_tasks=1,
@@ -29,7 +36,7 @@ with DAG(
             'python scripts/dbt/dbt_runner.py run '
             '--select stg_youtube_comments int_comment_sentences'
         ),
-        cwd='/opt/airflow',
+        cwd=PROJECT_ROOT,
     )
 
     run_nlp_inference = BashOperator(
@@ -39,7 +46,7 @@ with DAG(
             '--limit 5000 '
             '--dag-run-id "{{ dag_run.run_id }}"'
         ),
-        cwd='/opt/airflow',
+        cwd=PROJECT_ROOT,
     )
 
     promote_nlp_results = BashOperator(
@@ -49,13 +56,13 @@ with DAG(
             '--select int_sentiment_results int_video_product_mentions '
             'int_sentence_product_targets int_product_resolution_candidates'
         ),
-        cwd='/opt/airflow',
+        cwd=PROJECT_ROOT,
     )
 
     resolve_product_targets = BashOperator(
         task_id='resolve_product_targets',
         bash_command='python -m nlp.product_target_resolver --limit 100 --batch-size 10',
-        cwd='/opt/airflow',
+        cwd=PROJECT_ROOT,
     )
 
     rebuild_fact_product_mentions = BashOperator(
@@ -64,7 +71,7 @@ with DAG(
             'python scripts/dbt/dbt_runner.py run '
             '--select int_video_product_mentions int_sentence_product_targets fact_product_mentions'
         ),
-        cwd='/opt/airflow',
+        cwd=PROJECT_ROOT,
     )
 
     (

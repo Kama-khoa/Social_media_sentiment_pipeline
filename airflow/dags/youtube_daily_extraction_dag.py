@@ -1,6 +1,13 @@
+import os
+import pendulum
 from datetime import datetime, timedelta
+from pathlib import Path
 from airflow import DAG
 from airflow.operators.bash import BashOperator
+
+# Thư mục gốc dự án (hoạt động tốt cả trên local và Docker)
+PROJECT_ROOT = str(Path(__file__).resolve().parent.parent.parent)
+local_tz = pendulum.timezone("Asia/Ho_Chi_Minh")
 
 default_args = {
     'owner': 'elt_pipeline',
@@ -15,8 +22,8 @@ with DAG(
     'youtube_daily_extraction_dag',
     default_args=default_args,
     description='Daily ELT extraction and dbt transformation',
-    schedule_interval='0 19 * * *', # 2:00 AM UTC+7 (19:00 UTC)
-    start_date=datetime(2025, 1, 1),
+    schedule_interval='0 2 * * *', # 2:00 AM local time (Asia/Ho_Chi_Minh)
+    start_date=datetime(2025, 1, 1, tzinfo=local_tz),
     catchup=False,
     max_active_runs=1,
     max_active_tasks=1,
@@ -31,7 +38,7 @@ with DAG(
             '--lookback-days "{{ dag_run.conf.get(\'lookback_days\', 30) }}" '
             '--crawl-mode "{{ dag_run.conf.get(\'crawl_mode\', \'api_or_ytdlp\') }}"'
         ),
-        cwd='/opt/airflow',
+        cwd=PROJECT_ROOT,
     )
 
     prepare_downstream_models = BashOperator(
@@ -41,7 +48,7 @@ with DAG(
             '--select stg_youtube_videos stg_youtube_comments '
             'int_video_product_mentions int_comment_sentences'
         ),
-        cwd='/opt/airflow',
+        cwd=PROJECT_ROOT,
     )
 
     run_youtube_elt >> prepare_downstream_models

@@ -2,7 +2,7 @@ import logging
 from datetime import datetime, timezone
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from api.bq_client import query_to_list
 from api.config import get_settings
@@ -11,6 +11,7 @@ from api.models import AppUser
 from api.schemas.response_schemas import (
     AirflowHealth,
     DagRunDetail,
+    DagRunsListResponse,
     PipelineHealthResponse,
     PipelineMetrics,
     TaskInstanceDetail,
@@ -150,11 +151,85 @@ def list_dag_runs(dag_id: str, limit: int = 10, _: AppUser = Depends(require_adm
         return _safe_airflow_get(client, f"/api/v1/dags/{dag_id}/dagRuns?limit={limit}&order_by=-start_date")
 
 
-@router.get("/dags/{dag_id}/runs/{run_id}/tasks")
+@router.get("/dags/{dag_id}/runs/{run_id}/tasks", response_model=list[TaskInstanceDetail])
 def list_task_instances(dag_id: str, run_id: str, _: AppUser = Depends(require_admin)):
     settings = get_settings()
+    import urllib.parse
+    run_id_enc = urllib.parse.quote(run_id)
     with _airflow_client(settings) as client:
-        return _safe_airflow_get(client, f"/api/v1/dags/{dag_id}/dagRuns/{run_id}/taskInstances")
+        ti_data = _safe_airflow_get(client, f"/api/v1/dags/{dag_id}/dagRuns/{run_id_enc}/taskInstances")
+        tasks = []
+        if ti_data:
+            for ti in ti_data.get("task_instances", []):
+                tasks.append(TaskInstanceDetail(
+                    task_id=ti.get("task_id", ""),
+                    state=ti.get("state") or "none",
+                    duration=ti.get("duration"),
+                    try_number=ti.get("try_number", 1),
+                ))
+        return tasks
+
+
+@router.get("/runs", response_model=DagRunsListResponse)
+def list_all_dag_runs(
+    dag_id: str | None = Query(None),
+    state: str | None = Query(None),
+    limit: int = Query(10, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    _: AppUser = Depends(require_admin),
+):
+    settings = get_settings()
+    path = f"/api/v1/dags/{dag_id}/dagRuns" if dag_id else "/api/v1/dags/~/dagRuns"
+    
+    params = {
+        "limit": limit,
+        "offset": offset,
+        "order_by": "-start_date",
+    }
+    if state:
+        params["state"] = state
+
+    with _airflow_client(settings) as client:
+        try:
+            # Construct URL manually with parameters
+            param_str = "&".join(f"{k}={v}" for k, v in params.items())
+            resp_data = _safe_airflow_get(client, f"{path}?{param_str}")
+        except HTTPException as e:
+            if e.status_code == 404 and dag_id:
+                # If DAG ID not found, return empty list instead of crashing
+                return DagRunsListResponse(runs=[], total_count=0)
+            raise e
+
+        runs = []
+        total_count = 0
+        if resp_data:
+            total_count = resp_data.get("total_entries", 0)
+            for run in resp_data.get("dag_runs", []):
+                run_dag_id = run.get("dag_id", "")
+                run_id = run.get("dag_run_id", "")
+                start_date = run.get("start_date") or run.get("execution_date")
+                end_date = run.get("end_date")
+                
+                duration_seconds = None
+                if start_date and end_date:
+                    try:
+                        from datetime import datetime as dt
+                        start = dt.fromisoformat(start_date.replace("Z", "+00:00"))
+                        end = dt.fromisoformat(end_date.replace("Z", "+00:00"))
+                        duration_seconds = int((end - start).total_seconds())
+                    except Exception:
+                        pass
+
+                runs.append(DagRunDetail(
+                    dag_id=run_dag_id,
+                    run_id=run_id,
+                    state=run.get("state", "unknown"),
+                    start_date=start_date,
+                    duration_seconds=duration_seconds,
+                    tasks=[],  # Empty list; frontend pre-fetches tasks on-demand
+                ))
+
+        return DagRunsListResponse(runs=runs, total_count=total_count)
 
 
 @router.post("/dags/{dag_id}/trigger")

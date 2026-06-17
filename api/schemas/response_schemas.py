@@ -177,6 +177,11 @@ class DagRunDetail(BaseModel):
     tasks: list[TaskInstanceDetail] = []
 
 
+class DagRunsListResponse(BaseModel):
+    runs: list[DagRunDetail]
+    total_count: int
+
+
 class PipelineMetrics(BaseModel):
     quota_used_today: int
     quota_limit: int
