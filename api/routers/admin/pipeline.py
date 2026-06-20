@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
 
 from api.bq_client import query_to_list
 from api.config import get_settings
@@ -21,7 +22,7 @@ from api.schemas.response_schemas import (
 router = APIRouter(prefix="/admin/pipeline", tags=["pipeline"])
 
 _AIRFLOW_TIMEOUT = 10.0
-_DAG_IDS = ["youtube_daily_extraction_dag", "sentiment_analysis_dag", "analytics_dag"]
+_DAG_IDS = ["youtube_daily_extraction_dag", "sentiment_analysis_dag", "analytics_dag", "seed_sync_dag"]
 logger = logging.getLogger(__name__)
 
 
@@ -72,52 +73,69 @@ def pipeline_health(_: AppUser = Depends(require_admin)):
 
             for dag_id in _DAG_IDS:
                 try:
-                    runs_data = _safe_airflow_get(client, f"/api/v1/dags/{dag_id}/dagRuns?limit=1&order_by=-start_date")
-                    if not runs_data or not runs_data.get("dag_runs"):
-                        continue
+                    # Query single DAG info to get is_paused
+                    dag_meta = _safe_airflow_get(client, f"/api/v1/dags/{dag_id}")
+                    is_paused = dag_meta.get("is_paused") if dag_meta else None
 
-                    run = runs_data["dag_runs"][0]
-                    run_id = run.get("dag_run_id", "")
+                    runs_data = _safe_airflow_get(client, f"/api/v1/dags/{dag_id}/dagRuns?limit=1&order_by=-start_date")
+                    
+                    run = None
+                    if runs_data and runs_data.get("dag_runs"):
+                        run = runs_data["dag_runs"][0]
 
                     tasks: list[TaskInstanceDetail] = []
-                    if run_id:
-                        import urllib.parse
-                        run_id_enc = urllib.parse.quote(run_id)
-                        ti_data = _safe_airflow_get(client, f"/api/v1/dags/{dag_id}/dagRuns/{run_id_enc}/taskInstances")
-                        if ti_data:
-                            for ti in ti_data.get("task_instances", []):
-                                tasks.append(TaskInstanceDetail(
-                                    task_id=ti.get("task_id", ""),
-                                    state=ti.get("state") or "none",
-                                    duration=ti.get("duration"),
-                                    try_number=ti.get("try_number", 1),
-                                ))
-
-                    start_date = run.get("start_date") or run.get("execution_date")
-                    end_date = run.get("end_date")
+                    run_id = ""
+                    state = "none"
+                    start_date = None
                     duration_seconds = None
-                    if start_date and end_date:
-                        try:
-                            from datetime import datetime as dt
-                            start = dt.fromisoformat(start_date.replace("Z", "+00:00"))
-                            end = dt.fromisoformat(end_date.replace("Z", "+00:00"))
-                            duration_seconds = int((end - start).total_seconds())
-                        except Exception:
-                            pass
+
+                    if run:
+                        run_id = run.get("dag_run_id", "")
+                        state = run.get("state", "unknown")
+                        start_date = run.get("start_date") or run.get("execution_date")
+                        end_date = run.get("end_date")
+                        if start_date and end_date:
+                            try:
+                                from datetime import datetime as dt
+                                start = dt.fromisoformat(start_date.replace("Z", "+00:00"))
+                                end = dt.fromisoformat(end_date.replace("Z", "+00:00"))
+                                duration_seconds = int((end - start).total_seconds())
+                            except Exception:
+                                pass
+
+                        if run_id:
+                            import urllib.parse
+                            run_id_enc = urllib.parse.quote(run_id)
+                            ti_data = _safe_airflow_get(client, f"/api/v1/dags/{dag_id}/dagRuns/{run_id_enc}/taskInstances")
+                            if ti_data:
+                                for ti in ti_data.get("task_instances", []):
+                                    tasks.append(TaskInstanceDetail(
+                                        task_id=ti.get("task_id", ""),
+                                        state=ti.get("state") or "none",
+                                        duration=ti.get("duration"),
+                                        try_number=ti.get("try_number", 1),
+                                    ))
 
                     dag_runs.append(DagRunDetail(
                         dag_id=dag_id,
                         run_id=run_id,
-                        state=run.get("state", "unknown"),
+                        state=state,
                         start_date=start_date,
                         duration_seconds=duration_seconds,
                         tasks=tasks,
+                        is_paused=is_paused,
                     ))
                 except HTTPException as exc:
                     if airflow_message is None:
                         airflow_message = _airflow_error_message(exc)
                     logger.warning("Could not fetch Airflow DAG %s: %s", dag_id, exc.detail)
-                    continue
+                    dag_runs.append(DagRunDetail(
+                        dag_id=dag_id,
+                        run_id="",
+                        state="none",
+                        is_paused=None,
+                        tasks=[]
+                    ))
     except HTTPException as exc:
         airflow_message = _airflow_error_message(exc)
 
@@ -257,7 +275,7 @@ def get_task_log(dag_id: str, run_id: str, task_id: str, try_number: int, _: App
             run_id_enc = urllib.parse.quote(run_id)
             # Note: Airflow API returns plain text for logs if Accept is text/plain.
             # We fetch it and return as JSON wrapper.
-            resp = client.get(f"/api/v1/dags/{dag_id}/dagRuns/{run_id_enc}/taskInstances/{task_id}/logs/{try_number}")
+            resp = client.get(f"/api/v1/dags/{dag_id}/dagRuns/{run_id_enc}/taskInstances/{task_id}/logs/{try_number}?full_content=true")
             resp.raise_for_status()
             return {"content": resp.text}
         except httpx.ConnectError:
@@ -372,3 +390,60 @@ def pipeline_series(_: AppUser = Depends(require_admin)):
         pipeline_latency="2.1s",
         nlp_accuracy="97.7%"
     )
+
+
+class UpdateDagPayload(BaseModel):
+    is_paused: bool
+
+
+class UpdateTaskStatePayload(BaseModel):
+    new_state: str
+
+
+@router.patch("/dags/{dag_id}")
+def update_dag(dag_id: str, payload: UpdateDagPayload, _: AppUser = Depends(require_admin)):
+    settings = get_settings()
+    with _airflow_client(settings) as client:
+        try:
+            resp = client.patch(
+                f"/api/v1/dags/{dag_id}?update_mask=is_paused",
+                json={"is_paused": payload.is_paused}
+            )
+            resp.raise_for_status()
+            return resp.json()
+        except httpx.ConnectError:
+            raise HTTPException(status_code=502, detail="Cannot connect to Airflow webserver")
+        except httpx.TimeoutException:
+            raise HTTPException(status_code=504, detail="Airflow request timed out")
+        except httpx.HTTPStatusError as exc:
+            raise HTTPException(status_code=exc.response.status_code, detail=f"Airflow error: {exc.response.text[:200]}")
+
+
+@router.post("/dags/{dag_id}/runs/{run_id}/tasks/{task_id}/state")
+def update_task_state(
+    dag_id: str,
+    run_id: str,
+    task_id: str,
+    payload: UpdateTaskStatePayload,
+    _: AppUser = Depends(require_admin),
+):
+    settings = get_settings()
+    with _airflow_client(settings) as client:
+        try:
+            resp = client.post(
+                f"/api/v1/dags/{dag_id}/updateTaskInstancesState",
+                json={
+                    "dag_run_id": run_id,
+                    "task_id": task_id,
+                    "new_state": payload.new_state,
+                    "dry_run": False
+                }
+            )
+            resp.raise_for_status()
+            return resp.json()
+        except httpx.ConnectError:
+            raise HTTPException(status_code=502, detail="Cannot connect to Airflow webserver")
+        except httpx.TimeoutException:
+            raise HTTPException(status_code=504, detail="Airflow request timed out")
+        except httpx.HTTPStatusError as exc:
+            raise HTTPException(status_code=exc.response.status_code, detail=f"Airflow error: {exc.response.text[:200]}")

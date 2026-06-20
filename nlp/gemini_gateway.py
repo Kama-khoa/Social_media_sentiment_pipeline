@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+import threading
 
 from google import genai
 
@@ -30,6 +31,7 @@ class GeminiGateway:
         }
         self._available_models = list(GeminiAnnotator._MODELS_TO_TRY)
         self.last_model: str | None = None
+        self._lock = threading.Lock()
 
     def generate(self, prompt: str) -> str:
         if not self._client:
@@ -37,25 +39,31 @@ class GeminiGateway:
 
         last_exc: Exception | None = None
         for model_name in list(self._available_models):
-            budget = self._daily_budgets[model_name]
-            if not budget.can_use():
-                self._available_models.remove(model_name)
-                logger.warning("Model %s exhausted its daily request budget", model_name)
-                continue
+            with self._lock:
+                budget = self._daily_budgets[model_name]
+                if not budget.can_use():
+                    if model_name in self._available_models:
+                        self._available_models.remove(model_name)
+                    logger.warning("Model %s exhausted its daily request budget", model_name)
+                    continue
 
-            limiter = self._limiters[model_name]
-            limiter.wait(model_name)
+                limiter = self._limiters[model_name]
+                limiter.wait(model_name)
+
             try:
                 response = self._client.models.generate_content(model=model_name, contents=prompt)
-                budget.increment()
+                with self._lock:
+                    budget.increment()
                 self.last_model = model_name
                 return response.text
             except Exception as exc:
                 if any(marker in str(exc).lower() for marker in _RATE_LIMIT_ERRORS):
-                    limiter.block_for_cooldown()
+                    with self._lock:
+                        limiter.block_for_cooldown()
                     last_exc = exc
                     logger.warning("Model %s rate limited, trying fallback model", model_name)
                     continue
                 raise
 
         raise RuntimeError("All Gemini models in fallback chain exhausted") from last_exc
+

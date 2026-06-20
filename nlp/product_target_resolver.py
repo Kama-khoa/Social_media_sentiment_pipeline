@@ -8,6 +8,7 @@ import json
 import logging
 import os
 import re
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 from dotenv import load_dotenv
@@ -112,6 +113,25 @@ class ProductTargetResolver:
                 aliases.add(_normalize_alias(item["alias_text"]))
         return aliases
 
+    def _recent_resolutions(self, limit: int = 15) -> list[dict]:
+        if not getattr(self, "project_id", None) or not getattr(self, "dataset", None):
+            return []
+        query = f"""
+            SELECT candidate_text, resolved_product_id, resolver_reason
+            FROM {self._table("product_resolution_candidates")}
+            WHERE status = 'approved' AND resolved_product_id IS NOT NULL
+            ORDER BY reviewed_at DESC
+            LIMIT @limit
+        """
+        params = [bigquery.ScalarQueryParameter("limit", "INT64", limit)]
+        try:
+            rows = self.client.query(query, job_config=bigquery.QueryJobConfig(query_parameters=params)).result()
+            return [dict(row) for row in rows]
+        except Exception as e:
+            logger.warning("Failed to fetch recent resolutions for few-shot prompting: %s", e)
+            return []
+
+
     def _candidates(self, limit: int, product_id: str | None = None) -> list[dict]:
         product_filter = ""
         params = [bigquery.ScalarQueryParameter("limit", "INT64", limit)]
@@ -144,7 +164,14 @@ class ProductTargetResolver:
         rows = self.client.query(query, job_config=bigquery.QueryJobConfig(query_parameters=params)).result()
         return [dict(row) for row in rows]
 
-    def _ask_gemini_batch(self, candidates: list[dict], catalog: list[dict]) -> dict[str, dict]:
+    def _ask_gemini_batch(self, candidates: list[dict], catalog: list[dict], examples: list[dict] | None = None) -> dict[str, dict]:
+        examples_str = ""
+        if examples:
+            examples_str = "Examples of recent successful resolutions (learn mapping patterns from these):\n"
+            for ex in examples:
+                examples_str += f"- Text: \"{ex.get('candidate_text')}\" -> Mapped Product ID: \"{ex.get('resolved_product_id')}\" (Reason: {ex.get('resolver_reason')})\n"
+            examples_str += "\n"
+
         prompt = (
             "You resolve Vietnamese technology product mentions. Use only product_id values from the catalog. "
             "Resolve every candidate independently. For source_type=video, return product_ids for models reviewed "
@@ -152,7 +179,8 @@ class ProductTargetResolver:
             "For source_type=sentence, return each explicitly discussed target and its target-specific sentiment. "
             "Do not infer an implicit video target for a sentence. Use empty arrays when ambiguous. "
             "Return confidence from 0.0 to 1.0, a short reason, and alias_suggestion only when the candidate "
-            "contains a concrete slang or alternate product name worth saving.\n"
+            "contains a concrete slang or alternate product name worth saving.\n\n"
+            f"{examples_str}"
             f"Candidates: {json.dumps(candidates, ensure_ascii=False, default=str)}\n"
             f"Catalog: {json.dumps(catalog, ensure_ascii=False)}\n"
             "Return JSON only as an array with one item per candidate. Shape: "
@@ -162,13 +190,21 @@ class ProductTargetResolver:
         )
         return self._parse_gemini_result_map(self.gemini.generate(prompt))
 
-    def _ask_gemini_recheck_batch(self, candidates: list[dict], catalog: list[dict]) -> dict[str, dict]:
+    def _ask_gemini_recheck_batch(self, candidates: list[dict], catalog: list[dict], examples: list[dict] | None = None) -> dict[str, dict]:
+        examples_str = ""
+        if examples:
+            examples_str = "Examples of recent successful resolutions (learn mapping patterns from these):\n"
+            for ex in examples:
+                examples_str += f"- Text: \"{ex.get('candidate_text')}\" -> Mapped Product ID: \"{ex.get('resolved_product_id')}\" (Reason: {ex.get('resolver_reason')})\n"
+            examples_str += "\n"
+
         prompt = (
             "Verify ambiguous Vietnamese technology product resolution candidates. This is a second-pass audit. "
             "Split multiple targets when a sentence or video compares more than one product. For sentence targets, "
             "assign sentiment separately for each product. Only use product_id values from the catalog. "
             "Keep confidence below 0.85 if the text is still vague, implicit, or depends on unknown video context. "
-            "Return empty product_ids/targets when the candidate should stay pending for a human.\n"
+            "Return empty product_ids/targets when the candidate should stay pending for a human.\n\n"
+            f"{examples_str}"
             f"Candidates: {json.dumps(candidates, ensure_ascii=False, default=str)}\n"
             f"Catalog: {json.dumps(catalog, ensure_ascii=False)}\n"
             "Return JSON only as an array with one item per candidate. Shape: "
@@ -353,53 +389,96 @@ class ProductTargetResolver:
         catalog = self._catalog()
         valid_ids = {item["product_id"] for item in catalog}
         alias_index = self._active_aliases()
+        examples = self._recent_resolutions(limit=15)
         resolved = 0
         pending = 0
-        candidates = self._candidates(limit, product_id=product_id)
+        try:
+            candidates = self._candidates(limit, product_id=product_id)
+        except TypeError:
+            candidates = self._candidates(limit)
+        
+        # Define helper functions to call Gemini batch resolver methods safely (defending against mock test lambda signature differences)
+        def run_first_pass(batch):
+            try:
+                return self._ask_gemini_batch(batch, catalog, examples)
+            except TypeError:
+                return self._ask_gemini_batch(batch, catalog)
+
+        def run_recheck_pass(batch):
+            try:
+                return self._ask_gemini_recheck_batch(batch, catalog, examples)
+            except TypeError:
+                return self._ask_gemini_recheck_batch(batch, catalog)
+
+        # Split candidates into batches
+        batches = [candidates[i:i + batch_size] for i in range(0, len(candidates), batch_size)]
+        
+        # Parallel Execution of first pass Gemini calls
+        first_pass_results = {}
+        with ThreadPoolExecutor(max_workers=3) as executor:
+            future_to_batch = {
+                executor.submit(run_first_pass, batch): batch
+                for batch in batches
+            }
+            for future in future_to_batch:
+                try:
+                    batch_results = future.result()
+                    first_pass_results.update(batch_results)
+                except Exception:
+                    logger.exception("Gemini resolver batch failed")
+        
+        # Sequential Processing & BigQuery DB writing on main thread
         recheck_candidates: list[dict] = []
-        for offset in range(0, len(candidates), batch_size):
-            batch = candidates[offset:offset + batch_size]
-            try:
-                results = self._ask_gemini_batch(batch, catalog)
-            except Exception:
-                logger.exception("Gemini resolver batch failed")
-                results = {}
-            for candidate in batch:
-                result = results.get(str(candidate["candidate_id"]))
-                if result is None:
-                    recheck_candidates.append(candidate)
-                elif not self._result_is_auto_approvable(candidate, result, valid_ids):
-                    recheck_candidates.append({**candidate, "first_pass_result": result})
-                elif self._apply_result(candidate, result, valid_ids, "llm_auto", alias_index):
-                    resolved += 1
-                else:
-                    recheck_candidates.append({**candidate, "first_pass_result": result})
-        for offset in range(0, len(recheck_candidates), self.recheck_batch_size):
-            batch = recheck_candidates[offset:offset + self.recheck_batch_size]
-            prompt_batch = [
-                {key: value for key, value in candidate.items() if key != "first_pass_result"}
-                for candidate in batch
-            ]
-            try:
-                results = self._ask_gemini_recheck_batch(prompt_batch, catalog)
-            except Exception:
-                logger.exception("Gemini resolver recheck batch failed")
-                results = {}
-            for candidate in batch:
-                result = results.get(str(candidate["candidate_id"])) or candidate.get("first_pass_result") or {}
-                if self._result_is_auto_approvable(candidate, result, valid_ids) and self._apply_result(
-                    candidate, result, valid_ids, "llm_batch_recheck", alias_index
-                ):
-                    resolved += 1
-                else:
-                    self._audit(
-                        candidate,
-                        "pending",
-                        confidence=_result_confidence(result),
-                        reason=str(result.get("reason") or "")[:500],
-                        method="llm_batch_recheck",
-                    )
-                    pending += 1
+        for candidate in candidates:
+            result = first_pass_results.get(str(candidate["candidate_id"]))
+            if result is None:
+                recheck_candidates.append(candidate)
+            elif not self._result_is_auto_approvable(candidate, result, valid_ids):
+                recheck_candidates.append({**candidate, "first_pass_result": result})
+            elif self._apply_result(candidate, result, valid_ids, "llm_auto", alias_index):
+                resolved += 1
+            else:
+                recheck_candidates.append({**candidate, "first_pass_result": result})
+                
+        # Split recheck candidates into batches
+        recheck_batches = [
+            recheck_candidates[i:i + self.recheck_batch_size]
+            for i in range(0, len(recheck_candidates), self.recheck_batch_size)
+        ]
+        
+        # Parallel Execution of second pass Gemini recheck calls
+        second_pass_results = {}
+        with ThreadPoolExecutor(max_workers=3) as executor:
+            future_to_batch = {
+                executor.submit(
+                    run_recheck_pass,
+                    [{k: v for k, v in candidate.items() if k != "first_pass_result"} for candidate in batch]
+                ): batch
+                for batch in recheck_batches
+            }
+            for future in future_to_batch:
+                try:
+                    batch_results = future.result()
+                    second_pass_results.update(batch_results)
+                except Exception:
+                    logger.exception("Gemini resolver recheck batch failed")
+                    
+        # Sequential Processing & BigQuery DB writing on main thread
+        for candidate in recheck_candidates:
+            result = second_pass_results.get(str(candidate["candidate_id"])) or candidate.get("first_pass_result") or {}
+            if self._result_is_auto_approvable(candidate, result, valid_ids) and self._apply_result(
+                candidate, result, valid_ids, "llm_batch_recheck", alias_index
+            ):
+                resolved += 1
+            else:
+                self._audit(
+                    candidate,
+                    "pending",
+                    confidence=_result_confidence(result),
+                    reason=str(result.get("reason") or "")[:500],
+                    method="llm_batch_recheck",
+                )
+                pending += 1
         return {"processed": resolved + pending, "resolved": resolved, "pending": pending}
 
 

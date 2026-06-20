@@ -32,6 +32,9 @@ class AdminUserUpdateRequest(BaseModel):
 
 class ChannelCreateRequest(BaseModel):
     channel_url: str = Field(min_length=10)
+    bypass_resolve: Optional[bool] = False
+    channel_name: Optional[str] = None
+    subscriber_count: Optional[int] = None
 
 
 class ChannelUpdateRequest(BaseModel):

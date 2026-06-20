@@ -60,6 +60,11 @@ export default function ChannelsPage() {
   const [quotaRemaining, setQuotaRemaining] = useState<number | null>(null);
   const [suggestOpen, setSuggestOpen] = useState(false);
   const [backfillOpen, setBackfillOpen] = useState(false);
+  const [showManualFallback, setShowManualFallback] = useState(false);
+  const [manualUrl, setManualUrl] = useState("");
+  const [deferredInfo, setDeferredInfo] = useState<string | null>(null);
+  const [manualName, setManualName] = useState("");
+  const [manualSubs, setManualSubs] = useState("");
 
     const { register, handleSubmit, reset, formState: { errors } } = useForm<ChannelForm>({
         defaultValues: { channel_name: "", channel_url: "", channel_handle: "", subscriber_count: "" },
@@ -122,9 +127,13 @@ export default function ChannelsPage() {
     async function onSubmit(data: ChannelForm) {
         setSaving(true);
         setFormError(null);
+        setDeferredInfo(null);
         try {
             if (mode === "add") {
-                await api.admin.channels.create({ channel_url: data.channel_url.trim() });
+                const res = await api.admin.channels.create({ channel_url: data.channel_url.trim() });
+                if (res.subscriber_count === -1) {
+                    setDeferredInfo("Kênh đã được thêm thành công dưới dạng danh sách chờ. Thông tin kênh sẽ được tự động đồng bộ đầy đủ vào ngày mai.");
+                }
             } else if (editTarget) {
                 await api.admin.channels.update(editTarget.channel_id, {
                     channel_name: data.channel_name.trim(),
@@ -136,8 +145,52 @@ export default function ChannelsPage() {
             setMode(null);
             await load();
         } catch (err: unknown) {
+            const e = err as { status?: number; detail?: string };
+            if (mode === "add" && e?.status === 429) {
+                setManualUrl(data.channel_url.trim());
+                setManualName("");
+                setManualSubs("");
+                setMode(null);
+                setShowManualFallback(true);
+            } else {
+                setFormError(e?.detail ?? "Không thể lưu thay đổi.");
+            }
+        } finally {
+            setSaving(false);
+        }
+    }
+
+    async function onSubmitManual(isDeferred: boolean) {
+        setSaving(true);
+        setFormError(null);
+        try {
+            const payload: any = {
+                channel_url: manualUrl,
+                bypass_resolve: true,
+            };
+            if (isDeferred) {
+                payload.subscriber_count = -1;
+            } else {
+                if (!manualName.trim()) {
+                    setFormError("Vui lòng nhập tên kênh.");
+                    setSaving(false);
+                    return;
+                }
+                payload.channel_name = manualName.trim();
+                payload.subscriber_count = manualSubs ? parseInt(manualSubs, 10) : 0;
+            }
+
+            const res = await api.admin.channels.create(payload);
+            setShowManualFallback(false);
+            if (res.subscriber_count === -1) {
+                setDeferredInfo("Kênh đã được thêm thành công dưới dạng danh sách chờ. Thông tin kênh sẽ được tự động đồng bộ đầy đủ vào ngày mai.");
+            } else {
+                setDeferredInfo(null);
+            }
+            await load();
+        } catch (err: unknown) {
             const e = err as { detail?: string };
-            setFormError(e?.detail ?? "Không thể lưu thay đổi.");
+            setFormError(e?.detail ?? "Không thể lưu thông tin kênh.");
         } finally {
             setSaving(false);
         }
@@ -280,6 +333,16 @@ export default function ChannelsPage() {
           }
         />
       </div>
+
+            {deferredInfo && (
+                <div className="mb-4 bg-amber-50 border border-amber-200 text-amber-800 text-sm rounded-lg px-4 py-3 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                        <Icon name="clock" size={16} className="text-amber-600 mr-1.5" />
+                        <span>{deferredInfo}</span>
+                    </div>
+                    <Button variant="ghost" size="sm" onClick={() => setDeferredInfo(null)} className="h-auto p-1 text-amber-700 hover:bg-amber-100">Đóng</Button>
+                </div>
+            )}
 
             {pageError && (
                 <div className="mb-4 bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded-lg px-4 py-3">
@@ -487,6 +550,50 @@ export default function ChannelsPage() {
         open={backfillOpen} 
         onClose={() => setBackfillOpen(false)} 
       />
+
+      <Modal open={showManualFallback} title="Hết Quota - Nhập thông tin kênh thủ công" onClose={() => setShowManualFallback(false)}>
+          <div className="space-y-4">
+              <div className="bg-amber-50 border border-amber-200 text-amber-800 text-xs rounded-lg px-3 py-2">
+                  Hệ thống đã hết quota YouTube API hôm nay và bị YouTube chặn cào tự động. Bạn có thể tự điền thông tin hoặc lưu tạm thời chờ đồng bộ tự động.
+              </div>
+
+              <div className="text-xs text-slate-500 break-all">
+                  <strong>URL kênh:</strong> {manualUrl}
+              </div>
+
+              {formError && <div className="bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-lg px-3 py-2">{formError}</div>}
+
+              <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Tên kênh</label>
+                  <Input
+                      value={manualName}
+                      onChange={(e) => setManualName(e.target.value)}
+                      placeholder="Ví dụ: Schannel"
+                      disabled={saving}
+                  />
+              </div>
+
+              <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Số lượng người đăng ký (sub)</label>
+                  <Input
+                      value={manualSubs}
+                      onChange={(e) => setManualSubs(e.target.value)}
+                      placeholder="Ví dụ: 1500000"
+                      disabled={saving}
+                  />
+              </div>
+
+              <div className="flex justify-between items-center pt-2 gap-3">
+                  <Button type="button" onClick={() => onSubmitManual(true)} variant="outline" className="border-amber-300 text-amber-700 hover:bg-amber-50" disabled={saving}>
+                      {saving ? "Đang xử lý..." : "Lưu tạm thời (Hàng chờ)"}
+                  </Button>
+                  <div className="flex gap-2">
+                      <Button type="button" onClick={() => setShowManualFallback(false)} variant="outline" disabled={saving}>Hủy</Button>
+                      <Button type="button" onClick={() => onSubmitManual(false)} disabled={saving}>Lưu thủ công</Button>
+                  </div>
+              </div>
+          </div>
+      </Modal>
     </div>
   );
 }

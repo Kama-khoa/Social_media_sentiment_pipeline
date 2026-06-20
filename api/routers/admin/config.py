@@ -8,7 +8,7 @@ from urllib.parse import urlparse
 
 import httpx
 import requests
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from google.cloud import bigquery
 
 from api.bq_client import query_to_list
@@ -118,52 +118,111 @@ def _log_quota_operation(settings, operation_type: str, bucket: str, units: int,
     )
 
 
-def _resolve_channel_metadata(channel_url: str, settings) -> dict:
+def _resolve_channel_metadata(
+    channel_url: str,
+    settings,
+    bypass_resolve: bool = False,
+    manual_name: str | None = None,
+    manual_subs: int | None = None,
+) -> dict:
+    import uuid
+    import yt_dlp
+
     channel_id, handle, normalized_url = _parse_channel_url(channel_url)
-    api_key = os.getenv("YOUTUBE_API_KEY")
-    if not api_key:
-        raise HTTPException(status_code=503, detail="Thiếu YOUTUBE_API_KEY để resolve kênh YouTube.")
-
-    remaining = _quota_remaining(settings, "channel_seed", 500)
-    if remaining < _CHANNEL_SEED_UNITS_PER_CALL:
-        raise HTTPException(
-            status_code=429,
-            detail="Đã hết quota channel_seed hôm nay, chưa thể thêm kênh mới bằng YouTube API.",
-        )
-
-    params = {"part": "snippet,statistics", "key": api_key}
-    if channel_id:
-        params["id"] = channel_id
-    elif handle:
-        params["forHandle"] = handle
-
-    try:
-        response = requests.get(_YOUTUBE_CHANNELS_URL, params=params, timeout=15)
-        response.raise_for_status()
-    except requests.RequestException as exc:
-        logger.warning("Could not resolve channel URL %s: %s", normalized_url, exc)
-        raise HTTPException(status_code=502, detail="Không thể gọi YouTube API để resolve kênh.")
-
-    data = response.json()
-    items = data.get("items", [])
-    if not items:
-        raise HTTPException(status_code=404, detail="Không tìm thấy kênh YouTube từ URL này.")
-
-    item = items[0]
-    snippet = item.get("snippet", {})
-    statistics = item.get("statistics", {})
-    resolved_handle = handle or snippet.get("customUrl")
+    resolved_handle = handle
     if resolved_handle and not resolved_handle.startswith("@"):
         resolved_handle = f"@{resolved_handle}"
 
-    _log_quota_operation(settings, "channel_seed", "channel_seed", _CHANNEL_SEED_UNITS_PER_CALL, "admin_channel_create")
-    return {
-        "channel_id": item["id"],
-        "channel_name": snippet.get("title") or item["id"],
-        "channel_url": normalized_url,
-        "channel_handle": resolved_handle,
-        "subscriber_count": int(statistics["subscriberCount"]) if statistics.get("subscriberCount") else None,
-    }
+    # Lớp 3 hoặc Lớp 2 cưỡng bức: bypass_resolve từ Admin nhập thủ công hoặc lưu tạm
+    if bypass_resolve:
+        return {
+            "channel_id": channel_id or f"TEMP_UC_{uuid.uuid4().hex[:16]}",
+            "channel_name": manual_name or resolved_handle or "Kênh nhập thủ công",
+            "channel_url": normalized_url,
+            "channel_handle": resolved_handle,
+            "subscriber_count": manual_subs if manual_subs is not None else -1,
+            "deferred": manual_subs == -1,
+        }
+
+    # Thử gọi API YouTube (Lớp 0)
+    api_key = os.getenv("YOUTUBE_API_KEY")
+    api_success = False
+    api_data = {}
+
+    if api_key:
+        remaining = _quota_remaining(settings, "channel_seed", 500)
+        if remaining >= _CHANNEL_SEED_UNITS_PER_CALL:
+            params = {"part": "snippet,statistics", "key": api_key}
+            if channel_id:
+                params["id"] = channel_id
+            elif handle:
+                params["forHandle"] = handle
+
+            try:
+                response = requests.get(_YOUTUBE_CHANNELS_URL, params=params, timeout=10)
+                if response.status_code == 200:
+                    data = response.json()
+                    items = data.get("items", [])
+                    if items:
+                        item = items[0]
+                        snippet = item.get("snippet", {})
+                        statistics = item.get("statistics", {})
+                        api_handle = handle or snippet.get("customUrl")
+                        if api_handle and not api_handle.startswith("@"):
+                            api_handle = f"@{api_handle}"
+
+                        _log_quota_operation(settings, "channel_seed", "channel_seed", _CHANNEL_SEED_UNITS_PER_CALL, "admin_channel_create")
+                        api_data = {
+                            "channel_id": item["id"],
+                            "channel_name": snippet.get("title") or item["id"],
+                            "channel_url": normalized_url,
+                            "channel_handle": api_handle,
+                            "subscriber_count": int(statistics["subscriberCount"]) if statistics.get("subscriberCount") else None,
+                            "deferred": False,
+                        }
+                        api_success = True
+            except Exception as exc:
+                logger.warning("YouTube API resolve failed, trying fallback: %s", exc)
+
+    if api_success:
+        return api_data
+
+    # Lớp 1: Fallback sang yt-dlp (Không tốn quota)
+    logger.info("Falling back to yt-dlp to resolve channel metadata: %s", normalized_url)
+    try:
+        ydl_opts = {
+            "extract_flat": True,
+            "skip_download": True,
+            "quiet": True,
+            "no_warnings": True,
+        }
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(normalized_url, download=False)
+            if info:
+                ytdlp_id = info.get("id") or info.get("channel_id") or channel_id
+                ytdlp_title = info.get("title") or info.get("uploader") or ytdlp_id
+                ytdlp_handle = info.get("uploader_id") or resolved_handle
+                if ytdlp_handle and not ytdlp_handle.startswith("@"):
+                    ytdlp_handle = f"@{ytdlp_handle}"
+                
+                subs = info.get("channel_follower_count") or info.get("subscriber_count")
+                
+                return {
+                    "channel_id": ytdlp_id,
+                    "channel_name": ytdlp_title,
+                    "channel_url": normalized_url,
+                    "channel_handle": ytdlp_handle,
+                    "subscriber_count": int(subs) if subs else None,
+                    "deferred": False,
+                }
+    except Exception as exc:
+        logger.warning("yt-dlp resolve failed, triggering manual fallback prompt: %s", exc)
+
+    # Nếu cả YouTube API và yt-dlp đều lỗi, ném HTTPException 429 đặc biệt để Frontend kích hoạt popup tự nhập
+    raise HTTPException(
+        status_code=429,
+        detail="QUOTA_EXHAUSTED_FALLBACK_TO_MANUAL"
+    )
 
 
 def _airflow_trigger(settings, dag_id: str, conf: dict) -> dict:
@@ -226,9 +285,15 @@ def list_channels(_: AppUser = Depends(require_admin)):
 
 
 @router.post("/channels", response_model=ChannelConfigItem, status_code=201)
-def create_channel(body: ChannelCreateRequest, _: AppUser = Depends(require_admin)):
+def create_channel(body: ChannelCreateRequest, response: Response, _: AppUser = Depends(require_admin)):
     settings = get_settings()
-    resolved = _resolve_channel_metadata(body.channel_url, settings)
+    resolved = _resolve_channel_metadata(
+        body.channel_url,
+        settings,
+        bypass_resolve=body.bypass_resolve,
+        manual_name=body.channel_name,
+        manual_subs=body.subscriber_count,
+    )
     existing = query_to_list(
         f"SELECT channel_id, channel_name, is_active FROM `{settings.gcp_project_id}.{settings.bq_dataset}.channel_config` WHERE channel_id = @cid",
         [bigquery.ScalarQueryParameter("cid", "STRING", resolved["channel_id"])],
@@ -240,6 +305,9 @@ def create_channel(body: ChannelCreateRequest, _: AppUser = Depends(require_admi
             status_code=409, 
             detail=f"Kênh này đã tồn tại trong hệ thống với tên '{row['channel_name']}' (trạng thái: {status})."
         )
+
+    if resolved.get("deferred"):
+        response.status_code = 202
 
     now = _bq_now()
     client = _get_bq_client()

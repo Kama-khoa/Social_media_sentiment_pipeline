@@ -11,7 +11,7 @@ const PIPELINE_DAGS = [
   { id: "youtube_daily_extraction_dag", label: "Thu thập video YouTube", desc: "ELT extract + dbt staging" },
   { id: "sentiment_analysis_dag", label: "Phân tích cảm xúc NLP", desc: "PhoBERT + vELECTRA batch" },
   { id: "analytics_dag", label: "Tính toán Analytics", desc: "Bayesian ranking + controversy" },
-  { id: "dbt_transform_dag", label: "Biến đổi dữ liệu (dbt)", desc: "Toàn bộ dbt models" },
+  { id: "seed_sync_dag", label: "Đồng bộ hạt giống", desc: "Đồng bộ catalog + metadata" },
 ];
 
 function formatDuration(seconds: number | null): string {
@@ -74,6 +74,33 @@ export default function PipelineHealthPage() {
     } catch (err) {
       setTriggerStatus("error");
       setTimeout(() => setTriggerStatus(null), 4500);
+    }
+  }
+
+  async function handleToggleSchedule(dagId: string, currentPaused: boolean) {
+    try {
+      await api.admin.pipeline.pauseDag(dagId, !currentPaused);
+      await load();
+    } catch (err: unknown) {
+      const e = err as { detail?: string };
+      alert(e?.detail || "Không thể cập nhật trạng thái schedule của DAG.");
+    }
+  }
+
+  async function handleCancelTask(taskId: string) {
+    const run = data?.recent_dag_runs.find(r => r.dag_id === selectedDag);
+    if (!run || !run.run_id) return;
+    
+    if (!confirm(`Bạn có chắc chắn muốn hủy (đánh dấu thất bại) task "${taskId}" không?`)) {
+      return;
+    }
+    
+    try {
+      await api.admin.pipeline.updateTaskState(selectedDag, run.run_id, taskId, "failed");
+      await load();
+    } catch (err: unknown) {
+      const e = err as { detail?: string };
+      alert(e?.detail || "Không thể hủy task.");
     }
   }
 
@@ -160,19 +187,40 @@ export default function PipelineHealthPage() {
               </div>
               <div className="flex flex-col gap-[14px]">
                 <div className="flex flex-col gap-2">
-                  {PIPELINE_DAGS.map(d => (
-                    <label key={d.id} onClick={() => setSelectedDag(d.id)} className={`flex items-center gap-3.5 p-3 px-4 rounded-[11px] cursor-pointer transition-all border ${selectedDag === d.id ? "bg-violet-50 border-violet-600" : "bg-slate-50 border-transparent hover:bg-slate-100"
-                      }`}>
-                      <input type="radio" name="pipeline_dag" value={d.id} checked={selectedDag === d.id}
-                        onChange={() => setSelectedDag(d.id)}
-                        className="w-4 h-4 accent-violet-600 shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <div className={`font-bold text-[14px] ${selectedDag === d.id ? "text-violet-600" : "text-slate-800"}`}>{d.label}</div>
-                        <div className="text-xs font-mono text-slate-400 mt-0.5">{d.id}</div>
-                      </div>
-                      <span className="text-slate-500 text-xs shrink-0 hidden sm:block">{d.desc}</span>
-                    </label>
-                  ))}
+                  {PIPELINE_DAGS.map(d => {
+                    const runDetail = data?.recent_dag_runs?.find(r => r.dag_id === d.id);
+                    const isPaused = runDetail?.is_paused ?? false;
+                    return (
+                      <label key={d.id} onClick={() => setSelectedDag(d.id)} className={`flex items-center gap-3.5 p-3 px-4 rounded-[11px] cursor-pointer transition-all border ${selectedDag === d.id ? "bg-violet-50 border-violet-600" : "bg-slate-50 border-transparent hover:bg-slate-100"
+                        }`}>
+                        <input type="radio" name="pipeline_dag" value={d.id} checked={selectedDag === d.id}
+                          onChange={() => setSelectedDag(d.id)}
+                          className="w-4 h-4 accent-violet-600 shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <div className={`font-bold text-[14px] ${selectedDag === d.id ? "text-violet-600" : "text-slate-800"}`}>{d.label}</div>
+                          <div className="text-xs font-mono text-slate-400 mt-0.5">{d.id}</div>
+                        </div>
+                        <span className="text-slate-500 text-xs shrink-0 hidden sm:block mr-2">{d.desc}</span>
+                        {/* Toggle switch for schedule */}
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className="text-[11px] text-slate-400 hidden sm:inline">{isPaused ? "Tắt" : "Bật"}</span>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              void handleToggleSchedule(d.id, isPaused);
+                            }}
+                            className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${!isPaused ? "bg-violet-600" : "bg-slate-200"}`}
+                          >
+                            <span
+                              className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${!isPaused ? "translate-x-4" : "translate-x-0"}`}
+                            />
+                          </button>
+                        </div>
+                      </label>
+                    );
+                  })}
                 </div>
                 <div className="flex flex-col gap-2.5">
                   <button
@@ -219,8 +267,20 @@ export default function PipelineHealthPage() {
                             t.state === "failed" ? <Icon name="close" size={14} /> : <Icon name="clock" size={14} />}
                       </span>
                       <span className="flex-1 font-semibold text-[13.5px] font-mono text-slate-700 truncate">{t.task_id}</span>
-                      <span className="text-slate-400 font-mono text-xs">{formatDuration(t.duration)}</span>
-                      {stateChip(t.state)}
+                      <span className="text-slate-400 font-mono text-xs mr-2">{formatDuration(t.duration)}</span>
+                      <div className="flex items-center gap-2">
+                        {stateChip(t.state)}
+                        {(t.state === "running" || t.state === "queued") && (
+                          <button
+                            type="button"
+                            onClick={() => void handleCancelTask(t.task_id)}
+                            className="px-2.5 py-1 text-xs font-semibold bg-rose-600 hover:bg-rose-700 text-white rounded-[6px] transition shrink-0"
+                            title="Hủy task (đánh dấu thất bại)"
+                          >
+                            Hủy
+                          </button>
+                        )}
+                      </div>
                     </div>
                   ));
                 })()}

@@ -327,6 +327,7 @@ export interface DagRunDetail {
   start_date: string | null;
   duration_seconds: number | null;
   tasks: TaskInstanceDetail[];
+  is_paused?: boolean;
 }
 
 export interface DagRunsListResponse {

@@ -439,6 +439,50 @@ def seed_keywords(client: bigquery.Client) -> int:
         }
         for _, row in df.iterrows()
     ]
+
+def seed_channels(client: bigquery.Client) -> int:
+    df = pd.read_csv(_SEED_CHANNELS_CSV, dtype=str)
+    df.columns = df.columns.str.strip()
+
+    if "channel_handle" not in df.columns:
+        raise ValueError("seed_channels.csv must have column: channel_handle")
+
+    raw_handles = df["channel_handle"].dropna().str.strip().tolist()
+    handles = [_parse_handle(h) for h in raw_handles]
+
+    print(f"  Resolving {len(handles)} channel handles via YouTube API...")
+    api_records = _fetch_channels_from_api(handles)
+    print(f"  Resolved {len(api_records)}/{len(handles)} channels.")
+
+    merged = _merge_channels_to_bq(client, api_records)
+    return merged
+
+
+def seed_keywords(client: bigquery.Client) -> int:
+    df = pd.read_csv(_SEED_KEYWORDS_CSV, dtype=str)
+    df.columns = df.columns.str.strip()
+
+    if "keyword_text" not in df.columns:
+        raise ValueError("seed_keywords.csv must have column: keyword_text")
+    
+    if "keyword_id" not in df.columns:
+        raise ValueError("seed_keywords.csv must have column: keyword_id")
+
+    df = df[["keyword_id", "keyword_text", "search_cluster"]].dropna(subset=["keyword_text"])
+    df = df[df["keyword_text"].str.strip() != ""]
+    df = df[df["keyword_id"].str.strip() != ""]
+ 
+    now = _now_iso()
+    rows = [
+        {
+            "keyword_id": row["keyword_id"].strip(),
+            "keyword_text": row["keyword_text"].strip(),
+            "search_cluster": row["search_cluster"].strip() if pd.notna(row["search_cluster"]) else None,
+            "is_active": True,
+            "created_at": now,
+        }
+        for _, row in df.iterrows()
+    ]
  
     merged = _merge_keywords_to_bq(client, rows)
     return merged
@@ -454,6 +498,46 @@ def _get_existing_handles(client: bigquery.Client) -> set[str]:
     return {row.channel_handle for row in rows}
 
 
+def enrich_pending_channels(client: bigquery.Client) -> int:
+    query = f"""
+        SELECT channel_id, channel_url, channel_handle
+        FROM `{_PROJECT_ID}.{_DATASET}.channel_config`
+        WHERE subscriber_count = -1 AND is_active = TRUE
+    """
+    rows = list(client.query(query).result())
+    if not rows:
+        return 0
+
+    print(f"  [Enrich Fallback] Found {len(rows)} pending channels with subscriber_count = -1")
+    handles = [row.channel_handle for row in rows if row.channel_handle]
+    if not handles:
+        return 0
+
+    api_records = _fetch_channels_from_api(handles)
+    
+    updated = 0
+    for record in api_records:
+        update_sql = f"""
+            UPDATE `{_PROJECT_ID}.{_DATASET}.channel_config`
+            SET channel_id = @real_id,
+                channel_name = @name,
+                subscriber_count = @subs,
+                last_updated_at = CURRENT_TIMESTAMP()
+            WHERE channel_handle = @handle AND subscriber_count = -1
+        """
+        job_config = bigquery.QueryJobConfig(query_parameters=[
+            bigquery.ScalarQueryParameter("real_id", "STRING", record["channel_id"]),
+            bigquery.ScalarQueryParameter("name", "STRING", record["channel_name"]),
+            bigquery.ScalarQueryParameter("subs", "INT64", record["subscriber_count"]),
+            bigquery.ScalarQueryParameter("handle", "STRING", record["channel_handle"]),
+        ])
+        client.query(update_sql, job_config=job_config).result()
+        updated += 1
+        
+    print(f"  [Enrich Fallback] Successfully enriched {updated} channels.")
+    return updated
+
+
 def sync_channels(client: bigquery.Client) -> dict:
     df = pd.read_csv(_SEED_CHANNELS_CSV, dtype=str)
     df.columns = df.columns.str.strip()
@@ -467,11 +551,15 @@ def sync_channels(client: bigquery.Client) -> dict:
     existing_handles = _get_existing_handles(client)
     new_handles = [h for h in csv_handles if h not in existing_handles]
 
-    if not new_handles:
-        return {"csv_total": len(csv_handles), "new": 0, "synced": 0}
+    synced = 0
+    if new_handles:
+        api_records = _fetch_channels_from_api(new_handles)
+        synced = _merge_channels_to_bq(client, api_records)
 
-    api_records = _fetch_channels_from_api(new_handles)
-    synced = _merge_channels_to_bq(client, api_records)
+    try:
+        enrich_pending_channels(client)
+    except Exception as exc:
+        print(f"  [Enrich Fallback] WARNING: Failed to enrich pending channels: {exc}")
 
     return {"csv_total": len(csv_handles), "new": len(new_handles), "synced": synced}
 
@@ -505,7 +593,6 @@ def sync_keywords(client: bigquery.Client) -> dict:
 
 def run() -> None:
     client = _get_bq_client()
-
     print("=== Seeding channels ===")
     channel_count = seed_channels(client)
     print(f"  Done: {channel_count} channels upserted.\n")

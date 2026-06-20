@@ -12,7 +12,7 @@ router = APIRouter(prefix="/admin/logs", tags=["logs"])
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[3]
 _LOG_ROOT = (_PROJECT_ROOT / "logs").resolve()
-_MAX_FILE_BYTES = 2 * 1024 * 1024
+_MAX_FILE_BYTES = 5 * 1024 * 1024
 _DEFAULT_TAIL_LINES = 200
 _MAX_TAIL_LINES = 1000
 
@@ -51,6 +51,7 @@ def list_logs(_: AppUser = Depends(require_admin)):
 def tail_log(
     path: str = Query(..., min_length=1),
     lines: int = Query(_DEFAULT_TAIL_LINES, ge=1, le=_MAX_TAIL_LINES),
+    full: bool = Query(False),
     _: AppUser = Depends(require_admin),
 ):
     _ensure_log_root()
@@ -66,9 +67,14 @@ def tail_log(
         truncated = False
 
     text = raw.decode("utf-8", errors="replace")
+    if full:
+        lines_list = text.splitlines()
+    else:
+        lines_list = text.splitlines()[-lines:]
+
     return LogTailResponse(
         path=path,
-        lines=text.splitlines()[-lines:],
+        lines=lines_list,
         truncated=truncated,
         size_bytes=stat.st_size,
     )

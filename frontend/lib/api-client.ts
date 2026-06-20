@@ -125,7 +125,7 @@ export const api = {
         channels: {
             quota: () => request<{ search_remaining: number }>("/admin/channels/quota"),
             list: () => request<ChannelConfigItem[]>("/admin/channels"),
-            create: (data: { channel_url: string }) =>
+            create: (data: { channel_url: string; bypass_resolve?: boolean; channel_name?: string; subscriber_count?: number }) =>
                 request<ChannelConfigItem>("/admin/channels", { method: "POST", body: JSON.stringify(data) }),
             update: (id: string, data: { channel_name?: string; channel_url?: string; channel_handle?: string; subscriber_count?: number; is_active?: boolean }) =>
                 request<ChannelConfigItem>(`/admin/channels/${id}`, { method: "PUT", body: JSON.stringify(data) }),
@@ -237,6 +237,16 @@ export const api = {
                 request<{ content: string }>(`/admin/pipeline/dags/${dagId}/runs/${runId}/tasks/${taskId}/logs/${tryNumber}`),
             trigger: (dagId: string) =>
                 request<unknown>(`/admin/pipeline/dags/${dagId}/trigger`, { method: "POST" }),
+            pauseDag: (dagId: string, isPaused: boolean) =>
+                request<any>(`/admin/pipeline/dags/${dagId}`, {
+                    method: "PATCH",
+                    body: JSON.stringify({ is_paused: isPaused }),
+                }),
+            updateTaskState: (dagId: string, runId: string, taskId: string, newState: string) =>
+                request<any>(`/admin/pipeline/dags/${dagId}/runs/${runId}/tasks/${taskId}/state`, {
+                    method: "POST",
+                    body: JSON.stringify({ new_state: newState }),
+                }),
             metrics: () => request<unknown>("/admin/pipeline/metrics"),
             series: () => request<PipelineOpsSeries>("/admin/pipeline/series"),
         },
@@ -246,8 +256,13 @@ export const api = {
         },
         logs: {
             list: () => request<LogFileListResponse>("/admin/logs"),
-            tail: (path: string, lines = 200) =>
-                request<LogTailResponse>(`/admin/logs/tail?path=${encodeURIComponent(path)}&lines=${lines}`),
+            tail: (path: string, lines?: number, full?: boolean) => {
+                const query = new URLSearchParams();
+                query.append("path", path);
+                if (lines !== undefined) query.append("lines", String(lines));
+                if (full !== undefined) query.append("full", String(full));
+                return request<LogTailResponse>(`/admin/logs/tail?${query.toString()}`);
+            },
         },
         users: {
             list: () => request<AdminUserItem[]>("/admin/users"),

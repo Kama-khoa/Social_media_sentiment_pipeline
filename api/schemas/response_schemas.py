@@ -175,6 +175,7 @@ class DagRunDetail(BaseModel):
     start_date: Optional[str]
     duration_seconds: Optional[int]
     tasks: list[TaskInstanceDetail] = []
+    is_paused: Optional[bool] = None
 
 
 class DagRunsListResponse(BaseModel):
