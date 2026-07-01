@@ -24,6 +24,13 @@ comment_downloader:
   request_delay_seconds: 1.0
   max_retries: 3
 
+api_comment_backfill:
+  max_videos_per_run: 1000
+  max_comments_per_video: 100
+  max_pages_per_video: 1
+  daily_quota_units: 5000
+  request_delay_seconds: 0.2
+
 quota:
   daily_budget: 10000
   safety_buffer: 500
@@ -44,6 +51,12 @@ nlp:
     - negative
     - neutral
   gemini_batch_size: 50
+  bq_write_batch_size: 50
+  bq_write_max_retries: 2
+  bq_write_retry_base_seconds: 2
+  product_resolver_auto_approve_threshold: 0.85
+  product_resolver_auto_alias_threshold: 0.90
+  product_resolver_recheck_batch_size: 50
 
 api:
   redis_ttl_seconds: 300

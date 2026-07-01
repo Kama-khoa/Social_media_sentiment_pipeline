@@ -81,6 +81,13 @@ SELECT
     sentence_index,
     sentence_text,
     replace_slang(LOWER(sentence_text), slang_arr) AS sentence_text_normalized,
+    CASE
+        WHEN REGEXP_CONTAINS(LOWER(TRIM(sentence_text)), r'\?\s*$') THEN 'question'
+        WHEN REGEXP_CONTAINS(LOWER(TRIM(sentence_text)), r'(^|\s)(bao nhiêu|mấy|sao|tại sao|khi nào|ở đâu)(\s|$)') THEN 'question'
+        WHEN REGEXP_CONTAINS(LOWER(TRIM(sentence_text)), r'(^|\s)(có|nên)(\s|[^.!?\n]){1,80}\s(không|ko|k)\s*\??$') THEN 'question'
+        WHEN REGEXP_CONTAINS(LOWER(TRIM(sentence_text)), r'(^|\s)(được|tốt|ổn|ngon)\s+(không|ko|k)\s*\??$') THEN 'question'
+        ELSE 'statement'
+    END AS sentence_type,
     TRUE AS is_vietnamese,
     ARRAY_LENGTH(SPLIT(sentence_text, ' ')) AS word_count,
     data_quality_score,

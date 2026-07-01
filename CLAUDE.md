@@ -3,7 +3,7 @@
 ## Tổng quan dự án
 
 **Tên:** Social Media Sentiment Pipeline
-**Mục tiêu:** Hệ thống thu thập bình luận YouTube về sản phẩm công nghệ Việt Nam (điện thoại, laptop, tai nghe, thiết bị smarthome), phân tích cảm xúc đa chiều theo từng khía cạnh sản phẩm, và hiển thị insight qua dashboard tương tác.
+**Mục tiêu:** Hệ thống thu thập bình luận YouTube về sản phẩm công nghệ Việt Nam (điện thoại, laptop, tai nghe, thiết bị smarthome), phân tích cảm xúc đa chiều theo từng khía cạnh sản phẩm, và hiển thị insight qua một web app cho Guest/User và Admin.
 
 **Đây là đồ án tốt nghiệp** — output phải đạt cả tiêu chuẩn kỹ thuật lẫn học thuật.
 
@@ -36,7 +36,7 @@ YouTube Data API / yt-dlp
   Analytics Engine (analytics/)
      │
      ▼
-  FastAPI + Streamlit (api/ + dashboard/)
+  FastAPI + Redis + Next.js web app (api/ + frontend/)
 ```
 
 ---
@@ -50,7 +50,7 @@ YouTube Data API / yt-dlp
 | 2 | `transform/` | dbt biến đổi raw → Staging → Intermediate → Marts |
 | 3 | `nlp/` | Auto-annotation → Training (Colab) → Local inference |
 | 4 | `analytics/` | Bayesian ranking, Controversy index, PELT attribution |
-| 5 | `api/` + `dashboard/` | FastAPI backend + Streamlit frontend |
+| 5 | `api/` + `frontend/` | Một web app: FastAPI backend + Redis + Next.js frontend, auth và RBAC |
 | 6 | `airflow/` | DAG automation — TẠO SAU KHI phase 1 chạy thành công |
 
 ---
@@ -71,7 +71,8 @@ YouTube Data API / yt-dlp
 | LLM fallback | Gemini Flash (confidence routing < 0.70) |
 | Change point | ruptures (PELT algorithm) |
 | API | FastAPI + Redis cache (TTL=300s) |
-| Dashboard | Streamlit |
+| Web app frontend | Next.js App Router + TypeScript + Tailwind CSS |
+| Web app auth store | SQLAlchemy + PostgreSQL |
 | Training | Google Colab (GPU T4 16GB) |
 | ETL runtime | Conda environment: etl-py313 (Python 3.13) |
 
@@ -92,6 +93,14 @@ BRIGHTDATA_PROXY_HOST
 BRIGHTDATA_PROXY_PORT
 BRIGHTDATA_USERNAME
 BRIGHTDATA_PASSWORD
+JWT_SECRET_KEY
+JWT_ALGORITHM=HS256
+JWT_EXPIRE_MINUTES=480
+APP_DATABASE_URL=sqlite:///./data/web_app.db
+AIRFLOW_BASE_URL=http://localhost:8080
+AIRFLOW_API_USERNAME=admin
+AIRFLOW_API_PASSWORD=<airflow_api_password>
+NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 ```
 
 Load bằng `python-dotenv`: `from dotenv import load_dotenv; load_dotenv()`
@@ -153,14 +162,14 @@ Tuân thủ convention này để BigQuery External Table partition đúng.
 
 ---
 
-## BigQuery Schema — 12 bảng
+## BigQuery Schema — 28 bảng
 
 | Layer | Bảng |
 |---|---|
-| Layer 0 Config | `keyword_config`, `channel_config`, `video_crawl_state`, `quota_daily_summary`, `quota_operation_log` |
+| Layer 0 Config | `keyword_config`, `channel_config`, `video_crawl_state`, `quota_daily_summary`, `quota_operation_log`, `product_config`, `product_aliases`, `product_details`, `product_spec_templates`, `product_resolution_candidates`, `product_detail_change_requests`, `video_product_overrides`, `sentence_product_target_overrides` |
 | Layer 1 Raw | `raw_videos`, `raw_comments` (External Tables → GCS), `raw_sentiment_results` |
 | Layer 2 Staging | `stg_youtube_videos`, `stg_youtube_comments` |
-| Layer 3 Intermediate | `int_comment_sentences`, `int_sentiment_results` |
+| Layer 3 Intermediate | `int_comment_sentences`, `int_sentiment_results`, `int_video_product_mentions`, `int_sentence_product_targets`, `int_product_resolution_candidates` |
 | Layer 4 Marts | `dim_products`, `fact_product_mentions`, `agg_daily_product_ranking` |
 
 ---
@@ -197,13 +206,37 @@ Social_media_sentiment_pipeline/
 ├── nlp/                    ← NLP pipeline
 ├── analytics/              ← ranking + attribution engine
 ├── api/                    ← FastAPI
-├── dashboard/              ← Streamlit
+├── frontend/               ← Next.js App Router + TypeScript
+├── dashboard/              ← Legacy Streamlit prototype, không phát triển tiếp
 ├── airflow/                ← DAGs (tạo sau phase 1)
 ├── scripts/                ← Script tiện ích / bảo trì
 │   ├── dbt/                ← Script chạy dbt thủ công (dbt_runner.py)
 │   └── maintenance/        ← Các script fix data GCS, xử lý lỗi BigQuery
 └── tests/
 ```
+
+---
+
+## Phase 5 — Web App Contract
+
+Phase 5 xây dựng **một** Next.js web app gọi FastAPI, không tách thành
+nhiều ứng dụng độc lập.
+
+| Actor | Quyền chính |
+|---|---|
+| Guest/User | Đăng ký, đăng nhập, đăng xuất, tìm kiếm/lọc dữ liệu, xem phân tích và gửi phiếu đề xuất chỉnh sửa thông tin sản phẩm |
+| Admin | Kế thừa quyền Guest/User; CRUD từ khóa, kênh, sản phẩm, alias, template specs; duyệt phiếu chỉnh sửa và xử lý candidate sản phẩm chưa nhận diện |
+
+Quy tắc bắt buộc:
+
+1. FastAPI là nơi enforce auth và RBAC; ẩn menu Admin trên Next.js chỉ là UX, không phải biện pháp bảo mật.
+2. Mật khẩu phải được hash; JWT secret đọc từ `.env`; không lưu plaintext password hoặc token trong source code.
+3. Lưu `app_users` bằng SQLAlchemy + PostgreSQL; không dùng BigQuery làm transactional user store.
+4. Redis cache TTL 300 giây chỉ áp dụng cho endpoint đọc analytics; không cache endpoint auth.
+5. CRUD Admin ghi trực tiếp BigQuery cho cấu hình crawl và catalog. User chỉ ghi `product_detail_change_requests`; chỉ Admin được duyệt và merge dữ liệu vào `product_details`.
+6. Trang Admin Pipeline Health gọi FastAPI `/admin/pipeline/*`; frontend không gọi Airflow trực tiếp.
+
+Chi tiết catalog, resolver target và luồng duyệt phiếu: [`docs/product-catalog-and-moderation.md`](docs/product-catalog-and-moderation.md).
 
 ---
 
@@ -233,7 +266,11 @@ Lệnh vận hành thủ công khuyến nghị:
 ```powershell
 python -m nlp.runner --limit 500 --dag-run-id manual-nlp-500-t070
 cd transform
-python -m dotenv -f ..\.env run -- dbt run --profiles-dir . --select int_sentiment_results fact_product_mentions
+python -m dotenv -f ..\.env run -- dbt run --profiles-dir . --select int_sentiment_results int_video_product_mentions int_sentence_product_targets int_product_resolution_candidates fact_product_mentions
+
+# Resolve ambiguous product targets before the final fact rebuild
+conda activate etl-py313
+python -m nlp.product_target_resolver --limit 100
 ```
 
 Khi cần chạy lại bằng model/threshold mới:
@@ -243,3 +280,46 @@ python -m nlp.runner --limit 500 --dag-run-id reprocess-t070 --reprocess
 ```
 
 Phase tiếp theo: hoàn thiện Analytics Engine trên dữ liệu `fact_product_mentions`, ưu tiên Bayesian ranking, controversy index, sau đó PELT attribution.
+---
+
+## Update 2026-06-03 — YouTube API Comment Backfill
+
+Mục tiêu: sửa vấn đề `published_at` comment từ `youtube-comment-downloader` có thể là timestamp suy diễn từ relative time. Nhánh backfill mới lấy `snippet.publishedAt` chuẩn từ YouTube Data API.
+
+Các file chính:
+
+| File | Vai trò |
+|---|---|
+| `schema/layer_1_raw/init_api_comment_tables.py` | Tạo `raw_comments_api` và `api_comment_backfill_state` |
+| `elt/extract/helpers/youtube_api_comment_client.py` | Gọi `commentThreads.list`, parse `publishedAt` |
+| `elt/extract/api_comment_backfill.py` | Orchestrator API comments, progress bar, quota budget |
+| `elt/repositories/api_comment_repository.py` | Query candidate video, `MERGE` comments theo `comment_id`, checkpoint |
+| `scripts/run_api_comment_backfill.py` | Entrypoint chạy/dry-run backfill |
+
+Quota:
+
+- `QuotaBucket.COMMENT_THREADS = "youtube_api_comments"`.
+- `QuotaBudget.from_config()` tính quota còn lại từ `quota_operation_log`.
+- `QuotaRepository.get_today_used_by_bucket()` dùng `DATE(created_at) = @today`.
+- Mỗi page `commentThreads.list` tính 1 unit, log `operation_type="comment_threads"`.
+
+Runbook:
+
+```powershell
+conda activate etl-py313
+python schema\layer_1_raw\init_api_comment_tables.py
+python scripts\dbt\dbt_runner.py run --select stg_youtube_videos int_video_product_mentions
+python scripts\run_api_comment_backfill.py --max-videos 10 --max-comments-per-video 100 --dry-run
+python scripts\run_api_comment_backfill.py --max-videos 10 --max-comments-per-video 100
+```
+
+Sau khi crawl xong để chuẩn bị dashboard:
+
+```powershell
+python scripts\dbt\dbt_runner.py run --select stg_youtube_comments
+python scripts\dbt\dbt_runner.py run --select int_comment_sentences --full-refresh
+python -m nlp.runner
+python scripts\dbt\dbt_runner.py run --select int_sentiment_results int_sentence_product_targets fact_product_mentions agg_daily_product_ranking
+```
+
+Không xóa GCS comments cũ. `raw_comments_api` là native table được upsert; `stg_youtube_comments` union hai nguồn và ưu tiên API khi trùng `comment_id`.

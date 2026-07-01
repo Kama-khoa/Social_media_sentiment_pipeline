@@ -1,9 +1,9 @@
 WITH fixture AS (
-    SELECT 50.0 AS prior_strength, 0.2 AS global_mean, 10 AS total_mentions, 0.8 AS local_mean, 0.5 AS std_score
+    SELECT 50.0 AS prior_strength, 0.2 AS global_mean, 10 AS statement_count, 0.8 AS local_mean, 0.5 AS std_score
 ),
 calculated AS (
     SELECT
-        SAFE_DIVIDE(prior_strength * global_mean + total_mentions * local_mean, prior_strength + total_mentions) AS bayesian_score,
+        SAFE_DIVIDE(prior_strength * global_mean + statement_count * local_mean, prior_strength + statement_count) AS bayesian_score,
         SAFE_DIVIDE(std_score, ABS(local_mean) + 0.1) AS controversy_index
     FROM fixture
 )

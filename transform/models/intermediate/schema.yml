@@ -1,0 +1,28 @@
+version: 2
+
+models:
+  - name: int_sentiment_results
+    description: Promoted NLP inference results with one row per deterministic result_id.
+    columns:
+      - name: result_id
+        data_tests:
+          - not_null
+          - unique
+      - name: sentence_id
+        data_tests:
+          - not_null
+      - name: comment_id
+        data_tests:
+          - not_null
+      - name: video_id
+        data_tests:
+          - not_null
+      - name: aspect_label
+        data_tests:
+          - not_null
+      - name: sentiment_label
+        data_tests:
+          - not_null
+      - name: processed_at
+        data_tests:
+          - not_null

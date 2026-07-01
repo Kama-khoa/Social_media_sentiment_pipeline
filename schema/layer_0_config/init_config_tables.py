@@ -41,6 +41,7 @@ def create_keyword_config(client: bigquery.Client) -> None:
         bigquery.SchemaField("keyword_text", "STRING", mode="REQUIRED"),
         bigquery.SchemaField("search_cluster", "STRING", mode="NULLABLE"),
         bigquery.SchemaField("is_active", "BOOL", mode="REQUIRED"),
+        bigquery.SchemaField("needs_backfill", "BOOL", mode="NULLABLE"),
         bigquery.SchemaField("created_at", "TIMESTAMP", mode="REQUIRED"),
     ]
     table = table_ref(client, "keyword_config")
@@ -48,6 +49,157 @@ def create_keyword_config(client: bigquery.Client) -> None:
     table.description = "T02 — Danh muc 100 keywords nhom theo semantic cluster."
     client.create_table(table, exists_ok=True)
     print("keyword_config: OK")
+
+
+def create_product_config(client: bigquery.Client) -> None:
+    schema = [
+        bigquery.SchemaField("product_id", "STRING", mode="REQUIRED"),
+        bigquery.SchemaField("product_name", "STRING", mode="REQUIRED"),
+        bigquery.SchemaField("brand", "STRING", mode="NULLABLE"),
+        bigquery.SchemaField("category", "STRING", mode="NULLABLE"),
+        bigquery.SchemaField("release_year", "INT64", mode="NULLABLE"),
+        bigquery.SchemaField("is_active", "BOOL", mode="REQUIRED"),
+        bigquery.SchemaField("created_at", "TIMESTAMP", mode="REQUIRED"),
+        bigquery.SchemaField("updated_at", "TIMESTAMP", mode="REQUIRED"),
+    ]
+    table = table_ref(client, "product_config")
+    table.schema = schema
+    table.description = "Canonical product catalog. One row per product model."
+    client.create_table(table, exists_ok=True)
+    print("product_config: OK")
+
+
+def create_product_aliases(client: bigquery.Client) -> None:
+    schema = [
+        bigquery.SchemaField("alias_id", "STRING", mode="REQUIRED"),
+        bigquery.SchemaField("product_id", "STRING", mode="REQUIRED"),
+        bigquery.SchemaField("alias_text", "STRING", mode="REQUIRED"),
+        bigquery.SchemaField("alias_type", "STRING", mode="REQUIRED"),
+        bigquery.SchemaField("is_active", "BOOL", mode="REQUIRED"),
+        bigquery.SchemaField("created_at", "TIMESTAMP", mode="REQUIRED"),
+    ]
+    table = table_ref(client, "product_aliases")
+    table.schema = schema
+    table.description = "Known product names and abbreviations used by deterministic entity resolution."
+    client.create_table(table, exists_ok=True)
+    print("product_aliases: OK")
+
+
+def create_product_details(client: bigquery.Client) -> None:
+    schema = [
+        bigquery.SchemaField("product_id", "STRING", mode="REQUIRED"),
+        bigquery.SchemaField("specs", "JSON", mode="NULLABLE"),
+        bigquery.SchemaField("description", "STRING", mode="NULLABLE"),
+        bigquery.SchemaField("official_url", "STRING", mode="NULLABLE"),
+        bigquery.SchemaField("image_url", "STRING", mode="NULLABLE"),
+        bigquery.SchemaField("updated_at", "TIMESTAMP", mode="NULLABLE"),
+        bigquery.SchemaField("updated_by", "STRING", mode="NULLABLE"),
+    ]
+    table = table_ref(client, "product_details")
+    table.schema = schema
+    table.description = "Optional product specifications and descriptive metadata."
+    client.create_table(table, exists_ok=True)
+    print("product_details: OK")
+
+
+def create_product_spec_templates(client: bigquery.Client) -> None:
+    schema = [
+        bigquery.SchemaField("category", "STRING", mode="REQUIRED"),
+        bigquery.SchemaField("spec_key", "STRING", mode="REQUIRED"),
+        bigquery.SchemaField("display_label", "STRING", mode="REQUIRED"),
+        bigquery.SchemaField("value_type", "STRING", mode="REQUIRED"),
+        bigquery.SchemaField("unit", "STRING", mode="NULLABLE"),
+        bigquery.SchemaField("is_active", "BOOL", mode="REQUIRED"),
+        bigquery.SchemaField("created_at", "TIMESTAMP", mode="REQUIRED"),
+        bigquery.SchemaField("updated_at", "TIMESTAMP", mode="REQUIRED"),
+    ]
+    table = table_ref(client, "product_spec_templates")
+    table.schema = schema
+    table.description = "Allowed JSON specification keys per product category."
+    client.create_table(table, exists_ok=True)
+    print("product_spec_templates: OK")
+
+
+def create_product_resolution_candidates(client: bigquery.Client) -> None:
+    schema = [
+        bigquery.SchemaField("candidate_id", "STRING", mode="REQUIRED"),
+        bigquery.SchemaField("source_type", "STRING", mode="REQUIRED"),
+        bigquery.SchemaField("source_id", "STRING", mode="REQUIRED"),
+        bigquery.SchemaField("candidate_text", "STRING", mode="REQUIRED"),
+        bigquery.SchemaField("status", "STRING", mode="REQUIRED"),
+        bigquery.SchemaField("resolved_product_id", "STRING", mode="NULLABLE"),
+        bigquery.SchemaField("reviewed_by", "STRING", mode="NULLABLE"),
+        bigquery.SchemaField("reviewed_at", "TIMESTAMP", mode="NULLABLE"),
+        bigquery.SchemaField("created_at", "TIMESTAMP", mode="REQUIRED"),
+        bigquery.SchemaField("resolver_confidence", "FLOAT64", mode="NULLABLE"),
+        bigquery.SchemaField("resolver_reason", "STRING", mode="NULLABLE"),
+        bigquery.SchemaField("resolution_method", "STRING", mode="NULLABLE"),
+    ]
+    table = table_ref(client, "product_resolution_candidates")
+    table.schema = schema
+    table.description = "Unresolved or ambiguous product mentions waiting for admin review or LLM fallback."
+    created = client.create_table(table, exists_ok=True)
+    existing_fields = {field.name for field in created.schema}
+    missing_fields = [field for field in schema if field.name not in existing_fields]
+    if missing_fields:
+        created.schema = [*created.schema, *missing_fields]
+        client.update_table(created, ["schema"])
+    print("product_resolution_candidates: OK")
+
+
+def create_video_product_overrides(client: bigquery.Client) -> None:
+    schema = [
+        bigquery.SchemaField("video_id", "STRING", mode="REQUIRED"),
+        bigquery.SchemaField("product_id", "STRING", mode="REQUIRED"),
+        bigquery.SchemaField("role", "STRING", mode="REQUIRED"),
+        bigquery.SchemaField("is_active", "BOOL", mode="REQUIRED"),
+        bigquery.SchemaField("updated_by", "STRING", mode="REQUIRED"),
+        bigquery.SchemaField("updated_at", "TIMESTAMP", mode="REQUIRED"),
+    ]
+    table = table_ref(client, "video_product_overrides")
+    table.schema = schema
+    table.description = "Admin overrides for deterministic video-to-product resolution."
+    client.create_table(table, exists_ok=True)
+    print("video_product_overrides: OK")
+
+
+def create_sentence_product_target_overrides(client: bigquery.Client) -> None:
+    schema = [
+        bigquery.SchemaField("sentence_id", "STRING", mode="REQUIRED"),
+        bigquery.SchemaField("product_id", "STRING", mode="REQUIRED"),
+        bigquery.SchemaField("sentiment_label", "STRING", mode="NULLABLE"),
+        bigquery.SchemaField("target_source", "STRING", mode="REQUIRED"),
+        bigquery.SchemaField("target_confidence", "FLOAT64", mode="REQUIRED"),
+        bigquery.SchemaField("updated_by", "STRING", mode="REQUIRED"),
+        bigquery.SchemaField("updated_at", "TIMESTAMP", mode="REQUIRED"),
+    ]
+    table = table_ref(client, "sentence_product_target_overrides")
+    table.schema = schema
+    table.description = "Admin or LLM product targets for ambiguous comparison sentences."
+    client.create_table(table, exists_ok=True)
+    print("sentence_product_target_overrides: OK")
+
+
+def create_product_detail_change_requests(client: bigquery.Client) -> None:
+    schema = [
+        bigquery.SchemaField("request_id", "STRING", mode="REQUIRED"),
+        bigquery.SchemaField("product_id", "STRING", mode="REQUIRED"),
+        bigquery.SchemaField("proposed_specs", "JSON", mode="NULLABLE"),
+        bigquery.SchemaField("proposed_description", "STRING", mode="NULLABLE"),
+        bigquery.SchemaField("proposed_official_url", "STRING", mode="NULLABLE"),
+        bigquery.SchemaField("proposed_image_url", "STRING", mode="NULLABLE"),
+        bigquery.SchemaField("submitted_by", "STRING", mode="REQUIRED"),
+        bigquery.SchemaField("status", "STRING", mode="REQUIRED"),
+        bigquery.SchemaField("reviewed_by", "STRING", mode="NULLABLE"),
+        bigquery.SchemaField("reviewed_at", "TIMESTAMP", mode="NULLABLE"),
+        bigquery.SchemaField("review_note", "STRING", mode="NULLABLE"),
+        bigquery.SchemaField("created_at", "TIMESTAMP", mode="REQUIRED"),
+    ]
+    table = table_ref(client, "product_detail_change_requests")
+    table.schema = schema
+    table.description = "Moderated user contributions for product specifications."
+    client.create_table(table, exists_ok=True)
+    print("product_detail_change_requests: OK")
 
 
 def create_video_crawl_state(client: bigquery.Client) -> None:
@@ -119,6 +271,14 @@ def run() -> None:
     client = get_client()
     create_channel_config(client)
     create_keyword_config(client)
+    create_product_config(client)
+    create_product_aliases(client)
+    create_product_details(client)
+    create_product_spec_templates(client)
+    create_product_resolution_candidates(client)
+    create_video_product_overrides(client)
+    create_sentence_product_target_overrides(client)
+    create_product_detail_change_requests(client)
     create_video_crawl_state(client)
     create_quota_daily_summary(client)
     create_quota_operation_log(client)

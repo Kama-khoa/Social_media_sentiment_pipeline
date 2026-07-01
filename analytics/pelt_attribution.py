@@ -16,13 +16,15 @@ import pandas as pd
 import ruptures as rpt
 
 from elt.config import load_config
+from nlp.gemini_gateway import GeminiGateway
+from pipeline_progress import progress_bar
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)-7s | %(name)s | %(message)s")
 logger = logging.getLogger("pelt_attribution")
 
-_MIN_VIRAL_VIEWS = 100_000
-_MAX_INTERPOLATION_GAP_DAYS = 2
-_MIN_COVERAGE = 0.70
+_MIN_VIRAL_VIEWS = 10_000
+_MAX_INTERPOLATION_GAP_DAYS = 10
+_MIN_COVERAGE = 0.30
 
 
 class PELTAttribution:
@@ -33,12 +35,22 @@ class PELTAttribution:
         self.marts_dataset = f"{self.dataset}_marts"
         self.bq_client = bq_client or bigquery.Client(project=self.project_id)
         self._genai_client = genai_client
+        self._gemini_gateway = None
 
     @property
     def genai_client(self):
         if self._genai_client is None:
             self._genai_client = genai.Client(api_key=self.config.gemini_api_key)
         return self._genai_client
+
+    @property
+    def gemini_gateway(self):
+        if self._gemini_gateway is None:
+            self._gemini_gateway = GeminiGateway(
+                api_key=self.config.gemini_api_key,
+                client=self.genai_client,
+            )
+        return self._gemini_gateway
 
     def fetch_sentiment_timeseries(self) -> pd.DataFrame:
         query = f"""
@@ -66,6 +78,36 @@ class PELTAttribution:
         """
         return self.bq_client.query(query).to_dataframe()
 
+    def fetch_sentiment_timeseries_by_product_id(self, product_id: str) -> pd.DataFrame:
+        query = f"""
+            SELECT
+                f.mention_date AS ranking_date,
+                f.product_id,
+                p.product_name,
+                p.category,
+                COUNT(*) AS total_mentions,
+                COUNTIF(UPPER(f.sentiment_label) = 'POSITIVE') AS positive_count,
+                COUNTIF(UPPER(f.sentiment_label) = 'NEGATIVE') AS negative_count,
+                COUNTIF(UPPER(f.sentiment_label) = 'NEUTRAL') AS neutral_count,
+                AVG(CASE
+                    WHEN UPPER(f.sentiment_label) = 'POSITIVE' THEN 1.0
+                    WHEN UPPER(f.sentiment_label) = 'NEGATIVE' THEN -1.0
+                    ELSE 0.0
+                END) AS avg_sentiment
+            FROM `{self.project_id}.{self.marts_dataset}.fact_product_mentions` f
+            JOIN `{self.project_id}.{self.marts_dataset}.dim_products` p
+              ON f.product_id = p.product_id
+            WHERE p.is_active = TRUE
+              AND f.aspect_label != 'NONE'
+              AND f.product_id = @product_id
+            GROUP BY 1, 2, 3, 4
+            ORDER BY f.product_id, f.mention_date ASC
+        """
+        job_config = bigquery.QueryJobConfig(query_parameters=[
+            bigquery.ScalarQueryParameter("product_id", "STRING", product_id)
+        ])
+        return self.bq_client.query(query, job_config=job_config).to_dataframe()
+
     def prepare_product_timeseries(
         self,
         product_df: pd.DataFrame,
@@ -90,11 +132,12 @@ class PELTAttribution:
             logger.info("Skipping time series: coverage %.1f%% is below %.1f%%.", coverage * 100, min_coverage * 100)
             return None
 
+        # Sử dụng ffill() (Forward Fill) để điền các ngày trống kéo dài
         prepared["avg_sentiment"] = prepared["avg_sentiment"].interpolate(
             method="linear",
             limit=_MAX_INTERPOLATION_GAP_DAYS,
             limit_area="inside",
-        )
+        ).ffill().bfill()
         if prepared["avg_sentiment"].isna().any():
             logger.info("Skipping time series: it contains a gap longer than %d days.", _MAX_INTERPOLATION_GAP_DAYS)
             return None
@@ -109,13 +152,19 @@ class PELTAttribution:
         amplitude_threshold: float = 0.25,
         min_coverage: float = _MIN_COVERAGE,
         dry_run: bool = False,
+        product_id: str | None = None,
     ) -> None:
-        df = self.fetch_sentiment_timeseries()
+        if product_id:
+            df = self.fetch_sentiment_timeseries_by_product_id(product_id)
+        else:
+            df = self.fetch_sentiment_timeseries()
+
         if df.empty:
             logger.warning("No valid daily product sentiment data found.")
             return
 
-        for product_id in df["product_id"].unique():
+        product_ids = df["product_id"].unique()
+        for product_id in progress_bar(product_ids, desc="PELT attribution", unit="product"):
             source_df = df[df["product_id"] == product_id].copy()
             product_name = source_df["product_name"].iloc[0]
             product_df = self.prepare_product_timeseries(source_df, min_points, min_coverage)
@@ -161,8 +210,13 @@ class PELTAttribution:
     ) -> None:
         videos = self._query_videos_in_window(product_id, change_date)
         if not videos:
-            logger.info("Skipping event for %s on %s: no viral video candidate.", product_name, change_date)
-            return
+            logger.info("No viral video candidate for %s on %s. Using natural attribution fallback.", product_name, change_date)
+            videos = [{
+                "video_id": "N/A",
+                "title": "Biến động thảo luận tự nhiên (Không tìm thấy video review có tương tác cao tương ứng)",
+                "view_count": 0,
+                "published_at": change_date.isoformat()
+            }]
 
         change_dir_val = 1.0 if direction == "POSITIVE" else -1.0
         scored_videos = []
@@ -177,7 +231,12 @@ class PELTAttribution:
 
             days_diff = abs((pub_date - change_date).days)
             temporal_proximity = max(0.0, 1.0 - days_diff / 7.0)
-            video_sentiment = self._query_video_sentiment(product_id, video["video_id"])
+            
+            if video["video_id"] == "N/A":
+                video_sentiment = 0.0
+            else:
+                video_sentiment = self._query_video_sentiment(product_id, video["video_id"])
+                
             if video_sentiment * change_dir_val > 0:
                 direction_alignment = 1.0
             elif video_sentiment == 0.0:
@@ -205,8 +264,12 @@ class PELTAttribution:
             logger.info("Dry run enabled: skipping Gemini explanation and BigQuery write.")
             return
 
-        comments = self._query_representative_comments(product_id, best_video["video_id"])
-        explanation = self._generate_explanation(product_name, product_id, change_date, direction, best_video, comments)
+        comments = self._query_representative_comments(product_id, best_video["video_id"], change_date)
+        title, explanation = self._generate_explanation(product_name, product_id, change_date, direction, best_video, comments)
+        
+        if best_video["video_id"] == "N/A":
+            best_video["title"] = title
+            
         self._save_causal_event(product_id, change_date, direction, best_video, explanation)
 
     def _query_videos_in_window(self, product_id: str, change_date: date) -> list[dict]:
@@ -248,20 +311,35 @@ class PELTAttribution:
         rows = list(self.bq_client.query(query, job_config=job_config).result())
         return float(rows[0].avg_sentiment) if rows and rows[0].avg_sentiment is not None else 0.0
 
-    def _query_representative_comments(self, product_id: str, video_id: str) -> list[str]:
-        query = f"""
-            SELECT DISTINCT s.sentence_text
-            FROM `{self.project_id}.{self.marts_dataset}.fact_product_mentions` f
-            JOIN `{self.project_id}.{self.dataset}_intermediate.int_comment_sentences` s ON f.sentence_id = s.sentence_id
-            WHERE f.video_id = @video_id
-              AND f.product_id = @product_id
-              AND f.aspect_label != 'NONE'
-            LIMIT 5
-        """
-        job_config = bigquery.QueryJobConfig(query_parameters=[
-            bigquery.ScalarQueryParameter("product_id", "STRING", product_id),
-            bigquery.ScalarQueryParameter("video_id", "STRING", video_id),
-        ])
+    def _query_representative_comments(self, product_id: str, video_id: str, change_date: date = None) -> list[str]:
+        if video_id == "N/A" and change_date:
+            query = f"""
+                SELECT DISTINCT s.sentence_text
+                FROM `{self.project_id}.{self.marts_dataset}.fact_product_mentions` f
+                JOIN `{self.project_id}.{self.dataset}_intermediate.int_comment_sentences` s ON f.sentence_id = s.sentence_id
+                WHERE f.product_id = @product_id
+                  AND f.mention_date = @change_date
+                  AND f.aspect_label != 'NONE'
+                LIMIT 5
+            """
+            job_config = bigquery.QueryJobConfig(query_parameters=[
+                bigquery.ScalarQueryParameter("product_id", "STRING", product_id),
+                bigquery.ScalarQueryParameter("change_date", "DATE", change_date.isoformat()),
+            ])
+        else:
+            query = f"""
+                SELECT DISTINCT s.sentence_text
+                FROM `{self.project_id}.{self.marts_dataset}.fact_product_mentions` f
+                JOIN `{self.project_id}.{self.dataset}_intermediate.int_comment_sentences` s ON f.sentence_id = s.sentence_id
+                WHERE f.video_id = @video_id
+                  AND f.product_id = @product_id
+                  AND f.aspect_label != 'NONE'
+                LIMIT 5
+            """
+            job_config = bigquery.QueryJobConfig(query_parameters=[
+                bigquery.ScalarQueryParameter("product_id", "STRING", product_id),
+                bigquery.ScalarQueryParameter("video_id", "STRING", video_id),
+            ])
         return [row.sentence_text for row in self.bq_client.query(query, job_config=job_config).result()]
 
     def _generate_explanation(
@@ -272,27 +350,72 @@ class PELTAttribution:
         direction: str,
         video: dict,
         comments: list[str],
-    ) -> str:
+    ) -> tuple[str, str]:
         direction_vi = "tích cực" if direction == "POSITIVE" else "tiêu cực"
         comments_text = "\n".join(f"- {comment}" for comment in comments) if comments else "Không có bình luận mẫu."
+        
         prompt = f"""
         Bạn là chuyên gia phân tích thị trường công nghệ Việt Nam.
-        Sản phẩm: {product_name} (ID: {product_id})
+        Sản phẩm: {product_name}
         Ngày ghi nhận biến động sentiment: {change_date}
         Hướng biến động: {direction_vi}
-        Video có tương quan cao nhất: {video['title']} ({video['view_count']:,} lượt xem)
-        Bình luận tiêu biểu:
+        
+        Bình luận tiêu biểu của người dùng vào ngày này:
         {comments_text}
-
-        Viết 2-3 câu tiếng Việt súc tích. Chỉ mô tả mối tương quan, không khẳng định quan hệ nhân quả.
-        Dùng ngôn ngữ dè dặt như "có thể", "tương quan", "được ghi nhận", "cho thấy".
+        
+        Nhiệm vụ của bạn là viết báo cáo phân tích biến động này gồm 2 phần:
+        1. Tiêu đề ngắn gọn (1 câu duy nhất, tối đa 12 từ) tóm tắt xu hướng phản hồi chính của người dùng đối với sản phẩm (Ví dụ: "Người dùng đánh giá cao dung lượng pin của {product_name}" hoặc "Người dùng phàn nàn về lỗi màn hình của {product_name}").
+        2. Nội dung phân tích chi tiết (2-3 câu, tối đa 50 từ). Bạn phải đi thẳng vào nội dung phân tích, TUYỆT ĐỐI không sử dụng các câu dẫn nhập rườm rà như "Dưới đây là phân tích...", "Dữ liệu cho thấy...", "Theo thống kê...". Hãy viết trực tiếp theo dạng: "X% người dùng thấy [khía cạnh] của sản phẩm tốt/chưa tốt vì lý do..." hoặc "Khoảng X% bình luận đánh giá cao [khía cạnh] nhờ...".
+        
+        Hãy trả về kết quả dưới định dạng sau:
+        TITLE: <Tiêu đề ngắn gọn của bạn>
+        DESC: <Nội dung phân tích chi tiết của bạn>
         """
         try:
-            response = self.genai_client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
-            return response.text.strip()
+            response = self.gemini_gateway.generate(prompt).strip()
+            title = "Biến động thảo luận tự nhiên"
+            desc = response
+            
+            for line in response.split("\n"):
+                if line.startswith("TITLE:"):
+                    title = line.replace("TITLE:", "").strip()
+                elif line.startswith("DESC:"):
+                    desc = line.replace("DESC:", "").strip()
+            
+            title = title.replace("**", "").replace("*", "")
+            desc = desc.replace("**", "").replace("*", "")
+            
+            # Dọn dẹp các câu dẫn mở đầu rườm rà
+            prefixes_to_remove = [
+                "dưới đây là nội dung phân tích dựa trên dữ liệu bạn cung cấp:",
+                "dưới đây là phân tích dựa trên dữ liệu bạn cung cấp:",
+                "dưới đây là kết quả phân tích:",
+                "dữ liệu cho thấy",
+                "dữ liệu ngày cho biết",
+                "dữ liệu cho biết",
+                "dữ liệu ghi nhận",
+                "dữ liệu ngày cho thấy",
+                "theo dữ liệu phân tích,",
+                "theo dữ liệu,",
+                "theo thống kê,",
+                "vào ngày này,"
+            ]
+            desc_lower = desc.lower()
+            for prefix in prefixes_to_remove:
+                if desc_lower.startswith(prefix):
+                    desc = desc[len(prefix):].strip()
+                    if desc.startswith(",") or desc.startswith(":") or desc.startswith("."):
+                        desc = desc[1:].strip()
+                    if desc:
+                        desc = desc[0].upper() + desc[1:]
+                    break
+            
+            return title, desc
         except Exception as exc:
             logger.error("Error calling Gemini: %s", exc)
-            return f"Biến động cảm xúc {direction_vi} có thể tương quan với video review '{video['title']}'."
+            fallback_title = f"Người dùng phản hồi {direction_vi} về sản phẩm"
+            fallback_desc = f"Phần lớn ý kiến đánh giá {direction_vi} về các khía cạnh của {product_name} trong ngày này."
+            return fallback_title, fallback_desc
 
     def _save_causal_event(self, product_id: str, change_date: date, direction: str, video: dict, explanation: str) -> None:
         event_id = hashlib.md5(f"{product_id}-{change_date.isoformat()}-{video['video_id']}".encode("utf-8")).hexdigest()
@@ -312,7 +435,11 @@ class PELTAttribution:
             "attribution_score": float(video["attribution_score"]),
             "sentiment_direction": direction,
             "explanation_text": explanation,
-            "generated_by": "gemini-2.5-flash",
+            "generated_by": (
+                self._gemini_gateway.last_model
+                if self._gemini_gateway and self._gemini_gateway.last_model
+                else "gemini"
+            ),
             "detected_at": datetime.now(timezone.utc).isoformat(),
         }
         table_id = f"{self.project_id}.{self.marts_dataset}.causal_events"
@@ -341,6 +468,7 @@ def main() -> None:
     parser.add_argument("--amplitude", type=float, default=0.25)
     parser.add_argument("--min-coverage", type=float, default=_MIN_COVERAGE)
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--product-id", type=str, default=None, help="Filter attribution by product_id")
     args = parser.parse_args()
 
     PELTAttribution().run_attribution(
@@ -349,6 +477,7 @@ def main() -> None:
         amplitude_threshold=args.amplitude,
         min_coverage=args.min_coverage,
         dry_run=args.dry_run,
+        product_id=args.product_id,
     )
 
 

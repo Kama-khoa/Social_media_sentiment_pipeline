@@ -1,7 +1,13 @@
+import os
+import pendulum
 from datetime import datetime, timedelta
+from pathlib import Path
 from airflow import DAG
 from airflow.operators.bash import BashOperator
-from airflow.sensors.external_task import ExternalTaskSensor
+
+# Thư mục gốc dự án (hoạt động tốt cả trên local và Docker)
+PROJECT_ROOT = str(Path(__file__).resolve().parent.parent.parent)
+local_tz = pendulum.timezone("Asia/Ho_Chi_Minh")
 
 default_args = {
     'owner': 'nlp_pipeline',
@@ -16,37 +22,62 @@ with DAG(
     'sentiment_analysis_dag',
     default_args=default_args,
     description='Run NLP sentiment analysis on comment sentences',
-    schedule_interval='0 20 * * *', # Run at 3:00 AM UTC+7, after extraction
-    start_date=datetime(2025, 1, 1),
+    schedule_interval='0 3 * * *', # Run at 3:00 AM local time (Asia/Ho_Chi_Minh), after extraction
+    start_date=datetime(2026, 6, 16, tzinfo=local_tz),
     catchup=False,
+    max_active_runs=1,
+    max_active_tasks=1,
     tags=['nlp', 'daily'],
 ) as dag:
 
-    # Wait for the daily extraction DAG to complete
-    wait_for_extraction = ExternalTaskSensor(
-        task_id='wait_for_extraction',
-        external_dag_id='youtube_daily_extraction_dag',
-        external_task_id='dbt_run',
-        allowed_states=['success'],
-        failed_states=['failed', 'skipped'],
+    prepare_comment_sentences = BashOperator(
+        task_id='prepare_comment_sentences',
+        bash_command=(
+            'python scripts/dbt/dbt_runner.py run '
+            '--select stg_youtube_comments int_comment_sentences'
+        ),
+        cwd=PROJECT_ROOT,
     )
 
     run_nlp_inference = BashOperator(
         task_id='run_nlp_inference',
         bash_command=(
-            'cd /opt/airflow && '
             'python -m nlp.runner '
-            '--limit 500 '
+            '--limit 5000 '
             '--dag-run-id "{{ dag_run.run_id }}"'
         ),
+        cwd=PROJECT_ROOT,
     )
 
     promote_nlp_results = BashOperator(
         task_id='promote_nlp_results',
         bash_command=(
-            'cd /opt/airflow/transform && '
-            'dbt run --profiles-dir . --select int_sentiment_results fact_product_mentions'
+            'python scripts/dbt/dbt_runner.py run '
+            '--select int_sentiment_results int_video_product_mentions '
+            'int_sentence_product_targets int_product_resolution_candidates'
         ),
+        cwd=PROJECT_ROOT,
     )
 
-    wait_for_extraction >> run_nlp_inference >> promote_nlp_results
+    resolve_product_targets = BashOperator(
+        task_id='resolve_product_targets',
+        bash_command='python -m nlp.product_target_resolver --limit 100 --batch-size 10',
+        cwd=PROJECT_ROOT,
+    )
+
+    rebuild_fact_product_mentions = BashOperator(
+        task_id='rebuild_fact_product_mentions',
+        bash_command=(
+            'python scripts/dbt/dbt_runner.py run '
+            '--select int_video_product_mentions int_sentence_product_targets fact_product_mentions'
+        ),
+        cwd=PROJECT_ROOT,
+    )
+
+    (
+        prepare_comment_sentences
+        >> run_nlp_inference
+        >> promote_nlp_results
+        >> resolve_product_targets
+        >> rebuild_fact_product_mentions
+    )

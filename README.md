@@ -3,7 +3,7 @@
 [![Python 3.13](https://img.shields.io/badge/python-3.13-blue.svg)](https://www.python.org/downloads/release/python-3130/)
 [![dbt-bigquery](https://img.shields.io/badge/dbt-1.8-orange.svg)](https://www.getdbt.com/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688.svg)](https://fastapi.tiangolo.com/)
-[![Streamlit](https://img.shields.io/badge/Streamlit-1.42-FF4B4B.svg)](https://streamlit.io/)
+[![Next.js](https://img.shields.io/badge/Next.js-App_Router-000000.svg)](https://nextjs.org/docs/app)
 [![Google Cloud Platform](https://img.shields.io/badge/GCP-BigQuery%20%7C%20GCS-4285F4.svg)](https://cloud.google.com/)
 
 Hệ thống end-to-end phân tích cảm xúc (Sentiment Analysis) đa khía cạnh dành cho bình luận YouTube về các sản phẩm công nghệ Việt Nam (smartphone, laptop, thiết bị smarthome). Đồ án tốt nghiệp 2026.
@@ -20,6 +20,25 @@ Hệ thống end-to-end phân tích cảm xúc (Sentiment Analysis) đa khía c�
 
 ### 1. Kiến trúc hệ thống (System Architecture)
 ```mermaid
+%%{
+  init: {
+    "theme": "base",
+    "themeVariables": {
+      "background": "#ffffff",
+      "primaryColor": "#ffffff",
+      "primaryBorderColor": "#000000",
+      "primaryTextColor": "#000000",
+      "lineColor": "#000000",
+      "secondaryColor": "#ffffff",
+      "tertiaryColor": "#ffffff",
+      "clusterBkg": "#ffffff",
+      "clusterBorder": "#000000",
+      "edgeLabelBackground": "#ffffff",
+      "fontFamily": "Arial",
+      "fontSize": "14px"
+    }
+  }
+}%%
 graph TD
     subgraph Data_Collection ["Data Collection (Phase 1)"]
         A1[YouTube Data API]
@@ -41,7 +60,7 @@ graph TD
     subgraph NLP ["NLP Pipeline (Phase 3)"]
         D1["vELECTRA<br>(Aspect Extraction)"]
         D2["PhoBERT<br>(Sentiment Classify)"]
-        D3["Gemini 1.5 Flash<br>(Confidence Fallback)"]
+        D3["Gemini Flash<br>(Confidence Fallback)"]
     end
 
     subgraph Analytics ["Analytics Engine (Phase 4)"]
@@ -52,7 +71,7 @@ graph TD
 
     subgraph Application ["Application (Phase 5)"]
         F1[FastAPI + Redis]
-        F2[Streamlit Dashboard]
+        F2[Next.js Web App: Guest/User + Admin]
     end
 
     A1 --> B1
@@ -63,8 +82,8 @@ graph TD
     C1 --> C2
     C2 --> D1
     D1 --> D2
-    D2 -- "conf < 0.8" --> D3
-    D2 -- "conf >= 0.8" --> C2
+    D2 -- "conf < 0.7" --> D3
+    D2 -- "conf >= 0.7" --> C2
     D3 --> C2
     C2 --> C3
     C3 --> E1
@@ -172,6 +191,25 @@ GEMINI_API_KEY=your_gemini_api_key
 # BRIGHTDATA_PASSWORD=your_password
 ```
 
+### 4. Cấu trúc Docker và Airflow
+
+Các file Docker được gom trong `docker/`, còn DAG orchestration nằm trong `airflow/dags/`:
+
+```text
+docker/
+  docker-compose.yml
+  Dockerfile.airflow
+
+airflow/
+  dags/
+```
+
+Nếu muốn chạy các service Docker từ root project:
+
+```bash
+docker compose --env-file .env -f docker/docker-compose.yml up airflow-webserver airflow-scheduler redis web-db
+```
+
 ---
 
 ## 🚀 Hướng dẫn Chạy Dự án Từng Bước
@@ -184,6 +222,15 @@ Chạy script để khởi tạo toàn bộ các bảng cấu hình (Layer 0) v�
 conda activate etl-py313
 python -m schema.run_all
 ```
+
+Khi nâng cấp database cũ sang catalog sản phẩm chuẩn, chạy thêm:
+
+```bash
+conda activate etl-py313
+python -m schema.migrate_product_catalog
+```
+
+Catalog được seed độc lập từ `elt/seed_data/seed_products.csv`. `keyword_config` chỉ còn dùng để tìm video, không còn là nguồn cho `dim_products`.
 
 ### Bước 1: Thu thập Dữ liệu (Giai đoạn Ingestion)
 Script ELT sẽ lo việc thu thập metadata và comments, tự động lưu thành định dạng **NDJSON** đẩy lên GCS, sau đó lưu trạng thái vào BigQuery.
@@ -208,7 +255,11 @@ Chạy pipeline AI hybrid. Mô hình PhoBERT và vELECTRA đã được train v�
 conda activate etl-py313
 python -m nlp.runner --limit 500 --dag-run-id manual-nlp-500-t070
 cd transform
-python -m dotenv -f ..\.env run -- dbt run --profiles-dir . --select int_sentiment_results fact_product_mentions
+python -m dotenv -f ..\.env run -- dbt run --profiles-dir . --select int_sentiment_results int_video_product_mentions int_sentence_product_targets int_product_resolution_candidates fact_product_mentions
+
+# Resolve ambiguous comparison sentences and unmapped videos, then rebuild target facts
+conda activate etl-py313
+python -m nlp.product_target_resolver --limit 100
 ```
 
 ### Bước 4: Analytics Engine (Ranking & Causality)
@@ -220,16 +271,17 @@ conda run -n etl-py313 python scripts/dbt/dbt_runner.py run --select agg_daily_p
 python -m analytics.pelt_attribution --dry-run
 ```
 
-### Bước 5: Khởi động Dashboard & API
+### Bước 5: Khởi động Web App & API
 1. Mở Terminal 1 (Khởi chạy FastAPI Backend):
 ```bash
 conda activate etl-py313
 uvicorn api.main:app --reload --host 0.0.0.0 --port 8000
 ```
-2. Mở Terminal 2 (Khởi chạy Streamlit Dashboard):
+2. Mở Terminal 2 (Khởi chạy Next.js Web App):
 ```bash
-conda activate etl-py313
-streamlit run dashboard/app.py
+cd frontend
+npm install
+npm run dev
 ```
 
 ---
@@ -251,9 +303,70 @@ streamlit run dashboard/app.py
 - **Lỗi Tokenizer Mismatch**: Đảm bảo phân tách tiền xử lý đúng cho từng model: PhoBERT sử dụng `pyvi` (`ViTokenizer`) và format input `aspect </s> sentence`, còn vELECTRA sử dụng `underthesea.word_tokenize` để tách âm tiết và align nhãn BIO.
 - **Lỗi Gemini Fallback**: Threshold hiện tại là `0.70`. Nếu tỷ lệ route sang Gemini quá cao (>20% trên aspect thật), chạy `python -m nlp.runner --limit 500 --debug-local-confidence --output-jsonl scratch\local_confidence_debug_check.jsonl` để phân tách nguyên nhân NER thấp hay sentiment thấp.
 
-### Giai đoạn 4 & 5: API & Dashboard
-- **Dashboard load chậm (> 2 giây)**: Đảm bảo Redis caching (TTL=300s) đang hoạt động. Test bằng cách tắt Redis, nếu API báo lỗi connection refused, hãy khởi động lại Redis server.
+### Giai đoạn 4 & 5: API & Web App
+- **Web app load chậm (> 2 giây)**: Đảm bảo Redis caching (TTL=300s) đang hoạt động. Test bằng cách tắt Redis, nếu API báo lỗi connection refused, hãy khởi động lại Redis server.
 - **Ranking không hợp lý**: Kiểm tra lại công thức Bayesian Ranking trong bảng `agg_daily_product_ranking` (BigQuery/dbt), đảm bảo `C` (prior strength) không quá nhỏ hoặc quá lớn.
 
 ---
+
+## 📦 Product Catalog và Duyệt chỉnh sửa
+
+Ranking và phân tích được tổng hợp theo `product_id` chuẩn từ `product_config`. Alias như `s25 ultra` hoặc `galaxy s25u` được chuẩn hóa về cùng một sản phẩm trước khi sentiment tham gia KPI.
+
+Người dùng đăng nhập có thể gửi phiếu đề xuất specs, mô tả, URL chính thức và ảnh sản phẩm. Phiếu được lưu tại `product_detail_change_requests`; Admin phải duyệt trước khi dữ liệu được merge vào `product_details`.
+
+Xem schema, resolver target, API và use case chi tiết tại [`docs/product-catalog-and-moderation.md`](docs/product-catalog-and-moderation.md).
+
+---
 *Developed by Khoa Trần (2026)*
+---
+
+## Runbook nhanh: YouTube API comment backfill và chuẩn bị dashboard
+
+Nhánh API comment backfill dùng YouTube Data API `commentThreads.list` để lấy `publishedAt` chuẩn cho comment. Dữ liệu được upsert vào native BigQuery table `raw_comments_api` bằng `comment_id`, không xóa hoặc sửa GCS comments cũ. `stg_youtube_comments` union `raw_comments` và `raw_comments_api`, ưu tiên bản API khi trùng `comment_id`.
+
+### 1. Chuẩn bị bảng API comment
+
+```powershell
+conda activate etl-py313
+python schema\layer_1_raw\init_api_comment_tables.py
+```
+
+### 2. Sau khi crawl video raw xong, tạo candidate video
+
+API backfill chọn video từ `stg_youtube_videos` join `int_video_product_mentions`, nên cần chạy dbt tối thiểu:
+
+```powershell
+python scripts\dbt\dbt_runner.py run --select stg_youtube_videos int_video_product_mentions
+```
+
+### 3. Kiểm tra candidate và quota, chưa gọi API
+
+```powershell
+python scripts\run_api_comment_backfill.py --max-videos 10 --max-comments-per-video 100 --dry-run
+```
+
+`--dry-run` chỉ hiển thị số video candidate và quota ước tính. Nó không crawl comment, nên `videos_processed=0` là đúng.
+
+### 4. Crawl comments thật bằng API
+
+```powershell
+python scripts\run_api_comment_backfill.py --max-videos 10 --max-comments-per-video 100
+```
+
+Mỗi page `commentThreads.list` tốn 1 quota unit. Script dùng `QuotaBudget`, đọc quota đã dùng trong ngày từ `quota_operation_log` theo `DATE(created_at)`, consume bucket `youtube_api_comments`, log operation vào `quota_operation_log`, và cập nhật `quota_daily_summary`.
+
+### 5. Chuẩn bị dữ liệu hiển thị trang chủ/dashboard
+
+Sau khi `raw_comments_api` có dữ liệu:
+
+```powershell
+python scripts\dbt\dbt_runner.py run --select stg_youtube_comments
+python scripts\dbt\dbt_runner.py run --select int_comment_sentences --full-refresh
+python -m nlp.runner
+python scripts\dbt\dbt_runner.py run --select int_sentiment_results int_sentence_product_targets fact_product_mentions agg_daily_product_ranking
+```
+
+Trang chủ/dashboard đọc chủ yếu từ `agg_daily_product_ranking`, `fact_product_mentions`, `dim_products`. Nếu ranking chưa đổi, kiểm tra `raw_sentiment_results` đã có kết quả NLP cho comments mới chưa.
+
+Xem hướng dẫn tổng hợp toàn dự án tại [`docs/project-usage-guide.md`](docs/project-usage-guide.md).

@@ -12,6 +12,7 @@ from elt.extract.helpers.comment_downloader import CommentDownloader, ProxyConfi
 from elt.extract.helpers.comment_worker import CommentWorker
 from elt.repositories.crawl_state_repository import CrawlStateRepository
 from elt.repositories.quota_repository import QuotaRepository
+from pipeline_progress import progress_bar
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +31,9 @@ class CommentExtractor:
         self._crawl_state_repo = crawl_state_repo
         self._quota_repo = quota_repo
         self._gcs_client = gcs_client
-        self._downloader = CommentDownloader(proxy_config)
+        self._downloader = CommentDownloader(
+            proxy_config=proxy_config,
+        )
         self._worker = CommentWorker(
             downloader=self._downloader,
             crawl_state_repo=self._crawl_state_repo,
@@ -44,15 +47,21 @@ class CommentExtractor:
         failed: list[VideoDTO] = []
         delay = self._config.comment_downloader.request_delay_seconds
 
-        for video in videos:
-            ok = self._worker.process(video)
-            if ok:
-                success_count += 1
-            else:
-                failed.append(video)
+        with progress_bar(videos, desc="Comments", unit="video") as progress:
+            for video in progress:
+                ok = self._worker.process(video)
+                if ok:
+                    success_count += 1
+                else:
+                    failed.append(video)
 
-            if delay > 0:
-                time.sleep(delay)
+                progress.set_postfix(
+                    done=success_count,
+                    failed=len(failed),
+                )
+
+                if delay > 0:
+                    time.sleep(delay)
 
         return success_count, failed
 

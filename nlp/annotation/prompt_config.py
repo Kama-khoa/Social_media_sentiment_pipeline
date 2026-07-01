@@ -316,7 +316,8 @@ def get_system_prompt() -> str:
         "Cảm xúc hợp lệ: positive, negative, neutral\n\n"
         "Yêu cầu về kết quả:\n"
         "- Trả về JSON array thuần (chỉ chứa mảng các object).\n"
-        "- Mỗi object có đúng 4 trường: sentence, aspect_label, segment_text, sentiment_label.\n"
+        "- Mỗi object có đúng 5 trường: input_id, sentence, aspect_label, segment_text, sentiment_label.\n"
+        "- Sao chép nguyên văn `input_id` và `sentence` từ câu đầu vào tương ứng; không rút gọn hoặc viết lại.\n"
         "- Trường `segment_text` phải là trích xuất đúng cụm từ trong câu gốc thể hiện khía cạnh đó.\n\n"
         "Ví dụ minh họa:\n"
     )

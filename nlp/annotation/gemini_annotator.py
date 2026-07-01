@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import re
+import threading
 import time
 from datetime import date
 from pathlib import Path
@@ -12,7 +13,7 @@ from google import genai
 from dotenv import load_dotenv
 from underthesea import word_tokenize
 
-from nlp.annotation.prompt_builder import PromptBuilder
+from nlp.annotation.prompt_builder import PromptBuilder, annotation_input_id
 from nlp.annotation.prompt_config import ASPECT_LABELS, SENTIMENT_LABELS
 
 load_dotenv()
@@ -26,9 +27,12 @@ logger = logging.getLogger(__name__)
 # Verify your actual limits at: https://aistudio.google.com/rate-limit
 _FREE_TIER_LIMITS: dict[str, dict[str, int]] = {
     "gemini-3.1-flash-lite": {"rpm": 15,  "rpd": 500, "tpm": 250000},
-    "gemini-3-flash": {"rpm": 5,  "rpd": 20, "tpm": 250000},
+    "gemini-3.5-flash": {"rpm": 5,  "rpd": 20, "tpm": 250000},
+    "gemini-3-flash-preview": {"rpm": 5,  "rpd": 20, "tpm": 250000},
     "gemini-2.5-flash-lite": {"rpm": 10,  "rpd": 20,  "tpm":   250000},
     "gemini-2.5-flash":      {"rpm": 5,  "rpd": 20, "tpm": 250000},
+    "gemma-4-26b-a4b-it": {"rpm": 15, "rpd": 1500, "tpm": 250000},
+    "gemma-4-31b-it": {"rpm": 15, "rpd": 1500, "tpm": 250000},
 }
 
 # Sử dụng 75% RPM limit để có buffer cho drift thời gian
@@ -50,10 +54,13 @@ class _RateLimiter:
         self._min_interval: float = 60.0 / effective_rpm
         self._last_call: float = 0.0
         self._blocked_until: float = 0.0
+        self._lock = threading.Lock()
 
     def wait(self, model_name: str) -> None:
-        now = time.monotonic()
-        cooldown_remaining = self._blocked_until - now
+        with self._lock:
+            now = time.monotonic()
+            cooldown_remaining = self._blocked_until - now
+            
         if cooldown_remaining > 0:
             logger.info(
                 "Model %s đang trong 429 cooldown, chờ %.0fs...",
@@ -61,19 +68,26 @@ class _RateLimiter:
             )
             time.sleep(cooldown_remaining)
 
-        now = time.monotonic()
-        to_sleep = self._min_interval - (now - self._last_call)
+        with self._lock:
+            now = time.monotonic()
+            to_sleep = self._min_interval - (now - self._last_call)
+            if to_sleep > 0:
+                self._last_call = now + to_sleep
+            else:
+                self._last_call = now
+                to_sleep = 0.0
+
         if to_sleep > 0:
             logger.debug(
                 "Rate limiter [%s]: chờ %.1fs (%.1f RPM target)",
                 model_name, to_sleep, 60.0 / self._min_interval,
             )
             time.sleep(to_sleep)
-        self._last_call = time.monotonic()
 
     def block_for_cooldown(self) -> None:
         """Gọi sau khi nhận 429 — block model này trong _COOLDOWN_AFTER_429 giây."""
-        self._blocked_until = time.monotonic() + _COOLDOWN_AFTER_429
+        with self._lock:
+            self._blocked_until = time.monotonic() + _COOLDOWN_AFTER_429
 
 
 class _DailyBudget:
@@ -101,10 +115,13 @@ class _DailyBudget:
 
 class GeminiAnnotator:
     _MODELS_TO_TRY = [
-        "gemini-3.1-flash-lite",  # 15 RPM, 500 RPD — ưu tiên cao nhất
-        "gemini-3-flash",       # 5 RPM, 20 RPD
-        "gemini-2.5-flash",       # 5 RPM, 20 RPD
-        "gemini-2.5-flash-lite",       # 10 RPM, 20 RPD
+        "gemini-3.1-flash-lite",
+        "gemini-3.5-flash",
+        "gemini-3-flash-preview",
+        "gemini-2.5-flash",
+        "gemini-2.5-flash-lite",
+        "gemma-4-26b-a4b-it",
+        "gemma-4-31b-it",
     ]
 
     _VALID_ASPECTS = set(ASPECT_LABELS + ["NONE"])
@@ -170,16 +187,22 @@ class GeminiAnnotator:
             batch_idx = i // self._batch_size + 1
 
             last_exc: Exception | None = None
+            items: list[dict] = []
+            remaining = batch
             for attempt in range(3):
                 try:
-                    items = self._annotate_batch(batch)
-                    results.extend(items)
-                    if checkpoint_file:
-                        Path(checkpoint_file).parent.mkdir(parents=True, exist_ok=True)
-                        with open(checkpoint_file, "w", encoding="utf-8") as f:
-                            json.dump(results, f, ensure_ascii=False, indent=2)
-                    logger.info("Batch %d/%d: %d items OK", batch_idx, total_batches, len(items))
+                    round_items = self._annotate_batch(remaining)
+                    items.extend(round_items)
+                    remaining = self._missing_sentences(remaining, round_items)
                     last_exc = None
+                    if remaining and attempt < 2:
+                        logger.warning(
+                            "Batch %d/%d thiếu %d câu; retry riêng các câu chưa có annotation",
+                            batch_idx,
+                            total_batches,
+                            len(remaining),
+                        )
+                        continue
                     break
                 except Exception as exc:
                     last_exc = exc
@@ -202,6 +225,19 @@ class GeminiAnnotator:
                     "Batch %d/%d bỏ qua sau 3 lần thất bại: %s",
                     batch_idx, total_batches, last_exc,
                 )
+            if remaining:
+                logger.warning(
+                    "Batch %d/%d vẫn thiếu %d câu sau tối đa 3 lần gọi Gemini",
+                    batch_idx,
+                    total_batches,
+                    len(remaining),
+                )
+            results.extend(items)
+            if checkpoint_file:
+                Path(checkpoint_file).parent.mkdir(parents=True, exist_ok=True)
+                with open(checkpoint_file, "w", encoding="utf-8") as f:
+                    json.dump(results, f, ensure_ascii=False, indent=2)
+            logger.info("Batch %d/%d: %d items OK", batch_idx, total_batches, len(items))
 
         return results
 
@@ -215,7 +251,39 @@ class GeminiAnnotator:
                 "Dropped %d invalid items from batch (kept %d)",
                 len(parsed) - len(valid), len(valid),
             )
-        return [self._attach_bio_tags(item) for item in valid]
+        normalized = [
+            normalized_item
+            for item in valid
+            if (normalized_item := self._normalize_item_sentence(item, sentences)) is not None
+        ]
+        return [self._attach_bio_tags(item) for item in normalized]
+
+    def _normalize_item_sentence(
+        self,
+        item: dict,
+        expected_sentences: list[str],
+    ) -> dict | None:
+        expected_by_input_id = {
+            annotation_input_id(sentence): sentence for sentence in expected_sentences
+        }
+        sentence = str(item["sentence"])
+        original_sentence = expected_by_input_id.get(str(item.get("input_id", "")))
+        if original_sentence is None and sentence in expected_sentences:
+            original_sentence = sentence
+        if original_sentence is None:
+            logger.warning("Ignoring Gemini result for unexpected sentence: %.50s", sentence)
+            return None
+        return {**item, "sentence": original_sentence}
+
+    def _missing_sentences(
+        self,
+        expected_sentences: list[str],
+        items: list[dict],
+    ) -> list[str]:
+        annotated_sentences = {str(item["sentence"]) for item in items}
+        return [
+            sentence for sentence in expected_sentences if sentence not in annotated_sentences
+        ]
 
     def _call_llm_with_fallback(self, prompt: str) -> str:
         if not self._client:
@@ -223,18 +291,31 @@ class GeminiAnnotator:
 
         last_exc: Exception | None = None
 
-        for model_name in list(self._available_models):
+        models_to_try = list(self._available_models)
+        
+        for model_name in models_to_try.copy():
             budget = self._daily_budgets.get(model_name)
             if budget and not budget.can_use():
                 self._available_models.remove(model_name)
+                models_to_try.remove(model_name)
                 logger.warning(
                     "Model %s hết RPD quota hôm nay — loại khỏi session. "
                     "Còn lại: [%s]",
                     model_name,
                     ", ".join(self._available_models) if self._available_models else "không còn model nào",
                 )
-                continue
 
+        if not models_to_try:
+            raise RuntimeError("All Gemini models exhausted RPD quota.")
+
+        now = time.monotonic()
+        available_now = [m for m in models_to_try if m not in self._limiters or self._limiters[m]._blocked_until <= now]
+        blocked = [m for m in models_to_try if m in self._limiters and self._limiters[m]._blocked_until > now]
+        
+        blocked.sort(key=lambda m: self._limiters[m]._blocked_until)
+        ordered_models = available_now + blocked
+
+        for model_name in ordered_models:
             limiter = self._limiters.get(model_name)
             if limiter:
                 limiter.wait(model_name)
@@ -244,7 +325,8 @@ class GeminiAnnotator:
                     model=model_name,
                     contents=prompt,
                 )
-                if budget:
+                if model_name in self._daily_budgets:
+                    budget = self._daily_budgets[model_name]
                     budget.increment()
                     remaining = budget.remaining
                     if remaining <= 100 or remaining % 200 == 0:
@@ -263,6 +345,14 @@ class GeminiAnnotator:
                     if limiter:
                         limiter.block_for_cooldown()
                     last_exc = exc
+                    try:
+                        next_model_idx = ordered_models.index(model_name) + 1
+                        if next_model_idx < len(ordered_models):
+                            next_model = ordered_models[next_model_idx]
+                            logger.warning("Model %s rate limited, switching to fallback model %s", model_name, next_model)
+                            print(f"\n[Annotator] Model {model_name} rate limited. Switching to fallback model {next_model}...")
+                    except ValueError:
+                        pass
                     continue
                 raise exc
 

@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from elt.datacontext.gcs_client import GCSClient
 from elt.datacontext.models.video_dto import VideoDTO
 from elt.extract.helpers.comment_downloader import CommentDownloader
+from elt.extract.helpers.ytdlp_session_pool import YtdlpRateLimitError
 from elt.repositories.crawl_state_repository import CrawlStateRepository
 
 logger = logging.getLogger(__name__)
@@ -29,18 +30,15 @@ class CommentWorker:
 
     def process(self, video: VideoDTO) -> bool:
         if self._should_skip_by_maturity(video):
-            logger.debug("Skipping video %s (too new)", video.video_id)
+            logger.info("Skipped comments for video %s: too new", video.video_id)
             return True
 
-        raw = self._downloader.download(video.video_id, max_comments=self._max_comments)
-        if not raw:
-            self._crawl_state_repo.mark_video_skipped(video.video_id)
-            logger.debug("No comments for video %s, marked skipped", video.video_id)
-            return True
-
-        comments = self._downloader.to_comment_dtos(raw, video.video_id, video.channel_id)
+        comments = self._download_comments_with_retry(video)
         if not comments:
-            self._crawl_state_repo.mark_video_skipped(video.video_id)
+            logger.info(
+                "Deferred comments for video %s: no comments collected after clean/proxy retries",
+                video.video_id,
+            )
             return True
 
         try:
@@ -52,6 +50,42 @@ class CommentWorker:
 
         logger.info("Crawled %d comments for video %s", len(comments), video.video_id)
         return True
+
+    def _download_comments_with_retry(self, video: VideoDTO):
+        try:
+            raw = self._downloader.download_clean(video.video_id, self._max_comments)
+        except YtdlpRateLimitError:
+            logger.warning(
+                "Comment crawl rate-limited for video %s on clean session",
+                video.video_id,
+            )
+        else:
+            comments = self._parse_comments(raw, video)
+            if comments:
+                return comments
+            logger.info(
+                "Comment crawl returned no usable comments for video %s on clean session",
+                video.video_id,
+            )
+
+        try:
+            raw = self._downloader.download_with_proxy(
+                video.video_id,
+                self._max_comments,
+            )
+        except YtdlpRateLimitError:
+            logger.warning(
+                "Comment proxy fallback rate-limited for video %s",
+                video.video_id,
+            )
+            return []
+
+        return self._parse_comments(raw, video)
+
+    def _parse_comments(self, raw: list[dict] | None, video: VideoDTO):
+        if not raw:
+            return []
+        return self._downloader.to_comment_dtos(raw, video.video_id, video.channel_id)
 
     def _should_skip_by_maturity(self, video: VideoDTO) -> bool:
         now = datetime.now(timezone.utc)

@@ -11,6 +11,7 @@ if TYPE_CHECKING:
 class QuotaBucket(str, Enum):
     SEARCH = "search_videos"
     CHANNEL_SEED = "channel_seed"
+    COMMENT_THREADS = "youtube_api_comments"
 
 
 @dataclass
@@ -28,6 +29,7 @@ class QuotaBudget:
         allocations = {
             QuotaBucket.SEARCH: config.quota.bucket_search,
             QuotaBucket.CHANNEL_SEED: config.quota.bucket_channel_seed,
+            QuotaBucket.COMMENT_THREADS: config.api_comment_backfill.daily_quota_units,
         }
         remaining = {
             bucket: max(0, alloc - already_used_by_bucket.get(bucket.value, 0))

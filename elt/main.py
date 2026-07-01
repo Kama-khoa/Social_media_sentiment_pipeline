@@ -18,7 +18,7 @@ from elt.repositories.channel_repository import ChannelRepository
 from elt.repositories.crawl_state_repository import CrawlStateRepository
 from elt.repositories.keyword_repository import KeywordRepository
 from elt.repositories.quota_repository import QuotaRepository
-from elt.seed_data.seed_loader import sync_channels, sync_keywords
+from elt.seed_data.seed_loader import sync_channels, sync_keywords, sync_product_spec_templates, sync_products
 
 load_dotenv()
 
@@ -103,6 +103,13 @@ def _sync_seed_data(bq_client: bigquery.Client) -> None:
     kw_result = sync_keywords(bq_client)
     logger.info("Seed sync: %d keywords synced (CSV: %d)", kw_result["synced"], kw_result["csv_total"])
 
+    product_result = sync_products(bq_client)
+    logger.info(
+        "Seed sync: %d canonical products and %d aliases synced",
+        product_result["products"], product_result["aliases"],
+    )
+    logger.info("Seed sync: %d product specification templates synced", sync_product_spec_templates(bq_client))
+
 
 def run_videos(config, repos: dict, gcs_client: GCSClient, dag_run_id: str, execution_date: str):
     budget = _build_quota_budget(config, repos["quota_repo"])
@@ -110,9 +117,9 @@ def run_videos(config, repos: dict, gcs_client: GCSClient, dag_run_id: str, exec
 
     logger.info("=== VIDEO EXTRACTION START ===")
 
-    daily_result = 0
-    # daily_result = extractor.run_daily(execution_date, dag_run_id, budget)
-    # logger.info("Phase A done: %s", daily_result)
+    # daily_result = 0
+    daily_result = extractor.run_daily(execution_date, dag_run_id, budget)
+    logger.info("Phase A done: %s", daily_result)
 
     historical_result = extractor.run_historical(execution_date, dag_run_id, budget)
     logger.info("Phase B done: %s", historical_result)
@@ -136,12 +143,12 @@ def run_full(config, repos: dict, gcs_client: GCSClient, dag_run_id: str, execut
     comment_extractor = _build_comment_extractor(config, repos, gcs_client)
 
     logger.info("=== PHASE A: DAILY ===")
-    daily_result = 0
-    # daily_result = video_extractor.run_daily(
-    #     execution_date, dag_run_id, budget,
-    #     comment_extractor=comment_extractor,
-    # )
-    # logger.info("Phase A done: %s", daily_result)
+    # daily_result = 0
+    daily_result = video_extractor.run_daily(
+        execution_date, dag_run_id, budget,
+        comment_extractor=comment_extractor,
+    )
+    logger.info("Phase A done: %s", daily_result)
 
     logger.info("=== PHASE B: HISTORICAL ===")
     historical_result = video_extractor.run_historical(
@@ -162,6 +169,40 @@ def run_full(config, repos: dict, gcs_client: GCSClient, dag_run_id: str, execut
         "historical": historical_result,
         "backlog": backlog_result,
     }
+
+
+def run_manual_channel(
+    config,
+    repos: dict,
+    gcs_client: GCSClient,
+    dag_run_id: str,
+    execution_date: str,
+    channel_id: str,
+    lookback_days: int,
+    crawl_mode: str,
+):
+    budget = _build_quota_budget(config, repos["quota_repo"])
+    video_extractor = _build_video_extractor(config, repos, gcs_client)
+    comment_extractor = _build_comment_extractor(config, repos, gcs_client)
+
+    logger.info(
+        "=== MANUAL CHANNEL CRAWL START === channel_id=%s lookback_days=%s crawl_mode=%s",
+        channel_id,
+        lookback_days,
+        crawl_mode,
+    )
+    result = video_extractor.run_manual_channel(
+        channel_id=channel_id,
+        lookback_days=lookback_days,
+        crawl_mode=crawl_mode,
+        execution_date=execution_date,
+        dag_run_id=dag_run_id,
+        budget=budget,
+        comment_extractor=comment_extractor,
+    )
+    repos["quota_repo"].upsert_daily_summary(date.today(), dag_run_id)
+    logger.info("=== MANUAL CHANNEL CRAWL DONE === %s", result)
+    return result
 
 
 def main():
@@ -186,6 +227,21 @@ def main():
         type=str,
         default=None,
     )
+    parser.add_argument(
+        "--manual-channel-id",
+        type=str,
+        default=None,
+    )
+    parser.add_argument(
+        "--lookback-days",
+        type=int,
+        default=30,
+    )
+    parser.add_argument(
+        "--crawl-mode",
+        choices=["api_or_ytdlp", "ytdlp"],
+        default="api_or_ytdlp",
+    )
     args = parser.parse_args()
 
     config = load_config(args.config)
@@ -204,7 +260,18 @@ def main():
     logger.info("Pipeline config loaded")
     logger.info("Mode: %s | Date: %s | Run ID: %s", args.mode, execution_date, dag_run_id)
 
-    if args.mode == "videos":
+    if args.manual_channel_id:
+        run_manual_channel(
+            config,
+            repos,
+            gcs_client,
+            dag_run_id,
+            execution_date,
+            args.manual_channel_id,
+            args.lookback_days,
+            args.crawl_mode,
+        )
+    elif args.mode == "videos":
         run_videos(config, repos, gcs_client, dag_run_id, execution_date)
     elif args.mode == "comments":
         run_comments(config, repos, gcs_client, dag_run_id)

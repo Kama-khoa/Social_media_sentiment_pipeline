@@ -1,5 +1,28 @@
 **SENTIMENT INTELLIGENCE PLATFORM**
 
+## Cập Nhật Thực Thi 2026-06-02
+
+Hệ thống đã mở rộng từ ranking dựa trên keyword sang catalog sản phẩm chuẩn:
+
+- `keyword_config` chỉ còn dùng để discovery video. `dim_products` đọc từ `product_config`.
+- Catalog seed độc lập tại `elt/seed_data/seed_products.csv`, gồm 500 sản phẩm mẫu thuộc điện thoại, laptop và tai nghe.
+- dbt đã bổ sung `int_video_product_mentions`, `int_sentence_product_targets` và `int_product_resolution_candidates`.
+- `nlp.product_target_resolver` dùng alias trước, LLM fallback sau; candidate còn mơ hồ chờ Admin xử lý.
+- Ranking tổng hợp theo `product_id` chuẩn. Trang chi tiết trả thêm `product_details` và specs theo template category.
+- User đăng nhập được gửi `product_detail_change_requests`; chỉ Admin được duyệt và merge dữ liệu vào `product_details`.
+- FastAPI + Next.js đã có analytics pages, CRUD keyword/channel, Pipeline Health và trang Admin Products.
+- Auth store hiện dùng PostgreSQL qua SQLAlchemy. Redis cache áp dụng cho endpoint đọc analytics.
+
+Trạng thái cần xử lý trước production:
+
+1. Bật lại Phase A daily scan trong `elt.main` sau khi xác nhận quota seed production.
+2. Chuyển truy vấn viral video của `PELTAttribution._query_videos_in_window()` từ mapping legacy `video_crawl_state.keyword_id` sang `int_video_product_mentions`.
+3. Rebuild lịch sử `fact_product_mentions`, ranking và `causal_events` sau migration catalog.
+
+Chi tiết catalog và moderation: [`product-catalog-and-moderation.md`](product-catalog-and-moderation.md).
+
+---
+
 ## Cập Nhật Thực Thi 2026-05-30
 
 Giai đoạn NLP đã hoàn chỉnh ở mức vận hành:
@@ -15,7 +38,7 @@ Kế hoạch còn lại của dự án chuyển trọng tâm sang Phase 4 Analyt
 1. Populate thêm dữ liệu NLP đủ lớn.
 2. Hoàn thiện Bayesian ranking và controversy index trên `fact_product_mentions`.
 3. Hoàn thiện PELT attribution và bảng causal events.
-4. Sau analytics mới chuyển sang API và dashboard.
+4. Sau analytics mới chuyển sang xây dựng web app FastAPI + Next.js.
 
 ---
 
@@ -38,19 +61,22 @@ Sentiment Intelligence Platform là hệ thống end-to-end thu thập bình
 luận YouTube về sản phẩm công nghệ Việt Nam (smartphone, laptop, tai
 nghe, thiết bị nhà thông minh), chạy qua pipeline NLP Hybrid gồm
 vELECTRA + PhoBERT fine-tuned kết hợp Gemini Flash làm fallback, và cuối
-cùng trình bày kết quả phân tích qua dashboard Streamlit 3 tab.
+cùng trình bày kết quả phân tích qua một web app thống nhất cho hai
+actor: Guest/User và Admin.
 
 ### Kiến trúc luồng dữ liệu tổng thể
 
-- Ingestion: Airflow DAG thu thập dữ liệu mỗi ngày lúc 2:00 AM, dùng
-  yt-dlp + youtube-comment-downloader + RSS Feed thay thế YouTube API để
-  vượt giới hạn 10,000 quota/ngày.
+- Ingestion: Ưu tiên chạy thủ công trong Conda `etl-py313`; Airflow DAG
+  dùng để orchestration. Phase B historical dùng yt-dlp, Phase C comment
+  backlog dùng youtube-comment-downloader. Phase A daily dùng YouTube API
+  `search.list` theo kênh nhưng hiện đang tạm comment trong `elt.main`.
 
 - Storage: File JSON thô lưu trên Google Cloud Storage theo phân vùng
   YYYY/MM/DD.
 
 - Transformation: dbt xử lý 3 lớp ELT — Staging (làm phẳng JSON),
-  Intermediate (chuẩn hóa + lọc spam), Marts (bảng phân tích cuối).
+  Intermediate (chuẩn hóa, NLP promote và resolve target sản phẩm),
+  Marts (dimension, fact và ranking theo `product_id` chuẩn).
 
 - NLP Pipeline: vELECTRA trích xuất khía cạnh (Token Classification) +
   PhoBERT phân loại cảm xúc (Sequence Classification) +
@@ -59,7 +85,10 @@ cùng trình bày kết quả phân tích qua dashboard Streamlit 3 tab.
 - Analytics: Bayesian Ranking, Controversy Index, Correlation
   Attribution Engine dùng thuật toán PELT (ruptures).
 
-- Application: FastAPI + Redis Cache + Streamlit dashboard 3 tab.
+- Application: một Next.js web app gọi FastAPI + Redis Cache, hỗ trợ
+  Guest/User tra cứu insight và gửi phiếu bổ sung specs; Admin quản lý
+  cấu hình crawl, catalog sản phẩm, candidate resolution, phiếu chỉnh
+  sửa và theo dõi health của Airflow pipeline.
 
 ### Các điểm nhấn quan trọng mang tính quyết định
 
@@ -71,6 +100,7 @@ cùng trình bày kết quả phân tích qua dashboard Streamlit 3 tab.
 | **4** | **Confidence-Routing Threshold 0.70** | Ngưỡng 0.70 được chọn sau debug local 500 sentences, giúp giữ fallback tổng khoảng 6% và giảm chi phí Gemini nhưng vẫn route các case mơ hồ. |
 | **5** | **Historical Data — Tuần 1 bắt buộc** | Toàn bộ Phase 4 Correlation Attribution Engine phụ thuộc vào chuỗi thời gian đủ dài. Nếu không crawl historical data ngay tuần 1, Phase 4 sẽ không có dữ liệu để phân tích. |
 | **6** | **BrightData Proxy cho Comment Downloader** | youtube-comment-downloader có thể bị YouTube rate-limit. BrightData Residential Proxy là giải pháp đã được xác nhận trong ngân sách dự án để đảm bảo thu thập ổn định. |
+| **7** | **Tách keyword discovery khỏi product catalog** | Keyword crawl như `review` hoặc `samsung` không phải sản phẩm. Catalog chuẩn, alias và resolver target đảm bảo ranking hiển thị model đầy đủ và gom sentiment đúng sản phẩm. |
 
 #  CÁC BƯỚC CẦN XÉT DUYỆT VÀ CHUẨN BỊ SỚM
 
@@ -182,7 +212,9 @@ Analytics.
 3.  Thiết lập schema khởi tạo trên BigQuery: chạy các script trong folder `schema/` để tạo các bảng cấu hình và External Tables (layer 0 và layer 1).
 
 4.  Thực thi script chạy pipeline thủ công: `conda run -n etl-py313 python -m elt.main --mode full`.
-    Script này sẽ tự động handle Phase A (Daily), Phase B (Historical), và Phase C (Backlog).
+    Entry point hiện chạy Phase B (Historical) và Phase C (Backlog).
+    Phase A (Daily) đã có implementation nhưng đang tạm comment để kiểm
+    soát quota trong development.
 
 5.  Kiểm tra kết quả: xác nhận file NDJSON xuất hiện trên GCS theo cấu
     trúc raw/videos/YYYY/MM/DD/ và raw/comments/YYYY/MM/DD/.
@@ -192,13 +224,14 @@ Analytics.
 - yt-dlp: lấy metadata video (tiêu đề, lượt xem, thống kê) với 0 YouTube
   API quota.
 
-- feedparser 6.0.0: đọc RSS feed từ URL
-  https://www.youtube.com/feeds/videos.xml?channel_id={id}.
+- YouTube Data API v3 `search.list`: discovery video mới theo từng kênh
+  cho Phase A khi được bật lại.
 
 - Google Cloud Storage Python SDK (google-cloud-storage): upload file
   JSON.
 
-- Docker Desktop + Docker Compose: chạy Airflow stack.
+- Docker Desktop + Docker Compose: tùy chọn cho triển khai Airflow sau
+  này; development hiện ưu tiên chạy local/manual trong Conda.
 
 **Tài liệu tham khảo**
 
@@ -207,7 +240,7 @@ Analytics.
 - GCS Python Client:
   https://cloud.google.com/storage/docs/reference/libraries
 
-- Airflow Docker Compose:
+- Airflow local/manual runtime và Docker Compose tùy chọn:
   https://airflow.apache.org/docs/apache-airflow/stable/howto/docker-compose/index.html
 
 ### Tuần 2 — Viết Hybrid Extractor theo OOP
@@ -229,7 +262,7 @@ Analytics.
 - youtube-comment-downloader \>= 0.1.78: thu thập bình luận với 0
   YouTube API quota.
 
-- feedparser \>= 6.0.0: đọc RSS feed kênh YouTube.
+- YouTube Data API v3: `search.list` theo kênh cho Phase A daily.
 
 - yt-dlp: lấy metadata video.
 
@@ -258,14 +291,17 @@ Analytics.
 
 13. Tổ chức luồng chạy `elt/main.py` thành 3 pha: Phase A (Daily scan qua API), Phase B (Historical qua yt-dlp), Phase C (Backlog crawl comments).
 
-14. Cập nhật `seed_loader.py` để đồng bộ cấu hình channel và keyword từ file CSV cục bộ lên `channel_config` và `keyword_config` trong BigQuery.
+14. Cập nhật `seed_loader.py` để đồng bộ channel, keyword discovery,
+    catalog chuẩn từ `seed_products.csv`, alias và template specs lên
+    BigQuery.
 
 15. Xác nhận dữ liệu được ghi đè ổn định trên GCS (GCS-first) và sau đó commit trạng thái thành công lên BigQuery (BQ-second).
 
 **Công cụ sử dụng**
 
-- Apache Airflow 3.1.8: DAG, PythonOperator, XCom để truyền kết quả giữa
-  các task.
+- Apache Airflow: DAG, BashOperator, sensor và REST API `/api/v1`.
+  Development hiện ưu tiên chạy script thủ công trong Conda; Docker là
+  tùy chọn triển khai sau.
 
 - Google Cloud Storage: lưu trữ JSON thô phân vùng theo ngày.
 
@@ -288,6 +324,13 @@ Analytics.
   subscriber, is_historically_scanned).
 
 - keyword_config: danh sách 100 keywords nhóm theo semantic cluster.
+
+- product_config, product_aliases, product_details và
+  product_spec_templates: catalog chuẩn và specs có thể bổ sung dần.
+
+- product_resolution_candidates, product_detail_change_requests,
+  video_product_overrides và sentence_product_target_overrides: hàng
+  chờ và audit cho resolve target, moderation.
 
 - video_crawl_state: theo dõi trạng thái từng video
   (new/growing/mature/archived).
@@ -364,6 +407,13 @@ pipeline.
 28. Viết dbt model int_sentiment_results với schema sẵn sàng nhận kết
     quả từ NLP pipeline (tuần 8 sẽ populate data thực).
 
+28a. Bổ sung `int_video_product_mentions`, `int_sentence_product_targets`
+    và `int_product_resolution_candidates`. Match alias trong
+    title/description/comment trước; target mơ hồ chờ LLM hoặc Admin.
+
+28b. Chuyển `dim_products` sang đọc `product_config`. Không dùng
+    `keyword_id` làm `product_id`.
+
 **Công cụ sử dụng**
 
 - dbt seed: nạp CSV seed data vào BigQuery.
@@ -401,7 +451,7 @@ nhãn tự động thay vì gán tay 4 tuần.
     JSON chứa entity, aspect_label (Pin/Camera/Màn hình/Hiệu năng/Thiết
     kế/Giá), segment và nhãn BIO cho từng token.
 
-31. Viết script gửi batch 50 câu/request lên Gemini 1.5 Flash API (~40
+31. Viết script gửi batch 50 câu/request lên Gemini Flash API (~40
     requests tổng, nằm trong free tier).
 
 32. Parse và validate response JSON, loại bỏ câu có output không hợp lệ.
@@ -412,7 +462,7 @@ nhãn tự động thay vì gán tay 4 tuần.
 
 **Công cụ sử dụng**
 
-- Gemini 1.5 Flash API: gán nhãn tự động với few-shot prompting (Brown
+- Gemini Flash API: gán nhãn tự động với few-shot prompting (Brown
   et al., 2020).
 
 - underthesea 6.8.4: word tokenization tiếng Việt — bắt buộc trước khi
@@ -552,16 +602,24 @@ Fine-tune PhoBERT trên bộ dữ liệu Aspect-Sentiment (đã gom nhóm theo a
     70–75% xử lý hoàn toàn bằng local model), tổng thời gian xử lý mỗi
     batch.
 
+51a. Chạy `nlp.product_target_resolver` sau lượt dbt intermediate đầu
+    tiên: alias match trước, LLM fallback sau. Ghi override cho video và
+    sentence target; candidate chưa chắc chắn chờ Admin xử lý.
+
 **Công cụ sử dụng**
 
 - PyTorch + HuggingFace Transformers: load model local và chạy
   inference.
 
-- underthesea: word tokenization trước khi đưa vào PhoBERT (bắt buộc).
+- pyvi: word segmentation trước khi đưa vào PhoBERT (bắt buộc).
 
-- Gemini 1.5 Flash API: fallback cho các câu confidence thấp.
+- underthesea: tokenization và alignment BIO cho vELECTRA.
 
-- Redis: cache kết quả inference để tránh xử lý lại câu đã có kết quả.
+- Gemini Flash API: fallback cho các câu confidence thấp và target sản
+  phẩm mơ hồ.
+
+- BigQuery MERGE theo `result_id`: checkpoint và tránh xử lý trùng kết
+  quả inference.
 
 - Apache Airflow: tích hợp vào DAG tự động.
 
@@ -588,12 +646,12 @@ của dự án phân biệt thesis này với các hệ thống sentiment đơn 
 
 52. Viết dbt model mart_product_ranking tính Bayesian Score theo công
     thức: (C × m + Tổng(w × s)) / (C + n), trong đó C = 50 là prior
-    strength, m = 0.0 là điểm prior trung lập, n là tổng số mentions, s
-    là điểm sentiment.
+    strength, m là sentiment trung bình toàn cục trong rolling window 30
+    ngày, n là tổng số mentions, s là điểm sentiment.
 
-53. Hiệu ứng của Bayesian Score: sản phẩm có ít mentions bị kéo về điểm
-    0.0 (trung lập), tránh tình trạng sản phẩm chỉ có 3 bình luận tích
-    cực bị xếp hạng nhất.
+53. Hiệu ứng của Bayesian Score: sản phẩm có ít mentions bị kéo về mức
+    sentiment trung bình toàn cục, tránh tình trạng sản phẩm chỉ có 3
+    bình luận tích cực bị xếp hạng nhất.
 
 54. Tính Controversy Index: Std(sentiment_scores) /
     (\|Mean(sentiment_scores)\| + 0.1). Giá trị cao cho thấy sản phẩm bị
@@ -663,7 +721,7 @@ của dự án phân biệt thesis này với các hệ thống sentiment đơn 
 
 - BigQuery: truy vấn tìm video viral trong cửa sổ thời gian ±7 ngày.
 
-- Gemini 1.5 Flash API: sinh câu giải thích tự nhiên bằng tiếng Việt.
+- Gemini 2.5 Flash API: sinh câu giải thích tự nhiên bằng tiếng Việt.
 
 **Tài liệu tham khảo**
 
@@ -681,32 +739,71 @@ Nguyên tắc tuyệt đối: Không thêm tính năng mới sau tuần 10. Ch�
 và fix bugs những gì đã có. Vi phạm nguyên tắc này là nguy cơ lớn nhất
 dẫn đến nộp trễ.
 
-### Tuần 11 — FastAPI Backend và Streamlit Dashboard
+### Tuần 11 — Web App FastAPI + Next.js với 2 Actor
+
+**Phạm vi use-case**
+
+| **Actor** | **Use-case chính** | **Mô tả** |
+|----|----|----|
+| Guest/User | Đăng ký | Tạo tài khoản để sử dụng web app. |
+| Guest/User | Đăng nhập/Đăng xuất | Xác thực phiên làm việc và kết thúc phiên an toàn. |
+| Guest/User | Tìm kiếm và lọc dữ liệu | Tìm sản phẩm, lọc theo danh mục và các điều kiện phân tích được hỗ trợ. |
+| Guest/User | Xem các trang phân tích | Xem bảng xếp hạng, chi tiết khía cạnh và timeline attribution. |
+| Guest/User | Đề xuất chỉnh sửa thông tin sản phẩm | Gửi phiếu bổ sung specs, mô tả, URL chính thức hoặc ảnh; không ghi trực tiếp dữ liệu chính. |
+| Admin | Quản lý từ khóa tìm kiếm | Xem, thêm, sửa, xóa cấu hình `keyword_config`. |
+| Admin | Quản lý kênh tìm kiếm | Xem, thêm, sửa, xóa cấu hình `channel_config`. |
+| Admin | Quản lý catalog sản phẩm | CRUD `product_config`, alias và template specs theo danh mục. |
+| Admin | Xử lý candidate sản phẩm | Duyệt model chưa nhận diện, sửa mapping video và bổ sung alias chuẩn hóa. |
+| Admin | Duyệt phiếu chỉnh sửa | Duyệt hoặc từ chối `product_detail_change_requests`; phiếu được duyệt mới merge vào `product_details`. |
+| Admin | Theo dõi Airflow pipeline | Xem health, DAG runs, task status và metrics vận hành. |
+
+Admin kế thừa toàn bộ quyền của Guest/User. Phase 5 chỉ xây dựng **một**
+Next.js web app; giao diện điều hướng và quyền truy cập thay đổi theo
+role trả về từ FastAPI. Trigger ELT backfill sau khi thay đổi cấu hình là
+phần mở rộng sau MVP, không phải điều kiện hoàn thành use-case quản trị.
 
 **Các bước thực hiện**
 
-64. Viết 4 FastAPI endpoints: GET /products/top/{category} trả về top 10
-    theo Bayesian Score, GET /products/{id}/aspects trả về radar chart
-    data 6 khía cạnh, GET /products/{id}/attribution trả về danh sách
-    causal events, GET /health trả về trạng thái hệ thống.
+64. Tạo auth layer FastAPI: PostgreSQL qua SQLAlchemy cho bảng
+    `app_users`, hash mật khẩu, JWT access token, role `user|admin`;
+    viết `POST /auth/register`, `POST /auth/login`, `POST /auth/logout`,
+    `GET /auth/me`. Không dùng BigQuery làm transactional user store.
 
-65. Cấu hình Redis cache với decorator @cached(ttl=300) cho tất cả
-    endpoint — tránh query BigQuery liên tục, giữ thời gian phản hồi \<
-    2 giây.
+65. Viết Guest/User endpoints: `GET /products/top/{category}`, `GET
+    /products/{id}/aspects`, `GET /products/{id}/attribution`, `GET
+    /search?q=...&category=...`, `GET /health`, `POST
+    /products/{product_id}/details/requests`.
 
-66. Viết Tab 1 Streamlit: hiển thị Top 10 sản phẩm dạng bảng với
-    Bayesian Score, Controversy icon (đỏ/vàng/xanh), số mentions, biểu
-    đồ bar chart.
+66. Viết Admin endpoints có dependency `require_admin`: CRUD
+    `/admin/keywords` và CRUD `/admin/channels`. Validate dữ liệu đầu
+    vào trước khi ghi trực tiếp BigQuery `keyword_config` hoặc
+    `channel_config`; ưu tiên soft delete bằng `is_active=FALSE`. Bổ sung
+    CRUD `/admin/products`, alias, template specs, candidate resolution,
+    video mapping và endpoint duyệt phiếu chỉnh sửa.
 
-67. Viết Tab 2: hiển thị radar chart 6 khía cạnh cho sản phẩm được chọn,
-    kèm 5 câu bình luận tiêu biểu nhất (confidence cao nhất, đại diện
-    từng aspect).
+67. Cấu hình Redis cache TTL 300 giây cho endpoint đọc analytics; xóa
+    cache liên quan sau thao tác quản trị. Không cache endpoint auth.
 
-68. Viết Tab 3: timeline biến động sentiment, danh sách causal events
-    với attribution score, câu giải thích do Gemini sinh ra.
+68. Viết một Next.js App Router web app bằng TypeScript có màn đăng ký,
+    đăng nhập, đăng xuất và
+    các trang Guest/User: tìm kiếm/lọc, top sản phẩm, chi tiết radar 6
+    khía cạnh, timeline sentiment và causal events.
 
-69. Test end-to-end: click qua 3 tab, xác nhận không có lỗi, thời gian
-    phản hồi \< 2 giây.
+69. Bổ sung các trang chỉ dành cho Admin: quản lý từ khóa, kênh tìm
+    kiếm, catalog sản phẩm, alias/template specs, candidate resolution
+    và phiếu chỉnh sửa. Ẩn menu quản trị với user thường và bắt buộc
+    FastAPI kiểm tra role để ngăn gọi API trực tiếp.
+
+70. Thêm trang Admin Pipeline Health. Next.js gọi FastAPI
+    `/admin/pipeline/*`; FastAPI proxy Airflow REST API `/health`,
+    `/api/v1/dags`, DAG runs, task instances và kết hợp metrics vận hành
+    từ BigQuery. Không đưa Airflow credentials xuống frontend.
+
+71. Test end-to-end theo hai role: đăng ký, đăng nhập, đăng xuất, tìm
+    kiếm/lọc, xem analytics, gửi phiếu chỉnh sửa; Admin CRUD
+    keyword/channel/catalog và duyệt phiếu; user thường gọi endpoint
+    Admin phải nhận `403`; endpoint analytics đã cache phản hồi \< 2
+    giây; trang Pipeline Health hiển thị đúng trạng thái DAG gần nhất.
 
 **Công cụ sử dụng**
 
@@ -714,17 +811,32 @@ dẫn đến nộp trễ.
 
 - Redis 7: in-memory cache, TTL 300 giây.
 
-- Streamlit 1.32+: dashboard frontend.
+- Next.js App Router + TypeScript: frontend có routing và điều hướng theo
+  role.
 
-- Plotly (tích hợp sẵn trong Streamlit): radar chart và timeline chart.
+- Node.js 20.9+ và npm: runtime frontend Next.js.
 
-- Docker Compose: chạy Backend + Redis + Streamlit trong cùng stack.
+- Tailwind CSS + shadcn/ui: layout, form CRUD và bảng Admin.
+
+- Recharts hoặc Plotly.js: radar chart và timeline chart.
+
+- passlib/bcrypt hoặc pwdlib: hash mật khẩu.
+
+- python-jose hoặc PyJWT: ký và kiểm tra JWT.
+
+- SQLAlchemy + PostgreSQL: lưu tài khoản web app trong transactional
+  auth store độc lập với BigQuery.
+
+- Docker Compose: tùy chọn đóng gói Backend + Redis + Next.js web app
+  trong cùng stack sau giai đoạn development local.
 
 **Tài liệu tham khảo**
 
 - FastAPI documentation: https://fastapi.tiangolo.com/
 
-- Streamlit components: https://docs.streamlit.io/develop/api-reference
+- Next.js App Router: https://nextjs.org/docs/app
+
+- Next.js Installation: https://nextjs.org/docs/app/getting-started/installation
 
 - Redis Python (redis-py): https://redis-py.readthedocs.io/
 
@@ -732,32 +844,32 @@ dẫn đến nộp trễ.
 
 **Các bước thực hiện**
 
-70. Đóng băng code: không commit tính năng mới sau ngày đầu tuần 12. Chỉ
+72. Đóng băng code: không commit tính năng mới sau ngày đầu tuần 12. Chỉ
     hotfix lỗi nghiêm trọng.
 
-71. Vẽ và xuất các sơ đồ chất lượng cao: System Architecture tổng thể,
+73. Vẽ và xuất các sơ đồ chất lượng cao: System Architecture tổng thể,
     Data Flow Diagram (DFD), Database Schema ERD, NLP Pipeline
     Flowchart.
 
-72. Hoàn thiện 5 chương báo cáo: đặc biệt chú trọng Chương 4 Đánh giá —
+74. Hoàn thiện 5 chương báo cáo: đặc biệt chú trọng Chương 4 Đánh giá —
     cần giải thích trung thực tỷ lệ sai sót của PhoBERT, điều kiện
     Confidence-Routing, giới hạn Attribution Engine.
 
-73. Tạo bảng so sánh model performance: PhoBERT trước fine-tune (~65%
+75. Tạo bảng so sánh model performance: PhoBERT trước fine-tune (~65%
     accuracy), PhoBERT sau fine-tune (~81%), Gemini only (~85%), Hybrid
     Confidence-Routing (~83%).
 
-74. Export sample dataset (~500 câu anonymized) lên HuggingFace Dataset
+76. Export sample dataset (~500 câu anonymized) lên HuggingFace Dataset
     Hub để đóng góp học thuật.
 
-75. Chuẩn bị slide bảo vệ nhấn mạnh 3 điểm khác biệt: Hybrid NLP với
+77. Chuẩn bị slide bảo vệ nhấn mạnh 3 điểm khác biệt: Hybrid NLP với
     Confidence-Routing, Correlation Attribution Engine, Controversy
     Index.
 
-76. Quay video demo end-to-end backup phòng trường hợp mất mạng tại buổi
+78. Quay video demo end-to-end backup phòng trường hợp mất mạng tại buổi
     bảo vệ.
 
-77. Ẩn toàn bộ API key khỏi code, push GitHub public.
+79. Ẩn toàn bộ API key khỏi code, push GitHub public.
 
 **Công cụ sử dụng**
 
@@ -803,9 +915,9 @@ dẫn đến nộp trễ.
 
 | **Hạng mục chi phí** | **Đơn giá** | **Ước tính dùng** | **Thành tiền** |
 |----|:--:|:--:|:--:|
-| Gemini 1.5 Flash — Auto-Annotation (Tuần 6) | Free tier 1,500 req/ngày | ~40 requests | \$0 |
+| Gemini Flash — Auto-Annotation (Tuần 6) | Theo quota API hiện hành | ~40 requests | Phụ thuộc quota |
 | Google Colab Pro (nếu cần GPU đảm bảo) | \$10/tháng | 1 tháng | \$0–\$10 |
-| Gemini 1.5 Flash — Confidence Routing (Tuần 8+) | Free tier / \$0.075 per 1M tokens | ~25% trong 50K câu | \$0–\$2 |
+| Gemini Flash — Confidence Routing (Tuần 8+) | Theo quota API hiện hành | Debug hiện tại fallback tổng khoảng 6% | Phụ thuộc quota |
 | HuggingFace Hub (download model) | Free | \- | \$0 |
 | underthesea (local) | Free | \- | \$0 |
 | PyTorch + Transformers (local) | Free | \- | \$0 |
@@ -816,7 +928,7 @@ dẫn đến nộp trễ.
 | **Hạng mục chi phí** | **Đơn giá** | **Ước tính dùng** | **Thành tiền** |
 |----|:--:|:--:|:--:|
 | BigQuery Analytics Queries | \$5/TB processed | ~2GB × 20 lần | ~\$0.20 |
-| Gemini 1.5 Flash — Attribution explanations | Free tier | \< 100 requests | \$0 |
+| Gemini 2.5 Flash — Attribution explanations | Theo quota API hiện hành | \< 100 requests | Phụ thuộc quota |
 | ruptures (local) | Free | \- | \$0 |
 | TỔNG GIAI ĐOẠN 4 |  |  | \< \$1 |
 
@@ -825,8 +937,9 @@ dẫn đến nộp trễ.
 | **Hạng mục chi phí** | **Đơn giá** | **Ước tính dùng** | **Thành tiền** |
 |----|:--:|:--:|:--:|
 | Redis (chạy local trong Docker) | Free | \- | \$0 |
-| FastAPI + Streamlit (local) | Free | \- | \$0 |
-| BigQuery API reads từ Dashboard | \$5/TB | ~1GB | ~\$0.005 |
+| FastAPI + Next.js web app (local) | Free | \- | \$0 |
+| JWT auth + password hashing (local) | Free | \- | \$0 |
+| BigQuery API reads từ web app | \$5/TB | ~1GB | ~\$0.005 |
 | HuggingFace dataset upload | Free | \- | \$0 |
 | TỔNG GIAI ĐOẠN 5 |  |  | \< \$1 |
 

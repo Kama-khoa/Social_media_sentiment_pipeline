@@ -20,7 +20,9 @@ Transform được thực hiện hoàn toàn bởi dbt trong folder `transform/`
 | `datacontext/models/comment_dto.py` | `CommentDTO` dataclass — cấu trúc dữ liệu comment |
 | `datacontext/models/channel_dto.py` | `ChannelDTO` dataclass — cấu trúc dữ liệu kênh |
 | `datacontext/models/keyword_dto.py` | `KeywordDTO` dataclass — cấu trúc dữ liệu keyword |
-| `seed_data/seed_loader.py` | Script chạy thủ công — đọc 2 file CSV và load vào BQ tables `channel_config` + `keyword_config` |
+| `seed_data/seed_loader.py` | Đồng bộ `seed_channels.csv`, `seed_keywords.csv`, `seed_products.csv` và template specs vào BigQuery |
+| `seed_data/seed_products.csv` | Catalog chuẩn độc lập, không suy luận từ keyword |
+| `seed_data/generate_seed_products.py` | Sinh lại 500 sản phẩm mẫu development/demo |
 | `extract/base_extractor.py` | `BaseExtractor` abstract class — định nghĩa interface chuẩn |
 | `extract/video_extractor.py` | `VideoExtractor` class — triển khai Phase A (search.list per channel) và Phase B (yt-dlp historical) |
 | `extract/comment_extractor.py` | `CommentExtractor` class — crawl comments với `crawl_batch`, `crawl_batch_with_retry`, `run_backlog` |
@@ -147,5 +149,43 @@ Convention này là bắt buộc — BigQuery External Table (layer_1) dùng pat
 
 - File trong folder này chạy với **Conda env: etl-py313** (Python 3.13) — không import bất cứ thứ gì từ `airflow/`
 - Mỗi script trong `extract/` có thể chạy thủ công để test: `conda run -n etl-py313 python -m elt.main --mode full`
-- `seed_loader.py` chỉ chạy 1 lần khi setup, hoặc khi cần thêm kênh/keyword mới
+- `seed_loader.py` chạy khi setup hoặc khi cần thêm kênh, keyword, sản phẩm hay alias mới
 - DAG trong `airflow/` sẽ gọi vào các script này — không ngược lại
+---
+
+## Update 2026-06-03 — API Comment Backfill
+
+Nhánh này bổ sung nguồn comment có timestamp chuẩn từ YouTube Data API, tách khỏi `youtube-comment-downloader`.
+
+Files mới/quan trọng:
+
+| File | Nhiệm vụ |
+|---|---|
+| `extract/helpers/youtube_api_comment_client.py` | Gọi `commentThreads.list`, parse top-level comments thành `CommentDTO` |
+| `extract/api_comment_backfill.py` | Chọn candidate video, crawl API comments, progress bar, consume `QuotaBudget` |
+| `repositories/api_comment_repository.py` | Query candidate từ `stg_youtube_videos` + `int_video_product_mentions`, MERGE vào `raw_comments_api` |
+| `../scripts/run_api_comment_backfill.py` | CLI chạy dry-run hoặc crawl thật |
+| `../schema/layer_1_raw/init_api_comment_tables.py` | Tạo `raw_comments_api` và `api_comment_backfill_state` |
+
+Luồng chạy:
+
+```powershell
+conda activate etl-py313
+python schema\layer_1_raw\init_api_comment_tables.py
+python scripts\dbt\dbt_runner.py run --select stg_youtube_videos int_video_product_mentions
+python scripts\run_api_comment_backfill.py --max-videos 10 --max-comments-per-video 100 --dry-run
+python scripts\run_api_comment_backfill.py --max-videos 10 --max-comments-per-video 100
+```
+
+Quota:
+
+- Bucket mới: `youtube_api_comments`.
+- `QuotaBudget.from_config()` lấy allocation từ `config.api_comment_backfill.daily_quota_units`.
+- `QuotaRepository.get_today_used_by_bucket()` tính quota đã dùng trong ngày bằng `DATE(created_at)`.
+- Mỗi page `commentThreads.list` consume 1 unit và được log vào `quota_operation_log`.
+
+Data integrity:
+
+- Không sửa/xóa GCS files cũ.
+- `raw_comments_api` upsert bằng `comment_id`.
+- `stg_youtube_comments` ưu tiên row API khi cùng `comment_id` đã tồn tại ở GCS.

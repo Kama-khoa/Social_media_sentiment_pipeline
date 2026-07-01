@@ -18,6 +18,9 @@ Luồng: `GCS (raw JSON)` → `layer_1 External Tables` → `dbt` → `layer_2 S
 | `models/staging/stg_youtube_comments.sql` | UNNEST mảng comments → bảng phẳng (1 row = 1 comment) |
 | `models/intermediate/int_comment_sentences.sql` | Tách comment dài thành từng câu, chuẩn hóa text, ánh xạ từ lóng |
 | `models/intermediate/int_sentiment_results.sql` | Lưu kết quả NLP: aspect label + sentiment score từng câu |
+| `models/intermediate/int_video_product_mentions.sql` | Resolve model trong title/description bằng alias; xác định primary/secondary |
+| `models/intermediate/int_sentence_product_targets.sql` | Resolve sản phẩm được đánh giá ở cấp sentence, gồm explicit/inherited/override |
+| `models/intermediate/int_product_resolution_candidates.sql` | Hàng chờ video chưa map và sentence nhiều target |
 | `models/marts/dim_products.sql` | Dimension table: thông tin sản phẩm, hãng, danh mục |
 | `models/marts/fact_product_mentions.sql` | Fact table: mỗi lần sản phẩm được đề cập trong 1 comment |
 | `models/marts/agg_daily_product_ranking.sql` | Bảng tổng hợp hằng ngày: Bayesian score, controversy index, ranking |
@@ -40,12 +43,15 @@ models/staging/
         ▼ dbt run --select intermediate
 models/intermediate/
 ├── int_comment_sentences  ← tách câu + ánh xạ vn_slang_dictionary
-└── int_sentiment_results  ← nhận kết quả từ nlp/ pipeline
-                             (aspect label, sentiment, confidence)
+├── int_sentiment_results  ← nhận kết quả từ nlp/ pipeline
+│                            (aspect label, sentiment, confidence)
+├── int_video_product_mentions ← match product_aliases trong title/description
+├── int_sentence_product_targets ← explicit target hoặc kế thừa video primary
+└── int_product_resolution_candidates ← candidate chờ LLM/admin
         │
         ▼ dbt run --select marts
 models/marts/
-├── dim_products            ← master data sản phẩm
+├── dim_products            ← đọc master data từ product_config
 ├── fact_product_mentions   ← join sentences + sentiment + products
 └── agg_daily_product_ranking ← Bayesian score, controversy index
 ```
@@ -130,3 +136,32 @@ Manual debug qua Python script (`scripts/dbt/dbt_runner.py`)
 - `int_sentiment_results` phụ thuộc vào `nlp/` pipeline ghi kết quả vào BQ trước
 - Models dbt nên có tests: `not_null` + `unique` trên primary keys
 - Chạy `dbt run` sau khi GCS có dữ liệu mới và layer_1 External Tables đã detect partition mới
+- Không dùng `keyword_id` làm `product_id`; keyword chỉ phục vụ discovery video
+- Chạy `python -m nlp.product_target_resolver --limit 100` giữa hai lượt dbt khi cần resolve candidate mơ hồ
+- Chi tiết catalog và moderation: `docs/product-catalog-and-moderation.md`
+---
+
+## Update 2026-06-03 — Transform sau API comment backfill
+
+`stg_youtube_comments` hiện đọc hai nguồn:
+
+- `raw_comments`: external table trỏ GCS comments cũ.
+- `raw_comments_api`: native BigQuery table từ YouTube API comment backfill.
+
+Model staging union hai nguồn, dedupe theo `comment_id`, và ưu tiên `raw_comments_api` bằng `source_priority DESC`. Nhờ vậy downstream không bị duplicate và tự dùng timestamp API chuẩn khi có.
+
+Sau khi chạy `scripts/run_api_comment_backfill.py`, rebuild dữ liệu cho dashboard:
+
+```powershell
+conda activate etl-py313
+python scripts\dbt\dbt_runner.py run --select stg_youtube_comments
+python scripts\dbt\dbt_runner.py run --select int_comment_sentences --full-refresh
+python -m nlp.runner
+python scripts\dbt\dbt_runner.py run --select int_sentiment_results int_sentence_product_targets fact_product_mentions agg_daily_product_ranking
+```
+
+Nếu chỉ mới crawl video raw và muốn tạo candidate cho API comments:
+
+```powershell
+python scripts\dbt\dbt_runner.py run --select stg_youtube_videos int_video_product_mentions
+```

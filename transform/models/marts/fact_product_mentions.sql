@@ -14,8 +14,9 @@ WITH sentiment_results AS (
 sentences AS (
     SELECT * FROM {{ ref('int_comment_sentences') }}
 ),
-video_state AS (
-    SELECT * FROM {{ source('raw', 'video_crawl_state') }}
+targets AS (
+    SELECT * FROM {{ ref('int_sentence_product_targets') }}
+    WHERE resolution_status = 'resolved'
 ),
 products AS (
     SELECT * FROM {{ ref('dim_products') }}
@@ -29,14 +30,15 @@ SELECT
     s.channel_id,
     s.comment_id,
     sr.sentence_id,
+    s.sentence_type,
     sr.aspect_label,
-    sr.sentiment_label,
+    COALESCE(t.target_sentiment_label, sr.sentiment_label) AS sentiment_label,
     sr.confidence_score,
+    t.target_source,
+    t.target_confidence,
     CAST(s.published_at AS DATE) AS mention_date,
     CURRENT_TIMESTAMP() AS _dbt_processed_at
 FROM sentiment_results sr
 JOIN sentences s ON sr.sentence_id = s.sentence_id
--- Kết nối qua bảng video_crawl_state để lấy keyword_id (tương ứng product_id) của video
-JOIN video_state vcs ON s.video_id = vcs.video_id
--- Kết nối để lấy các trường chi tiết của product
-JOIN products p ON vcs.keyword_id = p.product_id
+JOIN targets t ON sr.sentence_id = t.sentence_id
+JOIN products p ON t.product_id = p.product_id

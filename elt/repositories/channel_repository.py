@@ -49,6 +49,25 @@ class ChannelRepository:
         rows = self._client.query(query, job_config=job_config).result()
         return [self._row_to_dto(row) for row in rows]
 
+    def get_active_channel(self, channel_id: str) -> ChannelDTO | None:
+        query = f"""
+            SELECT
+                channel_id, channel_name, channel_url, channel_handle,
+                subscriber_count, is_active, is_historically_scanned,
+                historical_scan_completed_at, created_at, last_updated_at
+            FROM {self._table("channel_config")}
+            WHERE channel_id = @channel_id
+              AND is_active = TRUE
+            LIMIT 1
+        """
+        job_config = bigquery.QueryJobConfig(
+            query_parameters=[
+                bigquery.ScalarQueryParameter("channel_id", "STRING", channel_id)
+            ]
+        )
+        rows = list(self._client.query(query, job_config=job_config).result())
+        return self._row_to_dto(rows[0]) if rows else None
+
     def mark_historically_scanned(self, channel_id: str) -> None:
         query = f"""
             UPDATE {self._table("channel_config")}

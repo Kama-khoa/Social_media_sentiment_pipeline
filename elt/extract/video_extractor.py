@@ -132,13 +132,70 @@ class VideoExtractor(BaseExtractor):
                 if comment_extractor:
                     comment_stats = comment_extractor.crawl_batch_with_retry(dtos, max_retries=2)
 
+        # --- Daily Backfill for New Keywords ---
+        backfill_saved = 0
+        all_keywords = self._keyword_repo.get_active_keywords()
+        backfill_keywords = [kw for kw in all_keywords if kw.needs_backfill]
+        if backfill_keywords:
+            logger.info("Phase A Backfill: Found %d keywords needing historical scan: %s", len(backfill_keywords), [kw.keyword_text for kw in backfill_keywords])
+            backfill_cutoff = datetime.now(timezone.utc) - timedelta(days=365)
+            
+            for ch in channels:
+                url = ch.channel_url or f"https://www.youtube.com/{ch.channel_handle}"
+                logger.info("Phase A Backfill: Scanning channel %s for new keywords", ch.channel_name)
+                try:
+                    raw_videos = fetcher.fetch_channel_videos(url, max_results=self._config.crawl.historical_scan_max_results)
+                except Exception as exc:
+                    logger.error("Phase A Backfill: Failed to fetch videos for %s: %s", ch.channel_name, exc)
+                    continue
+                
+                if not raw_videos:
+                    continue
+                
+                filtered_raw = []
+                for item in raw_videos:
+                    pub_at = fetcher._parse_published_at(item)
+                    if pub_at and pub_at >= backfill_cutoff:
+                        filtered_raw.append(item)
+                    elif not pub_at:
+                        filtered_raw.append(item)
+                
+                matched_backfill = fetcher.filter_by_keywords(filtered_raw, custom_keywords=backfill_keywords)
+                existing_ids = self._crawl_state_repo.get_existing_video_ids(ch.channel_id)
+                remaining = [v for v in matched_backfill if v["id"] not in existing_ids]
+                
+                if remaining:
+                    logger.info("Phase A Backfill: channel %s — found %d new videos for backfill keywords", ch.channel_name, len(remaining))
+                    for batch_entries in _chunks(remaining, self._config.crawl.video_batch_size):
+                        enriched = fetcher.enrich_batch(batch_entries)
+                        dtos = fetcher.build_video_dtos(enriched, ch.channel_id, search_mode="DAILY_BACKFILL")
+                        dtos = [dto for dto in dtos if dto.published_at >= backfill_cutoff]
+                        if not dtos:
+                            continue
+                        
+                        try:
+                            self._upload_to_gcs(dtos, execution_date)
+                            self._save_to_crawl_state(dtos)
+                        except Exception as e:
+                            logger.error("Phase A Backfill: Save failed for channel %s: %s", ch.channel_name, e)
+                            continue
+                        
+                        backfill_saved += len(dtos)
+                        if comment_extractor:
+                            comment_extractor.crawl_batch_with_retry(dtos, max_retries=2)
+            
+            # Clear backfill flags
+            backfill_ids = [kw.keyword_id for kw in backfill_keywords]
+            self._keyword_repo.clear_needs_backfill(backfill_ids)
+            logger.info("Phase A Backfill: Completed and cleared backfill flags for: %s", backfill_ids)
+
         elapsed = time.monotonic() - t0
         self._quota_repo.log_operation(
             operation_type="video_extraction_daily",
             bucket=QuotaBucket.SEARCH.value,
             units_used=channels_scanned * _SEARCH_UNITS_PER_CALL,
             dag_run_id=dag_run_id,
-            videos_processed=total_saved,
+            videos_processed=total_saved + backfill_saved,
             execution_time_seconds=elapsed,
         )
 
@@ -146,7 +203,7 @@ class VideoExtractor(BaseExtractor):
             "channels_scanned": channels_scanned,
             "raw_found": len(all_raw),
             "keyword_matched": len(matched),
-            "new_saved": total_saved,
+            "new_saved": total_saved + backfill_saved,
             "comment_stats": comment_stats,
             "elapsed_seconds": round(elapsed, 2),
         }
@@ -309,6 +366,119 @@ class VideoExtractor(BaseExtractor):
         return {
             "channels_scanned": channels_done,
             "total_saved": total_saved,
+            "elapsed_seconds": round(elapsed, 2),
+        }
+
+    def run_manual_channel(
+        self,
+        channel_id: str,
+        lookback_days: int,
+        crawl_mode: str,
+        execution_date: str,
+        dag_run_id: str,
+        budget: QuotaBudget,
+        comment_extractor: Optional[CommentExtractor] = None,
+    ) -> dict:
+        t0 = time.monotonic()
+        ch = self._channel_repo.get_active_channel(channel_id)
+        if ch is None:
+            logger.warning("Manual crawl: active channel not found: %s", channel_id)
+            return {"channels_scanned": 0, "total_saved": 0, "crawl_mode": crawl_mode, "elapsed_seconds": 0}
+
+        lookback_days = max(1, min(int(lookback_days), 730))
+        fetcher = self._build_fetcher()
+        cutoff_date = datetime.now(timezone.utc) - timedelta(days=lookback_days)
+
+        raw: list[dict] = []
+        units_used = 0
+        used_mode = crawl_mode
+        if crawl_mode == "api_or_ytdlp" and budget.can_consume(QuotaBucket.SEARCH, _SEARCH_UNITS_PER_CALL):
+            logger.info("Manual crawl: using YouTube API search for %s", ch.channel_name)
+            raw = self._api_client.search_channel_recent(
+                ch.channel_id,
+                cutoff_date,
+                self._config.crawl.daily_scan_max_results,
+            )
+            budget.consume(QuotaBucket.SEARCH, _SEARCH_UNITS_PER_CALL)
+            units_used = _SEARCH_UNITS_PER_CALL
+            used_mode = "api_or_ytdlp"
+
+        if not raw:
+            if crawl_mode == "api_or_ytdlp":
+                logger.info("Manual crawl: falling back to yt-dlp for %s", ch.channel_name)
+            else:
+                logger.info("Manual crawl: using yt-dlp for %s", ch.channel_name)
+            used_mode = "ytdlp"
+            url = ch.channel_url or f"https://www.youtube.com/{ch.channel_handle}"
+            try:
+                raw = fetcher.fetch_channel_videos(
+                    url,
+                    max_results=self._config.crawl.historical_scan_max_results,
+                )
+            except YtdlpFetchError as exc:
+                logger.error("Manual crawl: yt-dlp failed for %s: %s", ch.channel_name, exc)
+                raw = []
+
+        filtered_raw = []
+        unknown_date_count = 0
+        for item in raw:
+            pub_at = item.get("published_at") if used_mode == "api_or_ytdlp" else fetcher._parse_published_at(item)
+            if pub_at and pub_at >= cutoff_date:
+                filtered_raw.append(item)
+            elif not pub_at:
+                filtered_raw.append(item)
+                unknown_date_count += 1
+
+        matched = fetcher.filter_by_keywords(filtered_raw)
+        existing_ids = self._crawl_state_repo.get_existing_video_ids(ch.channel_id)
+        remaining = [v for v in matched if v["id"] not in existing_ids]
+        logger.info(
+            "Manual crawl: channel=%s mode=%s raw=%d filtered=%d matched=%d remaining=%d unknown_dates=%d",
+            ch.channel_name,
+            used_mode,
+            len(raw),
+            len(filtered_raw),
+            len(matched),
+            len(remaining),
+            unknown_date_count,
+        )
+
+        total_saved = 0
+        comment_fails: list[VideoDTO] = []
+        for batch_entries in _chunks(remaining, self._config.crawl.video_batch_size):
+            enriched = fetcher.enrich_batch(batch_entries)
+            dtos = fetcher.build_video_dtos(enriched, ch.channel_id, search_mode="MANUAL")
+            dtos = [dto for dto in dtos if dto.published_at >= cutoff_date]
+            if not dtos:
+                continue
+
+            self._upload_to_gcs(dtos, execution_date)
+            self._save_to_crawl_state(dtos)
+            total_saved += len(dtos)
+
+            if comment_extractor:
+                _, fails = comment_extractor.crawl_batch(dtos)
+                comment_fails.extend(fails)
+
+        if comment_extractor and comment_fails:
+            comment_extractor.crawl_batch_with_retry(comment_fails, max_retries=2)
+
+        elapsed = time.monotonic() - t0
+        self._quota_repo.log_operation(
+            operation_type="video_extraction_manual_channel",
+            bucket=QuotaBucket.SEARCH.value,
+            units_used=units_used,
+            dag_run_id=dag_run_id,
+            videos_processed=total_saved,
+            execution_time_seconds=elapsed,
+        )
+
+        return {
+            "channels_scanned": 1 if raw else 0,
+            "raw_found": len(raw),
+            "keyword_matched": len(matched),
+            "total_saved": total_saved,
+            "crawl_mode": used_mode,
             "elapsed_seconds": round(elapsed, 2),
         }
 

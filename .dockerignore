@@ -1,0 +1,17 @@
+.git
+.gitignore
+.env
+**/node_modules
+**/.next
+**/dbt_packages
+**/target
+**/dbt_modules
+**/*.pyc
+**/*.pyo
+**/*.pyd
+**/__pycache__
+.pytest_cache
+.vscode
+.claude
+logs
+data

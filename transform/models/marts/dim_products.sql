@@ -2,17 +2,18 @@
     materialized='table'
 ) }}
 
-WITH keywords AS (
-    SELECT * FROM {{ source('raw', 'keyword_config') }}
+WITH products AS (
+    SELECT * FROM {{ source('raw', 'product_config') }}
 )
 
 SELECT
-    keyword_id AS product_id,
-    keyword_text AS product_name,
-    keyword_text AS brand,
-    COALESCE(search_cluster, 'unknown') AS category,
-    CAST(NULL AS INT64) AS release_year,
+    product_id,
+    product_name,
+    COALESCE(brand, 'unknown') AS brand,
+    COALESCE(category, 'unknown') AS category,
+    release_year,
     is_active,
     created_at
-FROM keywords
-WHERE keyword_text IS NOT NULL AND keyword_text != ''
+FROM products
+WHERE product_name IS NOT NULL AND product_name != ''
+QUALIFY ROW_NUMBER() OVER (PARTITION BY product_id ORDER BY created_at DESC) = 1
