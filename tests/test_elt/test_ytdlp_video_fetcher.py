@@ -6,11 +6,11 @@ import pytest
 
 from elt.datacontext.models.keyword_dto import KeywordDTO
 from elt.datacontext.models.video_dto import VideoDTO
-from elt.extract.helpers.ytdlp_video_fetcher import YtdlpVideoFetcher
+from elt.extract.helpers.ytdlp_video_fetcher import YtdlpFetchError, YtdlpVideoFetcher
 
 KEYWORDS = [
-    KeywordDTO(keyword_id="kw_001", keyword_text="Samsung Galaxy S25", search_cluster="Samsung Galaxy S25"),
-    KeywordDTO(keyword_id="kw_002", keyword_text="iPhone 16", search_cluster="iPhone 16"),
+    KeywordDTO(keyword_id="kw_001", keyword_text="Samsung Galaxy S25", search_cluster="_uncategorized"),
+    KeywordDTO(keyword_id="kw_002", keyword_text="iPhone 16", search_cluster="_uncategorized"),
 ]
 
 FAKE_ENTRIES = [
@@ -65,24 +65,40 @@ class TestFetchChannelVideos:
         assert result[0]["title"] == "Review Samsung Galaxy S25 Ultra chi tiết"
 
     @patch("elt.extract.helpers.ytdlp_video_fetcher._make_ydl")
-    def test_returns_empty_on_exception(self, mock_make_ydl: MagicMock, fetcher: YtdlpVideoFetcher):
+    def test_raises_on_exception(self, mock_make_ydl: MagicMock, fetcher: YtdlpVideoFetcher):
         mock_make_ydl.side_effect = Exception("network error")
 
-        result = fetcher.fetch_channel_videos("https://www.youtube.com/@bad")
-
-        assert result == []
+        with pytest.raises(YtdlpFetchError):
+            fetcher.fetch_channel_videos("https://www.youtube.com/@bad")
 
     @patch("elt.extract.helpers.ytdlp_video_fetcher._make_ydl")
-    def test_returns_empty_when_none_result(self, mock_make_ydl: MagicMock, fetcher: YtdlpVideoFetcher):
+    def test_raises_when_none_result(self, mock_make_ydl: MagicMock, fetcher: YtdlpVideoFetcher):
         mock_ydl = MagicMock()
         mock_ydl.extract_info.return_value = None
         mock_ydl.__enter__ = MagicMock(return_value=mock_ydl)
         mock_ydl.__exit__ = MagicMock(return_value=False)
         mock_make_ydl.return_value = mock_ydl
 
-        result = fetcher.fetch_channel_videos("https://www.youtube.com/@empty")
+        with pytest.raises(YtdlpFetchError):
+            fetcher.fetch_channel_videos("https://www.youtube.com/@empty")
 
-        assert result == []
+
+class TestEnrichBatch:
+    @patch("elt.extract.helpers.ytdlp_video_fetcher._make_ydl")
+    def test_ignores_missing_video_formats(
+        self,
+        mock_make_ydl: MagicMock,
+        fetcher: YtdlpVideoFetcher,
+    ):
+        mock_ydl = MagicMock()
+        mock_ydl.extract_info.return_value = FAKE_ENTRIES[0]
+        mock_ydl.__enter__ = MagicMock(return_value=mock_ydl)
+        mock_ydl.__exit__ = MagicMock(return_value=False)
+        mock_make_ydl.return_value = mock_ydl
+
+        fetcher.enrich_batch([FAKE_ENTRIES[0]])
+
+        assert mock_make_ydl.call_args.kwargs["ignore_no_formats_error"] is True
 
 
 class TestFilterByKeywords:
@@ -109,7 +125,7 @@ class TestToVideoDtos:
         videos = [FAKE_ENTRIES[0].copy()]
         videos[0]["_matched_keyword"] = "Samsung Galaxy S25"
 
-        dtos = fetcher.to_video_dtos(videos, "UC_test_channel")
+        dtos = fetcher.build_video_dtos(videos, "UC_test_channel")
 
         assert len(dtos) == 1
         dto = dtos[0]

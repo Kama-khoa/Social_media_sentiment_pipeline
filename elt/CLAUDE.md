@@ -14,92 +14,122 @@ Transform được thực hiện hoàn toàn bởi dbt trong folder `transform/`
 |---|---|
 | `config.py` | `PipelineConfig` dataclass — load toàn bộ config từ `config/pipeline_config.yaml` và `.env`. Entry point cấu hình cho toàn bộ ELT |
 | `quota_budget.py` | `QuotaBudget` class — quản lý 10,000 YouTube API units/ngày theo 2 bucket: `search_videos` (9,000) và `channel_seed` (500). Raise `InsufficientQuotaError` khi vượt quota |
+| `main.py` | Entry point — orchestrate 3 phases: Phase A (daily) → Phase B (historical) → Phase C (backlog) |
 | `datacontext/gcs_client.py` | `GCSClient` class — kết nối GCS, upload JSON, kiểm tra file tồn tại. Mọi I/O với GCS đều đi qua đây |
-| `datacontext/models/video_dto.py` | `VideoDTO` dataclass — cấu trúc dữ liệu video (video_id, title, channel_id, published_at, view_count, ...) |
-| `datacontext/models/comment_dto.py` | `CommentDTO` dataclass — cấu trúc dữ liệu comment (comment_id, video_id, text, author, published_at, like_count) |
-| `datacontext/models/channel_dto.py` | `ChannelDTO` dataclass — cấu trúc dữ liệu kênh (channel_id, name, subscriber_count, is_historically_scanned) |
-| `seed_data/seed_loader.py` | Script chạy thủ công — đọc 2 file CSV và load vào BQ tables `channel_config` + `keyword_config` |
-| `seed_data/seed_channels.csv` | Danh sách 26 kênh YouTube công nghệ Việt Nam (channel_id, name, subscriber_count) |
-| `seed_data/seed_keywords.csv` | Danh sách keywords theo ~15 semantic cluster (keyword, cluster_name, product_category) |
-| `extract/base_extractor.py` | `BaseExtractor` abstract class — định nghĩa interface chuẩn cho video và comment extraction |
-| `extract/video_extractor.py` | `VideoExtractor` class — triển khai 3 mode discovery: Mode 0 (yt-dlp), Mode 1 (RSS), Mode 2 (search.list) |
-| `extract/comment_extractor.py` | `CommentExtractor` class — crawl comments qua `youtube-comment-downloader` + BrightData proxy. 0 YouTube API quota |
-| `repositories/channel_repository.py` | `ChannelRepository` — CRUD BigQuery table `channel_config`. Gồm `get_unscanned_channels()`, `mark_historically_scanned()` |
-| `repositories/crawl_state_repository.py` | `CrawlStateRepository` — quản lý `video_crawl_state`: video nào đã crawl, cần crawl lại, Comment Count Gate |
-| `repositories/quota_repository.py` | `QuotaRepository` — ghi log vào `quota_operation_log`, tổng hợp vào `quota_daily_summary`, query quota đã dùng theo bucket |
+| `datacontext/models/video_dto.py` | `VideoDTO` dataclass — cấu trúc dữ liệu video |
+| `datacontext/models/comment_dto.py` | `CommentDTO` dataclass — cấu trúc dữ liệu comment |
+| `datacontext/models/channel_dto.py` | `ChannelDTO` dataclass — cấu trúc dữ liệu kênh |
+| `datacontext/models/keyword_dto.py` | `KeywordDTO` dataclass — cấu trúc dữ liệu keyword |
+| `seed_data/seed_loader.py` | Đồng bộ `seed_channels.csv`, `seed_keywords.csv`, `seed_products.csv` và template specs vào BigQuery |
+| `seed_data/seed_products.csv` | Catalog chuẩn độc lập, không suy luận từ keyword |
+| `seed_data/generate_seed_products.py` | Sinh lại 500 sản phẩm mẫu development/demo |
+| `extract/base_extractor.py` | `BaseExtractor` abstract class — định nghĩa interface chuẩn |
+| `extract/video_extractor.py` | `VideoExtractor` class — triển khai Phase A (search.list per channel) và Phase B (yt-dlp historical) |
+| `extract/comment_extractor.py` | `CommentExtractor` class — crawl comments với `crawl_batch`, `crawl_batch_with_retry`, `run_backlog` |
+| `extract/helpers/ytdlp_video_fetcher.py` | yt-dlp wrapper — `fetch_channel_videos` (flat), `filter_by_keywords`, `enrich_batch` (ThreadPool), `build_video_dtos` |
+| `extract/helpers/youtube_api_client.py` | YouTube Data API wrapper — `search_channel_recent` (search.list per channel) |
+| `extract/helpers/comment_downloader.py` | youtube-comment-downloader + BrightData proxy wrapper |
+| `extract/helpers/comment_worker.py` | `CommentWorker` class — xử lý crawl + save comment cho 1 video (GCS-first, BQ-second) |
+| `repositories/channel_repository.py` | `ChannelRepository` — CRUD BigQuery table `channel_config` |
+| `repositories/crawl_state_repository.py` | `CrawlStateRepository` — quản lý `video_crawl_state`: video nào đã crawl, cần crawl lại |
+| `repositories/keyword_repository.py` | `KeywordRepository` — đọc danh sách keywords |
+| `repositories/quota_repository.py` | `QuotaRepository` — ghi log quota API đã dùng |
+
+**Đã bỏ:** `extract/helpers/rss_feed_reader.py` — RSS không ổn định (404/500), thay bằng search.list per channel
 
 ---
 
-## Luồng hoạt động
+## Luồng hoạt động — 3-Phase Pipeline
 
 ```
-config.py (load .env + pipeline_config.yaml)
-    │
-    ├── quota_budget.py ← query quota đã dùng hôm nay từ BQ
-    │       quota_repository.py → BigQuery quota_operation_log
-    │
-    ├── seed_data/seed_loader.py (chạy thủ công 1 lần)
-    │       seed_channels.csv → channel_repository → BQ channel_config
-    │       seed_keywords.csv → BQ keyword_config
-    │
-    └── extract/ (chạy hằng ngày)
-            │
-            ├── video_extractor.py
-            │   ├── Mode 0: yt-dlp → list video_id từ channel (0 API quota)
-            │   ├── Mode 1: feedparser RSS → 15 video mới nhất/kênh (0 API quota)
-            │   └── Mode 2: YouTube search.list → keyword sweep (100 units/call)
-            │
-            └── comment_extractor.py
-                    youtube-comment-downloader + BrightData proxy
-                    → crawl_state_repository (check Video Maturity)
-                    → CommentDTO list
-                    → gcs_client.upload()
-                    → GCS: raw/videos/YYYY/MM/DD/videos_run_HHMMSS.json
-                           raw/comments/YYYY/MM/DD/comments_{video_id}_HHMMSS.json
+main.py run_full() — chạy 2:00 AM UTC+7 hằng ngày
+│
+│  ══════ PHASE A — DAILY (ưu tiên cao, ~20-30 phút) ══════
+│
+├─ search.list per channel (18 channels × 100 units = 1,800 units)
+│   publishedAfter = now - 3 days, order = date, maxResults = 20
+├─ filter keyword local (so title với keyword_config)
+├─ dedupe: skip video đã có trong video_crawl_state
+├─ enrich yt-dlp (ThreadPool 8 workers, 0 quota)
+├─ save: GCS first → BQ second
+├─ comment crawl: crawl_batch_with_retry(dtos, max_retries=2)
+│
+│  ══════ PHASE B — HISTORICAL (chỉ chạy khi có kênh chưa scan) ══════
+│
+├─ get_unscanned_channels() → nếu rỗng: skip Phase B
+├─ Per channel:
+│   ├─ yt-dlp fetch_channel_videos (extract_flat=True, 1 request)
+│   ├─ filter_by_keywords (local)
+│   ├─ get_existing_video_ids(channel_id) → skip đã có (resume)
+│   ├─ Batch loop (50 videos/batch):
+│   │   ├─ enrich_batch (ThreadPool 8 workers)
+│   │   ├─ build_video_dtos
+│   │   ├─ save: GCS first → BQ second
+│   │   └─ comment crawl batch (interleaved)
+│   ├─ Retry failed comments × 2 → mark_skipped
+│   └─ mark_historically_scanned(channel_id)
+│
+│  ══════ PHASE C — BACKLOG (recrawl theo maturity) ══════
+│
+├─ get_videos_to_crawl() — priority score ORDER BY
+├─ crawl_batch_with_retry(videos, max_retries=2)
+└─ quota_repo.upsert_daily_summary()
 ```
 
 ---
 
 ## Video Maturity Model
 
-Trạng thái video quyết định tần suất crawl lại:
+| Stage | Tuổi video | Crawl lại sau | Priority Score |
+|---|---|---|---|
+| new | < 3 ngày | Bỏ qua (Comment Count Gate) | 100 |
+| growing | 3-14 ngày | 3 ngày | 50-80 (80 nếu comment tăng > 20%) |
+| mature | 14-30 ngày | 7 ngày | 30 |
+| archived | > 30 ngày | 30 ngày | 10 |
 
-| Stage | Tuổi video | Crawl lại sau |
-|---|---|---|
-| new | < 3 ngày | Bỏ qua (Comment Count Gate) |
-| growing | 3–14 ngày | 3 ngày |
-| mature | 14–30 ngày | 7 ngày |
-| archived | > 30 ngày | 30 ngày |
+---
 
-**Comment Count Gate:** Video mới (< 3 ngày) thường ít comment — không crawl để tiết kiệm proxy bandwidth.
+## Data Integrity
+
+Nguyên tắc **GCS-first, BQ-second** áp dụng ở mọi save point:
+
+```python
+try:
+    self._upload_to_gcs(data, execution_date)
+    self._save_to_crawl_state(data)
+except Exception as e:
+    logger.error("Lỗi khi lưu trữ dữ liệu: %s", e)
+    raise
+```
+
+Phase B: crash ở batch 30/90 → restart → `get_existing_video_ids` skip 1,500 đã save → enrich từ batch 31.
 
 ---
 
 ## Thông tin bảo mật
 
-| Biến | Mục đích |
-|---|---|
-| `YOUTUBE_API_KEY` | YouTube Data API v3 — chỉ dùng cho Mode 2 search.list và channels.list |
-| `GCS_BUCKET_NAME` | Upload JSON thô |
-| `GCP_PROJECT_ID` | BigQuery project |
-| `BQ_DATASET` | BigQuery dataset (`sentiment_platform`) |
-| `GOOGLE_APPLICATION_CREDENTIALS` | GCP service account |
-| `BRIGHTDATA_PROXY_HOST/PORT/USERNAME/PASSWORD` | Proxy cho comment downloader |
+| Biến | Dùng trong | Mục đích |
+|---|---|---|
+| `YOUTUBE_API_KEY` | `youtube_api_client.py` | search.list Phase A |
+| `BRIGHTDATA_PROXY_HOST/PORT/USERNAME/PASSWORD` | `comment_downloader.py` | Proxy cho comment crawl |
+| `GCS_BUCKET_NAME` | `gcs_client.py` | Upload destination |
+| `GCP_PROJECT_ID` + `BQ_DATASET` | repositories | BigQuery project/dataset |
+| `GOOGLE_APPLICATION_CREDENTIALS` | tất cả GCP clients | Service account |
 
 ---
 
 ## Công nghệ và thư viện
 
-| Thư viện | Version | Dùng cho |
-|---|---|---|
-| `yt-dlp` | 2024.12.23 | Mode 0 — lấy video list từ channel (0 quota) |
-| `feedparser` | 6.0.11 | Mode 1 — RSS feed YouTube channel (0 quota) |
-| `google-api-python-client` | (qua google-cloud) | Mode 2 — YouTube search.list |
-| `youtube-comment-downloader` | 0.1.78 | Crawl comments (0 YouTube quota) |
-| `google-cloud-storage` | 2.18.2 | Upload JSON lên GCS |
-| `google-cloud-bigquery` | 3.27.0 | Đọc/ghi BigQuery repositories |
-| `python-dotenv` | 1.0.1 | Load `.env` |
-| `pyyaml` | 6.0.2 | Load `pipeline_config.yaml` |
+| Thư viện | Version | Dùng trong | Mục đích |
+|---|---|---|---|
+| `yt-dlp` | 2024.12.23 | `ytdlp_video_fetcher.py` | Phase B historical scan + enrich (tất cả modes) |
+| `google-api-python-client` | (qua google-cloud) | `youtube_api_client.py` | Phase A search.list per channel |
+| `youtube-comment-downloader` | 0.1.78 | `comment_downloader.py` | Crawl comments (0 YouTube quota) |
+| `requests` | 2.32.3 | `comment_downloader.py` | HTTP qua BrightData proxy |
+| `google-cloud-bigquery` | 3.27.0 | repositories | Đọc/ghi BigQuery |
+| `google-cloud-storage` | 2.18.2 | `gcs_client.py` | Upload JSON lên GCS |
+| `python-dotenv` | 1.0.1 | `config.py` | Load `.env` |
+| `pyyaml` | 6.0.2 | `config.py` | Load `pipeline_config.yaml` |
 
 ---
 
@@ -108,16 +138,54 @@ Trạng thái video quyết định tần suất crawl lại:
 ```
 gs://social-media-sentiment-raw/raw/videos/YYYY/MM/DD/videos_run_HHMMSS.json
 gs://social-media-sentiment-raw/raw/comments/YYYY/MM/DD/comments_{video_id}_HHMMSS.json
-
 ```
 
 Convention này là bắt buộc — BigQuery External Table (layer_1) dùng path này để partition.
+**Định dạng file:** Dữ liệu JSON lưu trên GCS bắt buộc phải được convert sang dạng **Newline Delimited JSON (NDJSON)** (`application/x-ndjson`). `GCSClient` đảm nhiệm chức năng này bằng cách tự động unroll list JSON trước khi upload.
 
 ---
 
 ## Lưu ý quan trọng
 
-- File trong folder này chạy với **Python 3.13.12** — không import bất cứ thứ gì từ `airflow/`
-- Mỗi script trong `extract/` có thể chạy thủ công để test: `python -m elt.extract.video_extractor`
-- `seed_loader.py` chỉ chạy 1 lần khi setup, hoặc khi cần thêm kênh/keyword mới
+- File trong folder này chạy với **Conda env: etl-py313** (Python 3.13) — không import bất cứ thứ gì từ `airflow/`
+- Mỗi script trong `extract/` có thể chạy thủ công để test: `conda run -n etl-py313 python -m elt.main --mode full`
+- `seed_loader.py` chạy khi setup hoặc khi cần thêm kênh, keyword, sản phẩm hay alias mới
 - DAG trong `airflow/` sẽ gọi vào các script này — không ngược lại
+---
+
+## Update 2026-06-03 — API Comment Backfill
+
+Nhánh này bổ sung nguồn comment có timestamp chuẩn từ YouTube Data API, tách khỏi `youtube-comment-downloader`.
+
+Files mới/quan trọng:
+
+| File | Nhiệm vụ |
+|---|---|
+| `extract/helpers/youtube_api_comment_client.py` | Gọi `commentThreads.list`, parse top-level comments thành `CommentDTO` |
+| `extract/api_comment_backfill.py` | Chọn candidate video, crawl API comments, progress bar, consume `QuotaBudget` |
+| `repositories/api_comment_repository.py` | Query candidate từ `stg_youtube_videos` + `int_video_product_mentions`, MERGE vào `raw_comments_api` |
+| `../scripts/run_api_comment_backfill.py` | CLI chạy dry-run hoặc crawl thật |
+| `../schema/layer_1_raw/init_api_comment_tables.py` | Tạo `raw_comments_api` và `api_comment_backfill_state` |
+
+Luồng chạy:
+
+```powershell
+conda activate etl-py313
+python schema\layer_1_raw\init_api_comment_tables.py
+python scripts\dbt\dbt_runner.py run --select stg_youtube_videos int_video_product_mentions
+python scripts\run_api_comment_backfill.py --max-videos 10 --max-comments-per-video 100 --dry-run
+python scripts\run_api_comment_backfill.py --max-videos 10 --max-comments-per-video 100
+```
+
+Quota:
+
+- Bucket mới: `youtube_api_comments`.
+- `QuotaBudget.from_config()` lấy allocation từ `config.api_comment_backfill.daily_quota_units`.
+- `QuotaRepository.get_today_used_by_bucket()` tính quota đã dùng trong ngày bằng `DATE(created_at)`.
+- Mỗi page `commentThreads.list` consume 1 unit và được log vào `quota_operation_log`.
+
+Data integrity:
+
+- Không sửa/xóa GCS files cũ.
+- `raw_comments_api` upsert bằng `comment_id`.
+- `stg_youtube_comments` ưu tiên row API khi cùng `comment_id` đã tồn tại ở GCS.

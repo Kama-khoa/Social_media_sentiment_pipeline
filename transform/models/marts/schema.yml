@@ -1,0 +1,49 @@
+version: 2
+
+models:
+  - name: dim_products
+    description: Canonical product catalog promoted from product_config, never from crawl keywords.
+    columns:
+      - name: product_id
+        data_tests:
+          - not_null
+          - unique
+      - name: product_name
+        data_tests:
+          - not_null
+
+  - name: int_sentence_product_targets
+    description: Resolved or deferred product targets for each normalized comment sentence.
+    columns:
+      - name: sentence_id
+        data_tests:
+          - not_null
+      - name: product_id
+        data_tests:
+          - not_null
+
+  - name: agg_daily_product_ranking
+    description: Rolling 30-day product analytics snapshot excluding NONE aspects from KPIs.
+    columns:
+      - name: ranking_id
+        data_tests:
+          - not_null
+          - unique
+      - name: product_id
+        data_tests:
+          - not_null
+      - name: ranking_date
+        data_tests:
+          - not_null
+      - name: bayesian_score
+        data_tests:
+          - not_null
+      - name: controversy_index
+        data_tests:
+          - not_null
+      - name: controversy_label
+        data_tests:
+          - not_null
+      - name: top_aspect
+        data_tests:
+          - not_null

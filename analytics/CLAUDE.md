@@ -32,7 +32,7 @@ BigQuery: agg_daily_product_ranking (từ dbt marts)
     │   └── ghi: agg_daily_product_ranking.controversy_index
     │
     └── pelt_attribution.py
-        │ đọc: agg_daily_product_ranking (chuỗi thời gian sentiment)
+        │ đọc: fact_product_mentions (chuỗi sentiment theo ngày, loại NONE)
         │
         ├── ruptures.Pelt(model="rbf").fit_predict()
         │   └── → change_points: [ngày_1, ngày_2, ...]
@@ -40,8 +40,8 @@ BigQuery: agg_daily_product_ranking (từ dbt marts)
         ├── Với mỗi change_point:
         │   query BQ: video có view_count cao trong ±7 ngày quanh điểm gãy
         │
-        └── Gemini Flash: giải thích nguyên nhân bằng tiếng Việt tự nhiên
-            └── ghi vào: causal_events table
+        └── Gemini Flash: giải thích tương quan bằng tiếng Việt tự nhiên
+            └── ghi vào: <BQ_DATASET>_marts.causal_events
 ```
 
 ---
@@ -77,8 +77,9 @@ Thấp → cộng đồng đồng thuận về sản phẩm
 
 - **Model:** RBF (Radial Basis Function) — phát hiện thay đổi phân phối
 - **Penalty:** tự động (BIC criterion)
-- **Input:** chuỗi thời gian `daily_avg_sentiment` của 1 sản phẩm
+- **Input:** chuỗi thời gian `daily_avg_sentiment` của 1 sản phẩm, nội suy gap tối đa 2 ngày
 - **Output:** danh sách index ngày xảy ra thay đổi đột ngột
+- **Readiness gate:** tối thiểu 10 ngày quan sát và coverage tối thiểu 70%
 
 ---
 
@@ -108,5 +109,5 @@ Thấp → cộng đồng đồng thuận về sản phẩm
 ## Output
 
 Kết quả ghi vào BigQuery:
-- `agg_daily_product_ranking` — cập nhật thêm `bayesian_score`, `controversy_index`
-- `causal_events` — bảng mới: `product_id`, `change_date`, `event_videos`, `explanation_vi`
+- `agg_daily_product_ranking` — snapshot rolling 30 ngày với `bayesian_score`, `controversy_index`, `top_aspect`, `sentiment_trend`
+- `<BQ_DATASET>_marts.causal_events` — bảng mới: `product_id`, `change_point_date`, `event_video_id`, `attribution_score`, `explanation_text`

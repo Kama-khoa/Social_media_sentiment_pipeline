@@ -1,0 +1,155 @@
+name: social_media_sentiment_pipeline
+
+x-airflow-common: &airflow-common
+  build:
+    context: ..
+    dockerfile: docker/Dockerfile.airflow
+  environment:
+    - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+    - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres/airflow
+    - AIRFLOW__CORE__FERNET_KEY=46BKJoQYlPPOexq0OhDZnIlB7JAIBkR1I-_0c-L1gEw=
+    - AIRFLOW__CORE__LOAD_EXAMPLES=False
+    - AIRFLOW__CORE__DAGS_FOLDER=/opt/airflow/airflow/dags
+    - PYTHONPATH=/opt/airflow
+    - GOOGLE_APPLICATION_CREDENTIALS=/opt/airflow/gcp_credentials.json
+    - YOUTUBE_COOKIES_DIR=/opt/airflow/config
+    - AIRFLOW__CORE__PARALLELISM=4
+    - AIRFLOW__API__AUTH_BACKENDS=airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session
+  env_file:
+    - ../.env
+  volumes:
+    # Mount the entire project into /opt/airflow so dags, elt, transform, and configs are available
+    - ..:/opt/airflow
+    # Mount the GCP credentials file defined in .env into the container
+    - ${GOOGLE_APPLICATION_CREDENTIALS:?Set GOOGLE_APPLICATION_CREDENTIALS in .env or shell}:/opt/airflow/gcp_credentials.json:ro
+    # Cookie files are ignored by git and are exposed read-only for yt-dlp video extraction only.
+    - ../config:/opt/airflow/config:ro
+  user: "${AIRFLOW_UID:-50000}:0"
+
+services:
+  # ── Infrastructure Layer ──
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    restart: always
+
+  web-db:
+    image: postgres:15
+    environment:
+      - POSTGRES_USER=webapi
+      - POSTGRES_PASSWORD=webapi
+      - POSTGRES_DB=sentiment_webapi
+    ports:
+      - "5433:5432"
+    volumes:
+      - web-db-volume:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "webapi", "-d", "sentiment_webapi"]
+      interval: 10s
+      retries: 5
+      start_period: 5s
+    restart: always
+
+  postgres:
+    image: postgres:13
+    environment:
+      - POSTGRES_USER=airflow
+      - POSTGRES_PASSWORD=airflow
+      - POSTGRES_DB=airflow
+    volumes:
+      - postgres-db-volume:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "airflow"]
+      interval: 10s
+      retries: 5
+      start_period: 5s
+    restart: always
+
+  # ── Application Layer (Backend & Frontend) ──
+  backend:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.backend
+    ports:
+      - "8000:8000"
+    environment:
+      - APP_DATABASE_URL=postgresql+psycopg2://webapi:webapi@web-db:5432/sentiment_webapi
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - AIRFLOW_BASE_URL=http://host.docker.internal:8080
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/gcp_credentials.json
+      - GCP_PROJECT_ID=${GCP_PROJECT_ID}
+      - BQ_DATASET=${BQ_DATASET}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - JWT_ALGORITHM=${JWT_ALGORITHM}
+      - JWT_EXPIRE_MINUTES=${JWT_EXPIRE_MINUTES}
+    env_file:
+      - ../.env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ../.env:/app/.env
+      - ${GOOGLE_APPLICATION_CREDENTIALS:?Set GOOGLE_APPLICATION_CREDENTIALS in .env or shell}:/app/gcp_credentials.json:ro
+    depends_on:
+      web-db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    restart: always
+
+  frontend:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.frontend
+      args:
+        - NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
+    depends_on:
+      - backend
+    restart: always
+
+  # ── Airflow Orchestration Layer ──
+  airflow-webserver:
+    <<: *airflow-common
+    command: webserver
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      airflow-init:
+        condition: service_completed_successfully
+
+  airflow-scheduler:
+    <<: *airflow-common
+    command: scheduler
+    depends_on:
+      postgres:
+        condition: service_healthy
+      airflow-init:
+        condition: service_completed_successfully
+
+  airflow-init:
+    <<: *airflow-common
+    command: >
+      bash -c "
+        airflow db migrate &&
+        airflow users create --username admin --password admin --firstname Admin --lastname User --role Admin --email admin@example.com
+      "
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  web-db-volume:
+  postgres-db-volume:

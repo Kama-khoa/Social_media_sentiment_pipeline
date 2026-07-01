@@ -7,21 +7,17 @@ from typing import Optional
 
 from elt.config import PipelineConfig
 from elt.datacontext.gcs_client import GCSClient
-from elt.datacontext.models.comment_dto import CommentDTO
-from elt.datacontext.models.keyword_dto import KeywordDTO
 from elt.datacontext.models.video_dto import VideoDTO
-from elt.extract.base_extractor import BaseExtractor
 from elt.extract.helpers.comment_downloader import CommentDownloader, ProxyConfig
-from elt.extract.helpers.rss_feed_reader import RssFeedReader
-from elt.extract.helpers.youtube_api_client import YouTubeApiClient
-from elt.extract.helpers.ytdlp_video_fetcher import YtdlpVideoFetcher
+from elt.extract.helpers.comment_worker import CommentWorker
 from elt.repositories.crawl_state_repository import CrawlStateRepository
 from elt.repositories.quota_repository import QuotaRepository
+from pipeline_progress import progress_bar
 
 logger = logging.getLogger(__name__)
 
 
-class CommentExtractor(BaseExtractor):
+class CommentExtractor:
 
     def __init__(
         self,
@@ -35,142 +31,124 @@ class CommentExtractor(BaseExtractor):
         self._crawl_state_repo = crawl_state_repo
         self._quota_repo = quota_repo
         self._gcs_client = gcs_client
-        self._downloader = CommentDownloader(proxy_config)
-
-    def run(self, dag_run_id: str) -> dict:
-        t0 = time.monotonic()
-        videos = self._get_videos_to_crawl()
-        eligible = self._apply_maturity_filter(videos)
-
-        total_comments = 0
-        videos_crawled = 0
-        videos_skipped = 0
-
-        for video in eligible:
-            video_id = video["video_id"]
-            channel_id = video["channel_id"]
-
-            comments = self._crawl_video_comments(video)
-            if not comments:
-                self._crawl_state_repo.mark_video_skipped(video_id)
-                videos_skipped += 1
-                continue
-
-            self._upload_to_gcs(comments, video_id)
-            self._update_crawl_state(video_id, len(comments))
-
-            total_comments += len(comments)
-            videos_crawled += 1
-
-            delay = self._config.comment_downloader.request_delay_seconds
-            if delay > 0:
-                time.sleep(delay)
-
-        elapsed = time.monotonic() - t0
-        self._quota_repo.log_operation(
-            operation_type="comment_extraction",
-            bucket="comment_downloader",
-            units_used=0,
-            dag_run_id=dag_run_id,
-            videos_processed=videos_crawled,
-            comments_collected=total_comments,
-            execution_time_seconds=elapsed,
+        self._downloader = CommentDownloader(
+            proxy_config=proxy_config,
+        )
+        self._worker = CommentWorker(
+            downloader=self._downloader,
+            crawl_state_repo=self._crawl_state_repo,
+            gcs_client=self._gcs_client,
+            max_comments=config.crawl.max_comments_per_video,
+            new_video_min_age_days=config.crawl.new_video_min_age_days,
         )
 
+    def crawl_batch(self, videos: list[VideoDTO]) -> tuple[int, list[VideoDTO]]:
+        success_count = 0
+        failed: list[VideoDTO] = []
+        delay = self._config.comment_downloader.request_delay_seconds
+
+        with progress_bar(videos, desc="Comments", unit="video") as progress:
+            for video in progress:
+                ok = self._worker.process(video)
+                if ok:
+                    success_count += 1
+                else:
+                    failed.append(video)
+
+                progress.set_postfix(
+                    done=success_count,
+                    failed=len(failed),
+                )
+
+                if delay > 0:
+                    time.sleep(delay)
+
+        return success_count, failed
+
+    def crawl_batch_with_retry(
+        self,
+        videos: list[VideoDTO],
+        max_retries: int = 2,
+    ) -> dict:
+        total_crawled = 0
+        total_retried = 0
+
+        crawled, failed = self.crawl_batch(videos)
+        total_crawled += crawled
+
+        for attempt in range(1, max_retries + 1):
+            if not failed:
+                break
+            logger.info(
+                "Comment retry attempt %d: %d videos",
+                attempt, len(failed),
+            )
+            total_retried += len(failed)
+            crawled, failed = self.crawl_batch(failed)
+            total_crawled += crawled
+
+        for video in failed:
+            self._crawl_state_repo.mark_video_skipped(video.video_id)
+
         logger.info(
-            "Comment extraction done: %d videos crawled, %d skipped, %d comments total",
-            videos_crawled,
-            videos_skipped,
-            total_comments,
+            "crawl_batch_with_retry: %d crawled, %d retried, %d failed",
+            total_crawled, total_retried, len(failed),
         )
 
         return {
-            "videos_crawled": videos_crawled,
-            "videos_skipped": videos_skipped,
-            "total_comments": total_comments,
-            "elapsed_seconds": round(elapsed, 2),
+            "videos_crawled": total_crawled,
+            "videos_retried": total_retried,
+            "videos_failed": len(failed),
         }
 
-    def _get_videos_to_crawl(self) -> list[dict]:
-        return self._crawl_state_repo.get_videos_to_crawl()
+    def run_backlog(self, dag_run_id: str) -> dict:
+        t0 = time.monotonic()
 
-    def _apply_maturity_filter(self, videos: list[dict]) -> list[dict]:
-        min_age = self._config.crawl.new_video_min_age_days
+        raw_videos = self._crawl_state_repo.get_videos_to_crawl()
+        if not raw_videos:
+            logger.info("Backlog: no videos to crawl")
+            return {"videos_crawled": 0, "videos_failed": 0, "elapsed_seconds": 0}
+
+        dtos = self._build_dtos_from_crawl_state(raw_videos)
+        logger.info("Backlog: %d videos eligible", len(dtos))
+
+        stats = self.crawl_batch_with_retry(dtos, max_retries=2)
+
+        elapsed = time.monotonic() - t0
+        self._quota_repo.log_operation(
+            operation_type="comment_extraction_backlog",
+            bucket="comment_downloader",
+            units_used=0,
+            dag_run_id=dag_run_id,
+            videos_processed=stats["videos_crawled"],
+            comments_collected=0,
+            execution_time_seconds=elapsed,
+        )
+
+        stats["elapsed_seconds"] = round(elapsed, 2)
+        return stats
+
+    @staticmethod
+    def _build_dtos_from_crawl_state(raw_videos: list[dict]) -> list[VideoDTO]:
         now = datetime.now(timezone.utc)
-        eligible: list[dict] = []
-
-        for v in videos:
-            stage = v.get("maturity_stage", "")
-            if stage == "new":
+        dtos: list[VideoDTO] = []
+        for row in raw_videos:
+            published_at = row.get("published_at")
+            if published_at is None:
                 continue
-            eligible.append(v)
+            if isinstance(published_at, datetime):
+                if published_at.tzinfo is None:
+                    published_at = published_at.replace(tzinfo=timezone.utc)
+            else:
+                continue
 
-        logger.info(
-            "Maturity filter: %d eligible out of %d total (skipped 'new' < %d days)",
-            len(eligible),
-            len(videos),
-            min_age,
-        )
-        return eligible
-
-    def _crawl_video_comments(self, video: dict) -> list[CommentDTO]:
-        video_id = video["video_id"]
-        channel_id = video["channel_id"]
-        max_comments = self._config.crawl.max_comments_per_video
-
-        already_crawled = video.get("total_comments_crawled", 0)
-        remaining = max(0, max_comments - already_crawled)
-        if remaining <= 0:
-            return []
-
-        raw = self._downloader.download(video_id, max_comments=remaining)
-        return self._downloader.to_comment_dtos(raw, video_id, channel_id)
-
-    def _upload_to_gcs(self, comments: list[CommentDTO], video_id: str) -> None:
-        now = datetime.now(timezone.utc)
-        gcs_path = GCSClient.build_comments_path(video_id, now)
-        payload = [c.to_dict() for c in comments]
-        uri = self._gcs_client.upload_json(gcs_path, payload)
-        logger.info("Uploaded %d comments for video %s to %s", len(comments), video_id, uri)
-
-    def _update_crawl_state(self, video_id: str, comments_count: int) -> None:
-        now = datetime.now(timezone.utc)
-        self._crawl_state_repo.update_after_comment_crawl(
-            video_id=video_id,
-            comments_crawled_this_run=comments_count,
-            crawled_at=now,
-            max_comments_per_video=self._config.crawl.max_comments_per_video,
-        )
-
-    def get_channel_videos_historical(
-        self,
-        channel_id: str,
-        keywords: list[KeywordDTO],
-    ) -> list[VideoDTO]:
-        raise NotImplementedError("CommentExtractor does not support video discovery")
-
-    def get_channel_rss_videos(
-        self,
-        channel_id: str,
-        published_after: datetime,
-    ) -> list[dict]:
-        raise NotImplementedError("CommentExtractor does not support video discovery")
-
-    def search_videos_global(
-        self,
-        keyword: str,
-        max_results: int,
-    ) -> list[tuple[str, str]]:
-        raise NotImplementedError("CommentExtractor does not support video discovery")
-
-    def get_video_details(self, video_ids: list[str]) -> list[VideoDTO]:
-        raise NotImplementedError("CommentExtractor does not support video discovery")
-
-    def download_comments(
-        self,
-        video_id: str,
-        channel_id: str,
-        max_comments: int,
-    ) -> list[CommentDTO]:
-        raw = self._downloader.download(video_id, max_comments)
-        return self._downloader.to_comment_dtos(raw, video_id, channel_id)
+            dtos.append(VideoDTO(
+                video_id=row["video_id"],
+                channel_id=row["channel_id"],
+                title="",
+                published_at=published_at,
+                search_mode="BACKLOG",
+                crawled_at=now,
+                comment_count=row.get("comment_count"),
+            ))
+        return dtos

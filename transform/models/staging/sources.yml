@@ -1,0 +1,21 @@
+version: 2
+
+sources:
+  - name: raw
+    database: "{{ env_var('GCP_PROJECT_ID') }}"
+    schema: "{{ env_var('BQ_DATASET') }}"
+    tables:
+      - name: raw_videos
+      - name: raw_comments
+      - name: raw_comments_api
+      - name: raw_sentiment_results
+      - name: keyword_config
+      - name: product_config
+      - name: product_aliases
+      - name: product_details
+      - name: product_spec_templates
+      - name: product_resolution_candidates
+      - name: video_product_overrides
+      - name: sentence_product_target_overrides
+      - name: product_detail_change_requests
+      - name: video_crawl_state

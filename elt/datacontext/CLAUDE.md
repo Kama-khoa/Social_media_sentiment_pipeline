@@ -10,10 +10,11 @@ Cung cấp lớp trừu tượng kết nối với hạ tầng lưu trữ (GCS) 
 
 | File | Nhiệm vụ |
 |---|---|
-| `gcs_client.py` | `GCSClient` class — wrap `google-cloud-storage`. Cung cấp `upload_json()`, `file_exists()`, `list_files()`. Tất cả I/O với GCS đi qua đây |
+| `gcs_client.py` | `GCSClient` class — wrap `google-cloud-storage`. Cung cấp `upload_json()`, `file_exists()`, `list_files()`, `build_videos_path()`, `build_comments_path()`. Tất cả I/O với GCS đi qua đây |
 | `models/video_dto.py` | `VideoDTO` dataclass — schema dữ liệu video trước khi ghi xuống GCS |
 | `models/comment_dto.py` | `CommentDTO` dataclass — schema dữ liệu comment trước khi ghi xuống GCS |
 | `models/channel_dto.py` | `ChannelDTO` dataclass — schema dữ liệu kênh dùng trong seed và repository |
+| `models/keyword_dto.py` | `KeywordDTO` dataclass — schema keyword (keyword_id, keyword_text, search_cluster) |
 
 ---
 
@@ -21,22 +22,24 @@ Cung cấp lớp trừu tượng kết nối với hạ tầng lưu trữ (GCS) 
 
 ```
 extract/video_extractor.py
-    │ tạo VideoDTO
+    │ tạo VideoDTO (qua ytdlp_video_fetcher.build_video_dtos)
     ▼
-models/video_dto.py → serialize to dict
+models/video_dto.py → .to_dict() → serialize to list[dict]
     │
     ▼
 gcs_client.py → upload_json() → GCS bucket
+    path: raw/videos/YYYY/MM/DD/videos_run_HHMMSS.json
 ```
 
 ```
-extract/comment_extractor.py
-    │ tạo CommentDTO list
+extract/helpers/comment_worker.py
+    │ tạo CommentDTO list (qua comment_downloader.to_comment_dtos)
     ▼
-models/comment_dto.py → serialize to list[dict]
+models/comment_dto.py → .to_dict() → serialize to list[dict]
     │
     ▼
 gcs_client.py → upload_json() → GCS bucket
+    path: raw/comments/YYYY/MM/DD/comments_{video_id}_HHMMSS.json
 ```
 
 ---
@@ -58,11 +61,9 @@ gcs_client.py → upload_json() → GCS bucket
 
 ---
 
-## Output format (JSON/JSONL mẫu cho GCS)
-Để tối ưu cho BigQuery External Tables và luồng cào dữ liệu bất đồng bộ, dữ liệu Video và Comment được lưu thành 2 loại file hoàn toàn tách biệt trên GCS.
+## Output format — JSON mẫu cho GCS
 
-### 1. Dữ liệu Video (Ví dụ file: `raw/videos/2026/04/09/videos_run_143000.json`)
-List các `VideoDTO` được cào trong một batch.
+### 1. Video (file: `raw/videos/2026/04/20/videos_run_020500.json`)
 
 ```json
 [
@@ -76,36 +77,38 @@ List các `VideoDTO` được cào trong một batch.
     "comment_count": 1200,
     "duration_seconds": 650,
     "tags": ["samsung", "review", "s25 ultra"],
-    "thumbnail_url": "[https://i.ytimg.com/vi/abc/maxresdefault.jpg](https://i.ytimg.com/vi/abc/maxresdefault.jpg)",
-    "published_at": "2026-04-05T08:00:00Z",
-    "search_mode": "MODE1",
-    "keyword_matched": "đánh giá samsung s25",
-    "crawled_at": "2026-04-09T07:30:00Z"
+    "thumbnail_url": "https://i.ytimg.com/vi/abc/maxresdefault.jpg",
+    "published_at": "2026-04-18T08:00:00Z",
+    "search_mode": "DAILY",
+    "keyword_matched": "Samsung Galaxy S25",
+    "crawled_at": "2026-04-20T02:05:00Z"
   }
 ]
 ```
 
-### 2. Dữ liệu Comment (Ví dụ file: `raw/comments/2026/04/09/comments_abc123xyz_143500.json`)
-List các CommentDTO thuộc về MỘT video cụ thể (File được tạo ra sau khi youtube-comment-downloader chạy xong cho video đó). Bắt buộc phải có video_id làm Foreign Key.
+### 2. Comment (file: `raw/comments/2026/04/20/comments_abc123xyz_020800.json`)
 
 ```json
 [
   {
-    "comment_id": "UgxHsAgP7M3qOplZkFt4AaABAg",
+    "comment_id": "UgwBx1234",
     "video_id": "abc123xyz",
     "channel_id": "UCvZ_9N7JRRb-tM_qh9Bx1ew",
-    "parent_comment_id": null,
-    "author_channel_id": "UCuser123",
-    "author_display_name": "Nguyen Van A",
-    "text_original": "Pin trâu lắm, dùng cả ngày không hết",
-    "text_display": "Pin trâu lắm, dùng cả ngày không hết",
-    "like_count": 42,
-    "reply_count": 3,
+    "author": "Nguyen Van A",
+    "text": "Pin trâu ghê, dùng 2 ngày mới hết",
+    "like_count": 15,
+    "published_at": "2026-04-18T10:30:00Z",
     "is_reply": false,
-    "crawl_type": "full",
-    "published_at": "2026-04-06T09:00:00Z",
-    "updated_at": "2026-04-06T09:00:00Z",
-    "crawled_at": "2026-04-09T07:35:00Z"
+    "parent_comment_id": null,
+    "crawled_at": "2026-04-20T02:08:00Z"
   }
 ]
 ```
+
+---
+
+## Lưu ý
+
+- VideoDTO field `search_mode`: giá trị là `"DAILY"` (Phase A), `"MODE0"` (Phase B historical)
+- GCS path convention là bắt buộc — BigQuery External Table partition theo path
+- `GCSClient` thread-safe — có thể dùng từ nhiều thread trong enrich_batch

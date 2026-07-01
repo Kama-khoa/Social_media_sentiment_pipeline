@@ -15,3 +15,51 @@ venv/
 target/
 dbt_packages/
 logs/
+youtube_cookies*.txt
+# Models
+models/
+!transform/models/
+!transform/models/marts/
+!transform/models/marts/schema.yml
+
+# Airflow local files
+airflow.db
+airflow-webserver.pid
+airflow-webserver-monitor.pid
+airflow.cfg
+standalone_admin_password.txt
+airflow/airflow.db
+airflow/airflow-webserver.pid
+airflow/airflow-webserver-monitor.pid
+airflow/airflow.cfg
+airflow/standalone_admin_password.txt
+
+# Pytest & Jupyter Notebook
+.pytest_cache/
+.ipynb_checkpoints/
+
+# OS specific files
+desktop.ini
+Thumbs.db
+
+# Temp files
+allfileshas.txt
+
+# ── Web App — Frontend (Next.js) ───────────────────────────────────────────────
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/.turbo/
+frontend/.env.local
+frontend/.env.production.local
+frontend/.env.development.local
+
+# ── Web App — Backend (FastAPI) ────────────────────────────────────────────────
+data/web_app.db
+data/*.db
+
+# ── Web App — Auth / Session ───────────────────────────────────────────────────
+*.pem
+*.key
+*.p12
+*.pfx

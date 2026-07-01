@@ -21,22 +21,35 @@ class CrawlConfig:
     max_comments_per_video: int
     historical_scan_channels_per_day: int
     historical_scan_max_results: int
-    rss_max_entries: int
-    keyword_search_max_results: int
+    historical_scan_lookback_days: int
+    daily_scan_lookback_days: int
+    daily_scan_max_results: int
+    enrich_max_workers: int
+    video_batch_size: int
     new_video_min_age_days: int
     growing_video_max_age_days: int
     mature_video_max_age_days: int
     growing_recrawl_interval_days: int
     mature_recrawl_interval_days: int
     archived_recrawl_interval_days: int
-    enrich_max_workers: int       # default 8
-    video_batch_size: int          # default 50
+    ytdlp_cookies_path: str | None
+    ytdlp_cookies_paths: list[str]
+    ytdlp_session_cooldown_seconds: int
 
 
 @dataclass
 class CommentDownloaderConfig:
     request_delay_seconds: float
     max_retries: int
+
+
+@dataclass
+class ApiCommentBackfillConfig:
+    max_videos_per_run: int
+    max_comments_per_video: int
+    max_pages_per_video: int
+    daily_quota_units: int
+    request_delay_seconds: float
 
 
 @dataclass
@@ -52,6 +65,7 @@ class PipelineConfig:
     gcp: GCPConfig
     crawl: CrawlConfig
     comment_downloader: CommentDownloaderConfig
+    api_comment_backfill: ApiCommentBackfillConfig
     quota: QuotaConfig
     youtube_api_key: str
     gemini_api_key: str
@@ -74,12 +88,13 @@ def load_config(config_path: str | None = None) -> PipelineConfig:
         if config_path is not None
         else Path(__file__).parent.parent / "config" / "pipeline_config.yaml"
     )
- 
+
     with open(resolved, "r", encoding="utf-8") as f:
         raw = yaml.safe_load(f)
 
     crawl = raw["crawl"]
     downloader = raw["comment_downloader"]
+    api_comment_backfill = raw.get("api_comment_backfill", {})
     quota = raw["quota"]
 
     return PipelineConfig(
@@ -93,20 +108,38 @@ def load_config(config_path: str | None = None) -> PipelineConfig:
             max_comments_per_video=crawl["max_comments_per_video"],
             historical_scan_channels_per_day=crawl["historical_scan_channels_per_day"],
             historical_scan_max_results=crawl["historical_scan_max_results"],
-            rss_max_entries=crawl["rss_max_entries"],
-            keyword_search_max_results=crawl["keyword_search_max_results"],
+            historical_scan_lookback_days=crawl.get("historical_scan_lookback_days", 730),
+            daily_scan_lookback_days=crawl["daily_scan_lookback_days"],
+            daily_scan_max_results=crawl["daily_scan_max_results"],
+            enrich_max_workers=crawl["enrich_max_workers"],
+            video_batch_size=crawl["video_batch_size"],
             new_video_min_age_days=crawl["new_video_min_age_days"],
             growing_video_max_age_days=crawl["growing_video_max_age_days"],
             mature_video_max_age_days=crawl["mature_video_max_age_days"],
             growing_recrawl_interval_days=crawl["growing_recrawl_interval_days"],
             mature_recrawl_interval_days=crawl["mature_recrawl_interval_days"],
             archived_recrawl_interval_days=crawl["archived_recrawl_interval_days"],
-            enrich_max_workers=crawl.get("enrich_max_workers", 8),
-            video_batch_size=crawl.get("video_batch_size", 50),
+            ytdlp_cookies_path=crawl.get("ytdlp_cookies_path"),
+            ytdlp_cookies_paths=crawl.get("ytdlp_cookies_paths") or (
+                [crawl["ytdlp_cookies_path"]]
+                if crawl.get("ytdlp_cookies_path")
+                else []
+            ),
+            ytdlp_session_cooldown_seconds=crawl.get(
+                "ytdlp_session_cooldown_seconds",
+                3600,
+            ),
         ),
         comment_downloader=CommentDownloaderConfig(
             request_delay_seconds=downloader["request_delay_seconds"],
             max_retries=downloader["max_retries"],
+        ),
+        api_comment_backfill=ApiCommentBackfillConfig(
+            max_videos_per_run=api_comment_backfill.get("max_videos_per_run", 1000),
+            max_comments_per_video=api_comment_backfill.get("max_comments_per_video", 100),
+            max_pages_per_video=api_comment_backfill.get("max_pages_per_video", 1),
+            daily_quota_units=api_comment_backfill.get("daily_quota_units", 5000),
+            request_delay_seconds=api_comment_backfill.get("request_delay_seconds", 0.2),
         ),
         quota=QuotaConfig(
             daily_budget=quota["daily_budget"],

@@ -10,7 +10,6 @@ from elt.datacontext.models.video_dto import VideoDTO
 logger = logging.getLogger(__name__)
 
 _BATCH_SIZE = 50
-_SKIP_CLUSTERS = {"_uncategorized"}
 
 
 class YouTubeApiClient:
@@ -19,27 +18,63 @@ class YouTubeApiClient:
         self._api_key = api_key
         self._service = build("youtube", "v3", developerKey=api_key)
 
-    def search_videos(
+    def search_channel_recent(
+        self,
+        channel_id: str,
+        published_after: datetime,
+        max_results: int = 20,
+    ) -> list[dict]:
+        try:
+            response = (
+                self._service
+                .search()
+                .list(
+                    channelId=channel_id,
+                    type="video",
+                    order="date",
+                    publishedAfter=published_after.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                    maxResults=min(max_results, 50),
+                    part="snippet",
+                )
+                .execute()
+            )
+        except Exception:
+            logger.exception("search.list failed for channel=%s", channel_id)
+            return []
+
+        results: list[dict] = []
+        for item in response.get("items", []):
+            video_id = item["id"].get("videoId")
+            if not video_id:
+                continue
+            snippet = item.get("snippet", {})
+            published_at = self._parse_iso(snippet.get("publishedAt"))
+            results.append({
+                "id": video_id,
+                "title": snippet.get("title", ""),
+                "description": snippet.get("description") or "",
+                "channel_id": snippet.get("channelId", ""),
+                "published_at": published_at,
+            })
+        return results
+
+    def search_by_keyword(
         self,
         keyword: str,
         max_results: int = 10,
-        search_cluster: str | None = None,
-    ) -> list[tuple[str, str]]:
-        if search_cluster and search_cluster in _SKIP_CLUSTERS:
-            logger.debug("Skipping keyword=%s (cluster=%s)", keyword, search_cluster)
-            return []
-
+    ) -> list[dict]:
         try:
             response = (
                 self._service
                 .search()
                 .list(
                     q=keyword,
-                    part="snippet",
                     type="video",
-                    maxResults=min(max_results, 50),
-                    relevanceLanguage="vi",
                     order="relevance",
+                    maxResults=min(max_results, 50),
+                    part="snippet",
+                    regionCode="VN",
+                    relevanceLanguage="vi",
                 )
                 .execute()
             )
@@ -47,13 +82,21 @@ class YouTubeApiClient:
             logger.exception("search.list failed for keyword=%s", keyword)
             return []
 
-        pairs: list[tuple[str, str]] = []
+        results: list[dict] = []
         for item in response.get("items", []):
             video_id = item["id"].get("videoId")
-            channel_id = item["snippet"].get("channelId")
-            if video_id and channel_id:
-                pairs.append((video_id, channel_id))
-        return pairs
+            if not video_id:
+                continue
+            snippet = item.get("snippet", {})
+            published_at = self._parse_iso(snippet.get("publishedAt"))
+            results.append({
+                "id": video_id,
+                "title": snippet.get("title", ""),
+                "description": snippet.get("description") or "",
+                "channel_id": snippet.get("channelId", ""),
+                "published_at": published_at,
+            })
+        return results
 
     def get_video_details(self, video_ids: list[str]) -> list[VideoDTO]:
         if not video_ids:
@@ -102,7 +145,7 @@ class YouTubeApiClient:
             channel_id=snippet.get("channelId", ""),
             title=snippet.get("title", ""),
             published_at=published_at,
-            search_mode="MODE2",
+            search_mode="DAILY",
             crawled_at=now,
             description=snippet.get("description"),
             view_count=self._safe_int(stats.get("viewCount")),

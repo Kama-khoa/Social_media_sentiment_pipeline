@@ -13,9 +13,9 @@ Tự động hóa toàn bộ pipeline hằng ngày bằng Apache Airflow. Folder
 | | ELT Scripts | Airflow DAGs |
 |---|---|---|
 | Folder | `elt/` | `airflow/dags/` |
-| Python | 3.13.12 |
-| Runtime | Trực tiếp | Docker container |
-| Dependencies | `requirements.txt` | Airflow Docker image |
+| Python | Conda: etl-py313 | Conda: etl-py313 (hoặc Docker tùy chọn) |
+| Runtime | Trực tiếp | Local (đang chuyển đổi từ Docker) |
+| Dependencies | `requirements.txt` | Airflow Local |
 
 DAG **không được** import trực tiếp từ `elt/` Python packages — phải gọi qua `BashOperator` hoặc `PythonOperator` với subprocess.
 
@@ -47,7 +47,7 @@ DAG **không được** import trực tiếp từ `elt/` Python packages — ph�
     │
     ├── Task 1: run_velectra_extraction  ← aspect span detection
     ├── Task 2: run_phobert_classification ← sentiment scoring
-    ├── Task 3: run_confidence_routing   ← fallback Gemini nếu < 0.80
+    ├── Task 3: run_confidence_routing   ← fallback Gemini nếu < 0.70
     ├── Task 4: run_dbt_transform        ← dbt run staging+intermediate+marts
     ├── Task 5: run_bayesian_ranking     ← analytics/bayesian_ranking.py
     └── Task 6: run_pelt_attribution     ← analytics/pelt_attribution.py
@@ -79,14 +79,23 @@ default_args = {
 
 | Thư viện | Version | Mục đích |
 |---|---|---|
-| `apache-airflow` | 3.1.8 | Orchestration (chạy trong Docker) |
+| `apache-airflow` | 2.10.4 | Orchestration hiện tại theo `docker/Dockerfile.airflow` |
 | `apache-airflow-providers-google` | compatible | GCP operators |
 
 ---
 
-## Docker Compose
+## Môi trường Chạy (Current State)
 
-Airflow chạy qua Docker Desktop trên Windows. Config nằm trong `docker-compose.yml` ở root (không commit nếu chứa credentials).
+Dự án đang **chuyển đổi từ Docker-based deployment sang local development** để tránh hiện tượng overload session. 
+Trong giai đoạn này:
+- Khuyến nghị chạy pipeline manual qua các script trong `elt/` (ví dụ `conda run -n etl-py313 python -m elt.main`) hoặc qua các script bảo trì để linh hoạt hơn.
+- Cấu hình Docker (`docker/docker-compose.yml`) vẫn được giữ lại để dùng cho production sau này.
+
+Chạy Airflow bằng Docker Compose từ root project:
+
+```powershell
+docker compose --env-file .env -f docker\docker-compose.yml up airflow-webserver airflow-scheduler
+```
 
 ---
 
@@ -95,3 +104,20 @@ Airflow chạy qua Docker Desktop trên Windows. Config nằm trong `docker-comp
 - `catchup=False` trên tất cả DAGs — không chạy bù các ngày đã qua
 - DAG `seed_sync_dag` chỉ chạy manual trigger khi thêm kênh/keyword mới
 - Airflow UI tại `http://localhost:8080`
+
+---
+
+## Tích hợp Admin Pipeline Health
+
+Next.js frontend không gọi Airflow trực tiếp. FastAPI proxy các endpoint Admin:
+
+| FastAPI endpoint | Airflow 2.10.4 endpoint |
+|---|---|
+| `GET /admin/pipeline/health` | `GET /health` |
+| `GET /admin/pipeline/dags` | `GET /api/v1/dags` |
+| `GET /admin/pipeline/dags/{dag_id}/runs` | `GET /api/v1/dags/{dag_id}/dagRuns` |
+| `POST /admin/pipeline/dags/{dag_id}/trigger` | `POST /api/v1/dags/{dag_id}/dagRuns` |
+
+FastAPI phải giữ Airflow credentials phía server và enforce `require_admin`.
+Health service cần kết hợp với DAG run status và BigQuery operational metrics;
+`/health` đơn lẻ không chứng minh pipeline gần nhất chạy thành công.

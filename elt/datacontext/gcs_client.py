@@ -18,10 +18,15 @@ class GCSClient:
 
     def upload_json(self, gcs_path: str, data: Union[dict, list]) -> str:
         blob = self._bucket.blob(gcs_path)
-        blob.upload_from_string(
-            json.dumps(data, ensure_ascii=False),
-            content_type="application/json",
-        )
+        if isinstance(data, list):
+            # Convert list of dicts to NDJSON (Newline Delimited JSON)
+            ndjson_content = "\n".join(json.dumps(item, ensure_ascii=False) for item in data)
+            blob.upload_from_string(ndjson_content, content_type="application/x-ndjson")
+        else:
+            blob.upload_from_string(
+                json.dumps(data, ensure_ascii=False),
+                content_type="application/json",
+            )
         return f"gs://{self._bucket_name}/{gcs_path}"
 
     def file_exists(self, gcs_path: str) -> bool:

@@ -2,9 +2,9 @@
 
 ## Mục tiêu
 
-Cung cấp dữ liệu đầu vào tối giản cho hệ thống. Người dùng chỉ cần cung cấp 2 file CSV đơn giản nhất có thể — mọi thông tin còn lại (channel_id, channel_name, subscriber_count, search_cluster, keyword_id...) đều được **tự động bổ sung** bởi `seed_loader.py` thông qua YouTube API.
+Cung cấp dữ liệu đầu vào cho channel, keyword crawl và catalog sản phẩm chuẩn.
 
-Chạy thủ công 1 lần khi setup. Chạy lại khi muốn thêm kênh hoặc keyword mới.
+Chạy thủ công 1 lần khi setup. Chạy lại khi muốn thêm kênh, keyword hoặc sản phẩm mới.
 
 ---
 
@@ -14,7 +14,9 @@ Chạy thủ công 1 lần khi setup. Chạy lại khi muốn thêm kênh hoặc
 |---|---|
 | `seed_channels.csv` | Input tối giản: chỉ có 1 cột `channel_handle` chứa URL đầy đủ của kênh |
 | `seed_keywords.csv` | Input tối giản: có 3 cột `keyword_id` chứa id của từ khoá, `keyword_text` chứa từ khoá, `search_cluster` chứa từ khoá tìm kiếm |
-| `seed_loader.py` | Script chạy thủ công — xử lý 2 CSV, gọi YouTube API để bổ sung thông tin, upsert vào BQ |
+| `seed_products.csv` | Catalog chuẩn độc lập: `product_id`, tên model, hãng, danh mục, năm phát hành và aliases |
+| `generate_seed_products.py` | Sinh lại bộ 500 sản phẩm mẫu để phát triển và demo |
+| `seed_loader.py` | Script chạy thủ công — xử lý các CSV, gọi YouTube API khi cần và upsert vào BQ |
 
 ---
 
@@ -28,6 +30,17 @@ https://www.youtube.com/@tgdd
 https://www.youtube.com/@fptshop
 https://www.youtube.com/@nguyenkim
 ```
+
+**seed_products.csv** — catalog độc lập:
+```
+product_id,product_name,brand,category,release_year,aliases
+iphone-17-pro-max,iPhone 17 Pro Max,Apple,Điện thoại,2025,iphone 17 pro max
+samsung-galaxy-s25-ultra,Samsung Galaxy S25 Ultra,Samsung,Điện thoại,2025,galaxy s25 ultra|s25 ultra
+```
+
+`aliases` dùng dấu `|` để phân tách nhiều cách gọi. Bộ mẫu hiện có 500 dòng:
+250 điện thoại, 150 laptop và 100 tai nghe. Đây là dữ liệu khởi đầu cho
+development/demo; cần rà soát lại trước khi dùng production.
 
 **seed_keywords.csv** — 3 cột:
 ```
@@ -79,6 +92,19 @@ Gemini API (1 lần gọi duy nhất):
 BigQuery MERGE → keyword_config
 
 ```
+
+### Xử lý catalog sản phẩm
+
+```
+seed_products.csv
+    │ đọc tên model, brand, category, release_year, aliases
+    │ validate product_id không trùng
+    ▼
+BigQuery MERGE → product_config
+BigQuery MERGE → product_aliases
+```
+
+Catalog sản phẩm không còn được suy luận từ `search_cluster`.
 
 **Nguyên tắc cluster — 2 loại:**
 
@@ -146,4 +172,4 @@ Seed **không** tiêu thụ `bucket_search` — dùng `bucket_channel_seed` (500
 - `seed_loader.py` dùng BigQuery **MERGE** (upsert) — chạy lại không tạo duplicate
 - Layer 0 schema phải tồn tại trước: `python schema/layer_0_config/init_config_tables.py`
 - Sau khi seed xong, `elt/extract/video_extractor.py` đọc từ `channel_config` và `keyword_config`
-- Không cần điền gì thêm vào CSV — chỉ cần URL kênh và keyword text là đủ
+- Resolver sản phẩm đọc catalog độc lập từ `product_config` và `product_aliases`
