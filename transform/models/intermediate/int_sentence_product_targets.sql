@@ -65,7 +65,8 @@ SELECT
 FROM sentences s
 JOIN video_primary p USING (video_id)
 LEFT JOIN explicit_counts c USING (sentence_id)
-WHERE c.sentence_id IS NULL
+LEFT JOIN overridden_sentences o USING (sentence_id)
+WHERE c.sentence_id IS NULL AND o.sentence_id IS NULL
 
 UNION ALL
 

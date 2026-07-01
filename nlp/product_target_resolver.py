@@ -8,19 +8,19 @@ import json
 import logging
 import os
 import re
-from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 from dotenv import load_dotenv
 from google.cloud import bigquery
+from tqdm import tqdm
 
 from nlp.config import load_nlp_config
-from nlp.gemini_gateway import GeminiGateway
+from nlp.gemini_gateway import GeminiGateway, GeminiQuotaExhaustedError
 
 load_dotenv()
 
 _VALID_SENTIMENTS = {"POSITIVE", "NEGATIVE", "NEUTRAL"}
-_DEFAULT_BATCH_SIZE = 10
+_DEFAULT_BATCH_SIZE = 50
 _GENERIC_ALIAS_TEXT = {
     "ban pro",
     "ban plus",
@@ -397,7 +397,9 @@ class ProductTargetResolver:
         except TypeError:
             candidates = self._candidates(limit)
         
-        # Define helper functions to call Gemini batch resolver methods safely (defending against mock test lambda signature differences)
+        logger.info(f"Retrieved {len(candidates)} candidates for processing.")
+        print(f"Retrieved {len(candidates)} candidates for processing.")
+        
         def run_first_pass(batch):
             try:
                 return self._ask_gemini_batch(batch, catalog, examples)
@@ -410,76 +412,96 @@ class ProductTargetResolver:
             except TypeError:
                 return self._ask_gemini_recheck_batch(batch, catalog)
 
-        # Split candidates into batches
         batches = [candidates[i:i + batch_size] for i in range(0, len(candidates), batch_size)]
         
-        # Parallel Execution of first pass Gemini calls
-        first_pass_results = {}
-        with ThreadPoolExecutor(max_workers=3) as executor:
-            future_to_batch = {
-                executor.submit(run_first_pass, batch): batch
-                for batch in batches
-            }
-            for future in future_to_batch:
-                try:
-                    batch_results = future.result()
-                    first_pass_results.update(batch_results)
-                except Exception:
-                    logger.exception("Gemini resolver batch failed")
-        
-        # Sequential Processing & BigQuery DB writing on main thread
+        quota_exhausted = False
         recheck_candidates: list[dict] = []
-        for candidate in candidates:
-            result = first_pass_results.get(str(candidate["candidate_id"]))
-            if result is None:
-                recheck_candidates.append(candidate)
-            elif not self._result_is_auto_approvable(candidate, result, valid_ids):
-                recheck_candidates.append({**candidate, "first_pass_result": result})
-            elif self._apply_result(candidate, result, valid_ids, "llm_auto", alias_index):
-                resolved += 1
-            else:
-                recheck_candidates.append({**candidate, "first_pass_result": result})
-                
-        # Split recheck candidates into batches
+        if batches:
+            try:
+                with tqdm(total=len(batches), desc="First pass resolution") as pbar:
+                    for batch in batches:
+                        try:
+                            batch_results = run_first_pass(batch) or {}
+                        except GeminiQuotaExhaustedError as exc:
+                            logger.warning(f"Quota exhausted: {exc}")
+                            print(f"\n[Quota Exhausted] {exc}. Saving progress and exiting...")
+                            quota_exhausted = True
+                            break
+                        except Exception:
+                            logger.exception("Gemini resolver batch failed")
+                            batch_results = {}
+                        
+                        for candidate in batch:
+                            result = batch_results.get(str(candidate["candidate_id"]))
+                            if result is None:
+                                recheck_candidates.append(candidate)
+                            elif not self._result_is_auto_approvable(candidate, result, valid_ids):
+                                recheck_candidates.append({**candidate, "first_pass_result": result})
+                            elif self._apply_result(candidate, result, valid_ids, "llm_auto", alias_index):
+                                resolved += 1
+                            else:
+                                recheck_candidates.append({**candidate, "first_pass_result": result})
+                        pbar.update(1)
+            except KeyboardInterrupt:
+                logger.warning("First pass interrupted by user (Ctrl+C). Saving progress and exiting...")
+                print("\n[Interrupt] KeyboardInterrupt detected. Saving progress and exiting...")
+                logger.info(f"Resolution finished early. Resolved: {resolved}, Pending (unresolved): {pending}")
+                print(f"Resolution finished early. Resolved: {resolved}, Pending (unresolved): {pending}")
+                return {"processed": resolved + pending, "resolved": resolved, "pending": pending}
+        
+        if quota_exhausted:
+            logger.info(f"Resolution finished early due to quota exhaustion. Resolved: {resolved}, Pending (unresolved): {pending}")
+            print(f"Resolution finished early due to quota exhaustion. Resolved: {resolved}, Pending (unresolved): {pending}")
+            return {"processed": resolved + pending, "resolved": resolved, "pending": pending}
+
         recheck_batches = [
             recheck_candidates[i:i + self.recheck_batch_size]
             for i in range(0, len(recheck_candidates), self.recheck_batch_size)
         ]
         
-        # Parallel Execution of second pass Gemini recheck calls
-        second_pass_results = {}
-        with ThreadPoolExecutor(max_workers=3) as executor:
-            future_to_batch = {
-                executor.submit(
-                    run_recheck_pass,
-                    [{k: v for k, v in candidate.items() if k != "first_pass_result"} for candidate in batch]
-                ): batch
-                for batch in recheck_batches
-            }
-            for future in future_to_batch:
-                try:
-                    batch_results = future.result()
-                    second_pass_results.update(batch_results)
-                except Exception:
-                    logger.exception("Gemini resolver recheck batch failed")
-                    
-        # Sequential Processing & BigQuery DB writing on main thread
-        for candidate in recheck_candidates:
-            result = second_pass_results.get(str(candidate["candidate_id"])) or candidate.get("first_pass_result") or {}
-            if self._result_is_auto_approvable(candidate, result, valid_ids) and self._apply_result(
-                candidate, result, valid_ids, "llm_batch_recheck", alias_index
-            ):
-                resolved += 1
-            else:
-                self._audit(
-                    candidate,
-                    "pending",
-                    confidence=_result_confidence(result),
-                    reason=str(result.get("reason") or "")[:500],
-                    method="llm_batch_recheck",
-                )
-                pending += 1
+        if recheck_batches:
+            try:
+                with tqdm(total=len(recheck_batches), desc="Second pass recheck") as pbar:
+                    for batch in recheck_batches:
+                        try:
+                            clean_batch = [{k: v for k, v in candidate.items() if k != "first_pass_result"} for candidate in batch]
+                            batch_results = run_recheck_pass(clean_batch) or {}
+                        except GeminiQuotaExhaustedError as exc:
+                            logger.warning(f"Quota exhausted: {exc}")
+                            print(f"\n[Quota Exhausted] {exc}. Saving progress and exiting...")
+                            quota_exhausted = True
+                            break
+                        except Exception:
+                            logger.exception("Gemini resolver recheck batch failed")
+                            batch_results = {}
+                        
+                        for candidate in batch:
+                            result = batch_results.get(str(candidate["candidate_id"])) or candidate.get("first_pass_result") or {}
+                            if self._result_is_auto_approvable(candidate, result, valid_ids) and self._apply_result(
+                                candidate, result, valid_ids, "llm_batch_recheck", alias_index
+                            ):
+                                resolved += 1
+                            else:
+                                self._audit(
+                                    candidate,
+                                    "pending",
+                                    confidence=_result_confidence(result),
+                                    reason=str(result.get("reason") or "")[:500],
+                                    method="llm_batch_recheck",
+                                )
+                                pending += 1
+                        pbar.update(1)
+            except KeyboardInterrupt:
+                logger.warning("Second pass interrupted by user (Ctrl+C). Saving progress and exiting...")
+                print("\n[Interrupt] KeyboardInterrupt detected. Saving progress and exiting...")
+                logger.info(f"Resolution finished early. Resolved: {resolved}, Pending (unresolved): {pending}")
+                print(f"Resolution finished early. Resolved: {resolved}, Pending (unresolved): {pending}")
+                return {"processed": resolved + pending, "resolved": resolved, "pending": pending}
+        
+        logger.info(f"Resolution finished. Resolved: {resolved}, Pending (unresolved): {pending}")
+        print(f"Resolution finished. Resolved: {resolved}, Pending (unresolved): {pending}")
         return {"processed": resolved + pending, "resolved": resolved, "pending": pending}
+
 
 
 def main() -> None:

@@ -260,6 +260,13 @@ export interface ProductConfigItem {
   has_keyword?: boolean;
 }
 
+export interface ProductAdminDetailItem extends ProductConfigItem {
+  specs: Record<string, unknown> | null;
+  description: string | null;
+  official_url: string | null;
+  image_url: string | null;
+}
+
 export interface ProductAliasItem {
   alias_id: string;
   product_id: string;
@@ -281,6 +288,7 @@ export interface ProductSpecTemplateItem {
 export interface ProductDetailChangeRequestItem {
   request_id: string;
   product_id: string;
+  product_name?: string | null;
   proposed_specs: Record<string, unknown> | null;
   proposed_description: string | null;
   proposed_official_url: string | null;
@@ -288,6 +296,9 @@ export interface ProductDetailChangeRequestItem {
   submitted_by: string;
   status: "pending" | "processing" | "approved" | "rejected";
   created_at: string;
+  reviewed_by?: string | null;
+  reviewed_at?: string | null;
+  review_note?: string | null;
 }
 
 export interface ProductResolutionCandidate {

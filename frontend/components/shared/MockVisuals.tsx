@@ -46,7 +46,7 @@ export function Donut({ positive, negative, neutral, size = 150 }: { positive: n
         return <circle key={color} cx={center} cy={center} r={radius} fill="none" stroke={color} strokeWidth="14" strokeDasharray={`${dash} ${circumference - dash}`} strokeDashoffset={-currentOffset} strokeLinecap="round" transform={`rotate(-90 ${center} ${center})`} style={{ transition: "stroke-dasharray .8s ease" }} />;
       })}
       <text x={center} y={center - 2} textAnchor="middle" className="num" style={{ fontSize: 22, fontWeight: 700, fill: "var(--text)" }}>{positive.toFixed(0)}%</text>
-      <text x={center} y={center + 16} textAnchor="middle" style={{ fontSize: 10, fill: "var(--text-3)", fontWeight: 600 }}>tích cực</text>
+      <text x={center} y={center + 16} textAnchor="middle" style={{ fontSize: 10, fill: "var(--text-3)", fontWeight: 600 }}>hài lòng</text>
     </svg>
   );
 }

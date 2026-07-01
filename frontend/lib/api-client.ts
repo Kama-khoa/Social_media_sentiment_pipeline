@@ -6,6 +6,7 @@ import type {
     KeywordConfigItem,
     ProductAliasItem,
     ProductConfigItem,
+    ProductAdminDetailItem,
     ProductDetailChangeRequestItem,
     ProductSpecTemplateItem,
     ProductResolutionCandidate,
@@ -100,12 +101,18 @@ export const api = {
             request<ProductDetail>(`/products/${productId}/aspects`),
         attribution: (productId: string) =>
             request<AttributionData>(`/products/${productId}/attribution`),
-        comments: (productId: string, limit = 10) =>
+        comments: (productId: string, limit = 5) =>
             request<ProductComment[]>(`/products/${productId}/comments?limit=${limit}`),
         submitDetails: (productId: string, data: { proposed_specs?: Record<string, unknown>; proposed_description?: string }) =>
             request<{ request_id: string; status: string }>(`/products/${productId}/details/requests`, {
                 method: "POST",
                 body: JSON.stringify(data),
+            }),
+        detailRequests: () =>
+            request<ProductDetailChangeRequestItem[]>("/products/details/requests"),
+        cancelRequest: (requestId: string) =>
+            request<void>(`/products/details/requests/${encodeURIComponent(requestId)}`, {
+                method: "DELETE",
             }),
         favorites: {
             list: () => request<FavoriteProductItem[]>("/products/favorites"),
@@ -176,9 +183,20 @@ export const api = {
                 const qs = query.toString() ? `?${query.toString()}` : "";
                 return request<{ count: number }>(`/admin/products/count${qs}`);
             },
+            get: (id: string) => request<ProductAdminDetailItem>(`/admin/products/${id}`),
             create: (data: { product_id?: string; product_name: string; brand?: string; category?: string; release_year?: number; specs?: Record<string, any> }) =>
                 request<ProductConfigItem>("/admin/products", { method: "POST", body: JSON.stringify(data) }),
-            update: (id: string, data: { product_name?: string; brand?: string; category?: string; release_year?: number; is_active?: boolean }) =>
+            update: (id: string, data: {
+                product_name?: string;
+                brand?: string;
+                category?: string;
+                release_year?: number;
+                is_active?: boolean;
+                specs?: Record<string, any>;
+                description?: string;
+                official_url?: string;
+                image_url?: string;
+            }) =>
                 request<ProductConfigItem>(`/admin/products/${id}`, { method: "PUT", body: JSON.stringify(data) }),
             aliases: () => request<ProductAliasItem[]>("/admin/products/aliases"),
             createAlias: (data: { product_id: string; alias_text: string; alias_type?: string }) =>
@@ -190,10 +208,10 @@ export const api = {
             removeTemplate: (category: string, specKey: string) =>
                 request<void>(`/admin/products/templates/${encodeURIComponent(category)}/${encodeURIComponent(specKey)}`, { method: "DELETE" }),
             detailRequests: (status = "pending") => request<ProductDetailChangeRequestItem[]>(`/admin/products/detail-requests?status=${encodeURIComponent(status)}`),
-            reviewDetailRequest: (id: string, action: "approve" | "reject" | "processing") =>
+            reviewDetailRequest: (id: string, action: "approve" | "reject" | "processing", review_note?: string) =>
                 request<{ request_id: string; status: string }>(`/admin/products/detail-requests/${id}/review`, {
                     method: "POST",
-                    body: JSON.stringify({ action }),
+                    body: JSON.stringify({ action, review_note }),
                 }),
             candidateCounts: () => request<Record<string, number>>("/admin/products/resolution-candidates/counts"),
             candidates: (status = "pending", page = 1, limit = 20) => request<ProductResolutionCandidate[]>(`/admin/products/resolution-candidates?status=${encodeURIComponent(status)}&page=${page}&limit=${limit}`),

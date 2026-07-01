@@ -146,7 +146,7 @@ export function AdminDashboard() {
         {/* Khối 1: Cảm xúc theo khía cạnh */}
         <section className="card p-[22px]">
           <h3 className="text-base font-bold">Cảm xúc theo khía cạnh</h3>
-          <p className="faint mb-5 text-[12.5px]">Tỉ lệ cảm xúc tích cực - trung lập - tiêu cực của từng khía cạnh.</p>
+          <p className="faint mb-5 text-[12.5px]">Tỉ lệ cảm xúc hài lòng - trung lập - bất mãn của từng khía cạnh.</p>
           <AspectSentimentList aspects={admin.global_aspects} />
         </section>
 
@@ -323,8 +323,8 @@ function AspectSentimentList({ aspects }: { aspects: any[] }) {
               height={8}
             />
             <div className="flex justify-between text-[10px] font-semibold">
-              <span className="text-[var(--pos)]">{a.positive_pct.toFixed(0)}% tích cực</span>
-              <span className="text-[var(--neg)]">{a.negative_pct.toFixed(0)}% tiêu cực</span>
+              <span className="text-[var(--pos)]">{a.positive_pct.toFixed(0)}% hài lòng</span>
+              <span className="text-[var(--neg)]">{a.negative_pct.toFixed(0)}% bất mãn</span>
             </div>
           </div>
         );

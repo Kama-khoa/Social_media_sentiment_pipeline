@@ -10,9 +10,9 @@ from api.config import get_settings
 from api.database import get_db
 from api.dependencies import get_current_user
 from api.models import AppUser, ProductFavorite
-from api.routers.product_helpers import validate_specs
+from api.routers.product_helpers import json_value, validate_specs
 from api.schemas.request_schemas import ProductDetailChangeRequestCreate
-from api.schemas.response_schemas import FavoriteProductItem, ProductFavoriteStatus
+from api.schemas.response_schemas import FavoriteProductItem, ProductFavoriteStatus, ProductDetailChangeRequestItem
 
 router = APIRouter(prefix="/products", tags=["products"])
 
@@ -200,3 +200,76 @@ def submit_product_detail_request(
         ]),
     ).result()
     return {"request_id": request_id, "status": "pending"}
+
+
+@router.get("/details/requests", response_model=list[ProductDetailChangeRequestItem])
+def list_my_detail_requests(
+    current_user: AppUser = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    settings = get_settings()
+    rows = query_to_list(
+        f"""
+        SELECT r.*, p.product_name FROM `{settings.gcp_project_id}.{settings.bq_dataset}.product_detail_change_requests` r
+        LEFT JOIN `{settings.gcp_project_id}.{settings.bq_marts_dataset}.dim_products` p ON r.product_id = p.product_id
+        WHERE r.submitted_by = @submitted_by
+        ORDER BY r.created_at DESC
+        """,
+        [bigquery.ScalarQueryParameter("submitted_by", "STRING", current_user.id)],
+    )
+    
+    # Resolve user details from Postgres
+    user_ids = set()
+    for row in rows:
+        if row.get("submitted_by"):
+            user_ids.add(row["submitted_by"])
+        if row.get("reviewed_by"):
+            user_ids.add(row["reviewed_by"])
+            
+    user_map = {}
+    if user_ids:
+        users = db.query(AppUser).filter(AppUser.id.in_(list(user_ids))).all()
+        user_map = {u.id: u.display_name for u in users}
+        
+    for row in rows:
+        row["proposed_specs"] = json_value(row.get("proposed_specs"))
+        row["submitted_by"] = user_map.get(row.get("submitted_by"), row.get("submitted_by"))
+        if row.get("reviewed_by"):
+            row["reviewed_by"] = user_map.get(row.get("reviewed_by"), row.get("reviewed_by"))
+            
+    return rows
+
+
+@router.delete("/details/requests/{request_id}", status_code=204)
+def cancel_detail_request(
+    request_id: str,
+    current_user: AppUser = Depends(get_current_user)
+):
+    settings = get_settings()
+    rows = query_to_list(
+        f"""
+        SELECT submitted_by, status FROM `{settings.gcp_project_id}.{settings.bq_dataset}.product_detail_change_requests`
+        WHERE request_id = @request_id
+        """,
+        [bigquery.ScalarQueryParameter("request_id", "STRING", request_id)]
+    )
+    if not rows:
+        raise HTTPException(status_code=404, detail="Phiếu yêu cầu không tồn tại.")
+        
+    req = rows[0]
+    if req["submitted_by"] != current_user.id:
+        raise HTTPException(status_code=403, detail="Bạn không có quyền hủy phiếu này.")
+        
+    if req["status"] != "pending":
+        raise HTTPException(status_code=400, detail="Chỉ có thể hủy phiếu đang ở trạng thái Đang chờ.")
+        
+    get_bq_client().query(
+        f"""
+        DELETE FROM `{settings.gcp_project_id}.{settings.bq_dataset}.product_detail_change_requests`
+        WHERE request_id = @request_id
+        """,
+        job_config=bigquery.QueryJobConfig(query_parameters=[
+            bigquery.ScalarQueryParameter("request_id", "STRING", request_id)
+        ])
+    ).result()
+

@@ -41,6 +41,7 @@ def create_keyword_config(client: bigquery.Client) -> None:
         bigquery.SchemaField("keyword_text", "STRING", mode="REQUIRED"),
         bigquery.SchemaField("search_cluster", "STRING", mode="NULLABLE"),
         bigquery.SchemaField("is_active", "BOOL", mode="REQUIRED"),
+        bigquery.SchemaField("needs_backfill", "BOOL", mode="NULLABLE"),
         bigquery.SchemaField("created_at", "TIMESTAMP", mode="REQUIRED"),
     ]
     table = table_ref(client, "keyword_config")

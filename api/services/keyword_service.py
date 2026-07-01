@@ -37,8 +37,8 @@ class KeywordService:
     def create_keyword(self, req: KeywordCreateRequest) -> KeywordResponse:
         keyword_id = f"kw_{uuid.uuid4().hex[:8]}"
         query = f"""
-            INSERT INTO `{self.table_ref}` (keyword_id, keyword_text, search_cluster, is_active, created_at)
-            VALUES (@keyword_id, @keyword_text, @search_cluster, TRUE, CURRENT_TIMESTAMP())
+            INSERT INTO `{self.table_ref}` (keyword_id, keyword_text, search_cluster, is_active, needs_backfill, created_at)
+            VALUES (@keyword_id, @keyword_text, @search_cluster, TRUE, TRUE, CURRENT_TIMESTAMP())
         """
         job_config = bigquery.QueryJobConfig(query_parameters=[
             bigquery.ScalarQueryParameter("keyword_id", "STRING", keyword_id),

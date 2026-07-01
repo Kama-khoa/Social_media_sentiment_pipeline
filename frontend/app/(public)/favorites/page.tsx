@@ -98,9 +98,9 @@ export default function FavoritesPage() {
               <SentimentBar positivePct={product.positive_pct} negativePct={product.negative_pct} height={10} />
               {!hasEnoughBayesData(product.statement_count) && <div className="faint text-[12.5px] font-semibold">Chưa đủ dữ liệu Bayes</div>}
               <div className="flex justify-between text-[12.5px]">
-                <span className="font-semibold text-[var(--pos)]">{product.positive_pct.toFixed(0)}% tích cực</span>
+                <span className="font-semibold text-[var(--pos)]">{product.positive_pct.toFixed(0)}% hài lòng</span>
                 <span className="num faint">{product.total_mentions.toLocaleString("vi-VN")} đề cập</span>
-                <span className="font-semibold text-[var(--neg)]">{product.negative_pct.toFixed(0)}% tiêu cực</span>
+                <span className="font-semibold text-[var(--neg)]">{product.negative_pct.toFixed(0)}% bất mãn</span>
               </div>
             </Link>
           ))}

@@ -53,6 +53,23 @@ class ProductConfigItem(BaseModel):
     has_keyword: Optional[bool] = None
 
 
+class ProductAdminDetailResponse(BaseModel):
+    product_id: str
+    product_name: str
+    brand: Optional[str] = None
+    category: Optional[str] = None
+    release_year: Optional[int] = None
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+    is_synced: Optional[bool] = None
+    has_keyword: Optional[bool] = None
+    specs: Optional[dict[str, Any]] = None
+    description: Optional[str] = None
+    official_url: Optional[str] = None
+    image_url: Optional[str] = None
+
+
 class ProductAliasItem(BaseModel):
     alias_id: str
     product_id: str
@@ -74,6 +91,7 @@ class ProductSpecTemplateItem(BaseModel):
 class ProductDetailChangeRequestItem(BaseModel):
     request_id: str
     product_id: str
+    product_name: Optional[str] = None
     proposed_specs: Optional[dict[str, Any]]
     proposed_description: Optional[str]
     proposed_official_url: Optional[str]
@@ -84,6 +102,7 @@ class ProductDetailChangeRequestItem(BaseModel):
     reviewed_at: Optional[datetime]
     review_note: Optional[str]
     created_at: datetime
+
 
 
 class AttributionPoint(BaseModel):

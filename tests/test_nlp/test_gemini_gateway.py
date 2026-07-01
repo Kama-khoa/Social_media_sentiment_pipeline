@@ -29,3 +29,13 @@ def test_gateway_waits_before_each_request(monkeypatch):
     gateway.generate("second")
 
     assert waits == [gateway._available_models[0], gateway._available_models[0]]
+
+
+def test_gateway_raises_quota_exhausted_error(monkeypatch):
+    client = MagicMock()
+    gateway = gemini_gateway.GeminiGateway(client=client)
+    gateway._available_models = []
+    import pytest
+    with pytest.raises(gemini_gateway.GeminiQuotaExhaustedError):
+        gateway.generate("prompt")
+

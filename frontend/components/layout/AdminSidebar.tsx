@@ -17,14 +17,14 @@ const items: AdminMenuItem[] = [
   { href: "/admin/channels", label: "Quản lý kênh", icon: "broadcast", group: "THU THẬP" },
   { href: "/admin/keywords", label: "Quản lý từ khóa", icon: "tag", group: "THU THẬP" },
   { href: "/admin/products", label: "Quản lý sản phẩm", icon: "box", group: "SẢN PHẨM" },
-  { href: "/admin/products/aliases", label: "Tên gọi khác", icon: "link", group: "SẢN PHẨM" },
-  { href: "/admin/products/candidates", label: "Duyệt ánh xạ SP", icon: "inbox", group: "SẢN PHẨM" },
-  { href: "/admin/products/spec-templates", label: "Mẫu thông số", icon: "spec", group: "SẢN PHẨM" },
+  // { href: "/admin/products/aliases", label: "Tên gọi khác", icon: "link", group: "SẢN PHẨM" },
+  // { href: "/admin/products/candidates", label: "Duyệt ánh xạ SP", icon: "inbox", group: "SẢN PHẨM" },
+  // { href: "/admin/products/spec-templates", label: "Mẫu thông số", icon: "spec", group: "SẢN PHẨM" },
   { href: "/admin/airflow", label: "Tình trạng Pipeline", icon: "heart", group: "HỆ THỐNG" },
   { href: "/admin/airflow/runs", label: "Lịch sử DAG Runs", icon: "flow", group: "HỆ THỐNG" },
   { href: "/admin/airflow/ops", label: "Chỉ số vận hành", icon: "activity", group: "HỆ THỐNG" },
   { href: "/admin/users", label: "Quản lý tài khoản", icon: "users", group: "HỆ THỐNG" },
-  { href: "/admin/logs", label: "Log pipeline", icon: "server", group: "HỆ THỐNG" },
+  // { href: "/admin/logs", label: "Log pipeline", icon: "server", group: "HỆ THỐNG" },
 ];
 
 function splitHref(href: string) {

@@ -19,12 +19,12 @@ export function SentimentBar({ positivePct, negativePct, neutralPct, height = 6 
       className="flex w-full overflow-hidden rounded-full bg-[var(--surface-3)]"
       style={{ height }}
       role="img"
-      aria-label={`Cảm xúc: ${positive.toFixed(1)}% tích cực, ${neutral.toFixed(1)}% trung lập, ${negative.toFixed(1)}% tiêu cực`}
+      aria-label={`Cảm xúc: ${positive.toFixed(1)}% hài lòng, ${neutral.toFixed(1)}% trung lập, ${negative.toFixed(1)}% bất mãn`}
     >
       {positive > 0 && (
         <div
           style={{ width: width(positive), background: "var(--pos)", transition: "width .6s ease" }}
-          title={`Tích cực: ${positive.toFixed(1)}%`}
+          title={`Hài lòng: ${positive.toFixed(1)}%`}
         />
       )}
       {neutral > 0 && (
@@ -36,7 +36,7 @@ export function SentimentBar({ positivePct, negativePct, neutralPct, height = 6 
       {negative > 0 && (
         <div
           style={{ width: width(negative), background: "var(--neg)", transition: "width .6s ease" }}
-          title={`Tiêu cực: ${negative.toFixed(1)}%`}
+          title={`Bất mãn: ${negative.toFixed(1)}%`}
         />
       )}
     </div>

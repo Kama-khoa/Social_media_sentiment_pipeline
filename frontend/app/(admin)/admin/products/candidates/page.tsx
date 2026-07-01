@@ -20,8 +20,8 @@ const statuses = [
 
 const sentimentOptions = [
   { value: "NEUTRAL", label: "Trung tính (NEUTRAL)" },
-  { value: "POSITIVE", label: "Tích cực (POSITIVE)" },
-  { value: "NEGATIVE", label: "Tiêu cực (NEGATIVE)" },
+  { value: "POSITIVE", label: "Hài lòng (POSITIVE)" },
+  { value: "NEGATIVE", label: "Bất mãn (NEGATIVE)" },
 ];
 
 function sourceLabel(value: string) {

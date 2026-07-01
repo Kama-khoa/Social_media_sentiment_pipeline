@@ -15,6 +15,7 @@ class KeywordResponse(BaseModel):
     keyword_text: str
     search_cluster: Optional[str] = None
     is_active: bool
+    needs_backfill: Optional[bool] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
 

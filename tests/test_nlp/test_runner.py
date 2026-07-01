@@ -252,7 +252,7 @@ def test_write_rows_to_bigquery_with_retry_uses_exponential_delays(monkeypatch) 
     monkeypatch.setattr(runner_module.time, "sleep", delays.append)
 
     assert write_rows_to_bigquery_with_retry(
-        [{"sentence_id": "s1"}],
+        [{"sentence_id": "s1", "result_id": "r1"}],
         dag_run_id="test-run",
         batch_index=1,
         phase="local",
@@ -321,7 +321,7 @@ def test_write_rows_to_bigquery_deletes_staging_table_when_load_fails(
     monkeypatch.setenv("BQ_DATASET", "dataset")
 
     with pytest.raises(RuntimeError, match="load failed"):
-        write_rows_to_bigquery([{"sentence_id": "s1"}])
+        write_rows_to_bigquery([{"sentence_id": "s1", "result_id": "r1"}])
 
     assert len(deleted_tables) == 1
 

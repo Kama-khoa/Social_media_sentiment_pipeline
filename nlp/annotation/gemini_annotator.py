@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import re
+import threading
 import time
 from datetime import date
 from pathlib import Path
@@ -27,15 +28,15 @@ logger = logging.getLogger(__name__)
 _FREE_TIER_LIMITS: dict[str, dict[str, int]] = {
     "gemini-3.1-flash-lite": {"rpm": 15,  "rpd": 500, "tpm": 250000},
     "gemini-3.5-flash": {"rpm": 5,  "rpd": 20, "tpm": 250000},
-    "gemini-3-flash": {"rpm": 5,  "rpd": 20, "tpm": 250000},
+    "gemini-3-flash-preview": {"rpm": 5,  "rpd": 20, "tpm": 250000},
     "gemini-2.5-flash-lite": {"rpm": 10,  "rpd": 20,  "tpm":   250000},
     "gemini-2.5-flash":      {"rpm": 5,  "rpd": 20, "tpm": 250000},
-    "Gemma 4 26B": {"rpm": 15, "rpd": 1500, "tpm": 250000},
-    "Gemma 4 31B": {"rpm": 15, "rpd": 1500, "tpm": 250000},
+    "gemma-4-26b-a4b-it": {"rpm": 15, "rpd": 1500, "tpm": 250000},
+    "gemma-4-31b-it": {"rpm": 15, "rpd": 1500, "tpm": 250000},
 }
 
 # Sử dụng 75% RPM limit để có buffer cho drift thời gian
-_SAFETY_FACTOR = 0.95
+_SAFETY_FACTOR = 0.75
 
 # Sau khi nhận 429, block model này trong 70s trước khi thử lại
 _COOLDOWN_AFTER_429: float = 70.0
@@ -53,10 +54,13 @@ class _RateLimiter:
         self._min_interval: float = 60.0 / effective_rpm
         self._last_call: float = 0.0
         self._blocked_until: float = 0.0
+        self._lock = threading.Lock()
 
     def wait(self, model_name: str) -> None:
-        now = time.monotonic()
-        cooldown_remaining = self._blocked_until - now
+        with self._lock:
+            now = time.monotonic()
+            cooldown_remaining = self._blocked_until - now
+            
         if cooldown_remaining > 0:
             logger.info(
                 "Model %s đang trong 429 cooldown, chờ %.0fs...",
@@ -64,19 +68,26 @@ class _RateLimiter:
             )
             time.sleep(cooldown_remaining)
 
-        now = time.monotonic()
-        to_sleep = self._min_interval - (now - self._last_call)
+        with self._lock:
+            now = time.monotonic()
+            to_sleep = self._min_interval - (now - self._last_call)
+            if to_sleep > 0:
+                self._last_call = now + to_sleep
+            else:
+                self._last_call = now
+                to_sleep = 0.0
+
         if to_sleep > 0:
             logger.debug(
                 "Rate limiter [%s]: chờ %.1fs (%.1f RPM target)",
                 model_name, to_sleep, 60.0 / self._min_interval,
             )
             time.sleep(to_sleep)
-        self._last_call = time.monotonic()
 
     def block_for_cooldown(self) -> None:
         """Gọi sau khi nhận 429 — block model này trong _COOLDOWN_AFTER_429 giây."""
-        self._blocked_until = time.monotonic() + _COOLDOWN_AFTER_429
+        with self._lock:
+            self._blocked_until = time.monotonic() + _COOLDOWN_AFTER_429
 
 
 class _DailyBudget:
@@ -104,13 +115,13 @@ class _DailyBudget:
 
 class GeminiAnnotator:
     _MODELS_TO_TRY = [
-        "gemini-3.1-flash-lite",  # 15 RPM, 500 RPD — ưu tiên cao nhất
-        "gemini-3.5-flash",       # 5 RPM, 20 RPD
-        "gemini-3-flash",       # 5 RPM, 20 RPD
-        "gemini-2.5-flash",       # 5 RPM, 20 RPD
-        "gemini-2.5-flash-lite",       # 10 RPM, 20 RPD
-        "Gemma 4 26B", # 15 RPM, 1500 RPD
-        "Gemma 4 31B", # 15 RPM, 1500 RPD
+        "gemini-3.1-flash-lite",
+        "gemini-3.5-flash",
+        "gemini-3-flash-preview",
+        "gemini-2.5-flash",
+        "gemini-2.5-flash-lite",
+        "gemma-4-26b-a4b-it",
+        "gemma-4-31b-it",
     ]
 
     _VALID_ASPECTS = set(ASPECT_LABELS + ["NONE"])
@@ -334,6 +345,14 @@ class GeminiAnnotator:
                     if limiter:
                         limiter.block_for_cooldown()
                     last_exc = exc
+                    try:
+                        next_model_idx = ordered_models.index(model_name) + 1
+                        if next_model_idx < len(ordered_models):
+                            next_model = ordered_models[next_model_idx]
+                            logger.warning("Model %s rate limited, switching to fallback model %s", model_name, next_model)
+                            print(f"\n[Annotator] Model {model_name} rate limited. Switching to fallback model {next_model}...")
+                    except ValueError:
+                        pass
                     continue
                 raise exc
 

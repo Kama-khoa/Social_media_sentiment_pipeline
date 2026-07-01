@@ -132,13 +132,70 @@ class VideoExtractor(BaseExtractor):
                 if comment_extractor:
                     comment_stats = comment_extractor.crawl_batch_with_retry(dtos, max_retries=2)
 
+        # --- Daily Backfill for New Keywords ---
+        backfill_saved = 0
+        all_keywords = self._keyword_repo.get_active_keywords()
+        backfill_keywords = [kw for kw in all_keywords if kw.needs_backfill]
+        if backfill_keywords:
+            logger.info("Phase A Backfill: Found %d keywords needing historical scan: %s", len(backfill_keywords), [kw.keyword_text for kw in backfill_keywords])
+            backfill_cutoff = datetime.now(timezone.utc) - timedelta(days=365)
+            
+            for ch in channels:
+                url = ch.channel_url or f"https://www.youtube.com/{ch.channel_handle}"
+                logger.info("Phase A Backfill: Scanning channel %s for new keywords", ch.channel_name)
+                try:
+                    raw_videos = fetcher.fetch_channel_videos(url, max_results=self._config.crawl.historical_scan_max_results)
+                except Exception as exc:
+                    logger.error("Phase A Backfill: Failed to fetch videos for %s: %s", ch.channel_name, exc)
+                    continue
+                
+                if not raw_videos:
+                    continue
+                
+                filtered_raw = []
+                for item in raw_videos:
+                    pub_at = fetcher._parse_published_at(item)
+                    if pub_at and pub_at >= backfill_cutoff:
+                        filtered_raw.append(item)
+                    elif not pub_at:
+                        filtered_raw.append(item)
+                
+                matched_backfill = fetcher.filter_by_keywords(filtered_raw, custom_keywords=backfill_keywords)
+                existing_ids = self._crawl_state_repo.get_existing_video_ids(ch.channel_id)
+                remaining = [v for v in matched_backfill if v["id"] not in existing_ids]
+                
+                if remaining:
+                    logger.info("Phase A Backfill: channel %s — found %d new videos for backfill keywords", ch.channel_name, len(remaining))
+                    for batch_entries in _chunks(remaining, self._config.crawl.video_batch_size):
+                        enriched = fetcher.enrich_batch(batch_entries)
+                        dtos = fetcher.build_video_dtos(enriched, ch.channel_id, search_mode="DAILY_BACKFILL")
+                        dtos = [dto for dto in dtos if dto.published_at >= backfill_cutoff]
+                        if not dtos:
+                            continue
+                        
+                        try:
+                            self._upload_to_gcs(dtos, execution_date)
+                            self._save_to_crawl_state(dtos)
+                        except Exception as e:
+                            logger.error("Phase A Backfill: Save failed for channel %s: %s", ch.channel_name, e)
+                            continue
+                        
+                        backfill_saved += len(dtos)
+                        if comment_extractor:
+                            comment_extractor.crawl_batch_with_retry(dtos, max_retries=2)
+            
+            # Clear backfill flags
+            backfill_ids = [kw.keyword_id for kw in backfill_keywords]
+            self._keyword_repo.clear_needs_backfill(backfill_ids)
+            logger.info("Phase A Backfill: Completed and cleared backfill flags for: %s", backfill_ids)
+
         elapsed = time.monotonic() - t0
         self._quota_repo.log_operation(
             operation_type="video_extraction_daily",
             bucket=QuotaBucket.SEARCH.value,
             units_used=channels_scanned * _SEARCH_UNITS_PER_CALL,
             dag_run_id=dag_run_id,
-            videos_processed=total_saved,
+            videos_processed=total_saved + backfill_saved,
             execution_time_seconds=elapsed,
         )
 
@@ -146,7 +203,7 @@ class VideoExtractor(BaseExtractor):
             "channels_scanned": channels_scanned,
             "raw_found": len(all_raw),
             "keyword_matched": len(matched),
-            "new_saved": total_saved,
+            "new_saved": total_saved + backfill_saved,
             "comment_stats": comment_stats,
             "elapsed_seconds": round(elapsed, 2),
         }

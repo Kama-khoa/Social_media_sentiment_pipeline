@@ -75,7 +75,7 @@ export function CrawlProgress({ open, taskId, onClose, onComplete, productName }
   const isFinished = status === "success" || status === "failed";
 
   return (
-    <Modal open={open} title="Tiến trình thu thập dữ liệu" onClose={isFinished ? onClose : () => {}} size="lg">
+    <Modal open={open} title="Tiến trình thu thập dữ liệu" onClose={onClose} size="lg">
       <div className="space-y-6">
         <div>
           <div className="text-[13.5px] font-semibold text-[var(--text-3)]">Sản phẩm thu thập</div>
@@ -137,14 +137,20 @@ export function CrawlProgress({ open, taskId, onClose, onComplete, productName }
         )}
 
         {/* Footer */}
-        <div className="flex justify-end pt-2">
-          <Button
-            onClick={onClose}
-            disabled={!isFinished}
-            className={`min-w-[100px] ${!isFinished ? "opacity-50 cursor-not-allowed" : ""}`}
-          >
-            Đóng
-          </Button>
+        <div className="flex justify-end gap-3 pt-2">
+          {!isFinished && (
+            <Button variant="outline" onClick={onClose}>
+              Thu nhỏ
+            </Button>
+          )}
+          {isFinished && (
+            <Button
+              onClick={onClose}
+              className="min-w-[100px]"
+            >
+              Đóng
+            </Button>
+          )}
         </div>
       </div>
     </Modal>

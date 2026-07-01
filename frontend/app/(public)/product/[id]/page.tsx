@@ -15,6 +15,8 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { CustomSelect } from "@/components/ui/custom-select";
 import { calculateControversyLabel } from "@/lib/utils";
+import { Modal } from "@/components/admin/Modal";
+import { Input } from "@/components/ui/input";
 
 type Section = "analytics" | "specs" | "timeline" | "comments";
 
@@ -23,6 +25,24 @@ const baseSections: Array<{ id: Section; label: string; icon: IconName }> = [
   { id: "specs", label: "Thông số kỹ thuật", icon: "spec" },
   { id: "timeline", label: "Dòng thời gian", icon: "clock" },
 ];
+
+const SPEC_FALLBACK_INFO: Record<string, { label: string; unit?: string }> = {
+  screen_technology: { label: "Công nghệ màn hình" },
+  screen_size_inches: { label: "Kích thước màn hình", unit: "inch" },
+  ram_gb: { label: "Dung lượng RAM", unit: "GB" },
+  storage_gb: { label: "Bộ nhớ trong", unit: "GB" },
+  battery_mah: { label: "Dung lượng pin", unit: "mAh" },
+  chipset: { label: "Vi xử lý (Chipset)" },
+  generation: { label: "Thế hệ" },
+  release_date: { label: "Ngày ra mắt" },
+  model_year: { label: "Năm model" },
+  processor: { label: "Bộ vi xử lý (CPU)" },
+  graphics: { label: "Card đồ họa (GPU)" },
+  battery_hours: { label: "Thời lượng pin", unit: "giờ" },
+  connection: { label: "Kết nối" },
+  connector: { label: "Cổng sạc" },
+  noise_cancellation: { label: "Chống ồn chủ động (ANC)" },
+};
 
 export default function ProductDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -35,9 +55,12 @@ export default function ProductDetailPage() {
   const [loading, setLoading] = useState(true);
   const [isFavorite, setIsFavorite] = useState(false);
   const [favoriteLoading, setFavoriteLoading] = useState(false);
-  const [proposalAspect, setProposalAspect] = useState("");
-  const [proposalText, setProposalText] = useState("");
   const [proposalSent, setProposalSent] = useState(false);
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editDescription, setEditDescription] = useState("");
+  const [editOfficialUrl, setEditOfficialUrl] = useState("");
+  const [editImageUrl, setEditImageUrl] = useState("");
+  const [editSpecs, setEditSpecs] = useState<Record<string, any>>({});
 
   const aspectOptions = useMemo(() => {
     if (data?.spec_templates?.length) {
@@ -52,12 +75,6 @@ export default function ProductDetailPage() {
       { value: "features", label: "Tính năng" },
     ];
   }, [data]);
-
-  useEffect(() => {
-    if (aspectOptions.length > 0 && !proposalAspect) {
-      setProposalAspect(aspectOptions[0].value);
-    }
-  }, [aspectOptions, proposalAspect]);
 
   useEffect(() => {
     if (!id) return;
@@ -80,6 +97,23 @@ export default function ProductDetailPage() {
       active = false;
     };
   }, [id, user]);
+
+  useEffect(() => {
+    if (editModalOpen && data) {
+      setEditDescription(data.details?.description ?? "");
+      setEditOfficialUrl(data.details?.official_url ?? "");
+      setEditImageUrl(data.details?.image_url ?? "");
+      
+      const initialSpecs: Record<string, any> = {};
+      if (data.spec_templates) {
+        data.spec_templates.forEach(t => {
+          const currentValue = data.details?.specs?.[t.spec_key];
+          initialSpecs[t.spec_key] = currentValue !== undefined ? String(currentValue) : "";
+        });
+      }
+      setEditSpecs(initialSpecs);
+    }
+  }, [editModalOpen, data]);
 
   const sentiment = useMemo(() => {
     if (!data?.aspects.length) return { positive: 0, negative: 0, neutral: 100 };
@@ -176,30 +210,88 @@ export default function ProductDetailPage() {
   }, [filteredTrend, timeRange]);
 
   if (loading) return <div className="grid min-h-[400px] place-items-center"><div className="spinner" /></div>;
-  if (!data) return <div className="mx-auto max-w-5xl p-8"><Link href="/" className="muted">← Quay lại danh sách</Link><div className="card mt-6 p-10 text-center">Không tìm thấy sản phẩm.</div></div>;
+  if (!data || data.total_mentions === 0 || data.statement_count === 0) return <div className="mx-auto max-w-5xl p-8"><Link href="/" className="muted">← Quay lại danh sách</Link><div className="card mt-6 p-10 text-center">Sản phẩm này sẽ được cập nhật thêm trong tương lai. Vui lòng quay lại sau!</div></div>;
   const specs = data.details?.specs ?? {};
   const sections = [...baseSections, { id: "comments" as const, label: `Bình luận (${comments.length})`, icon: "bell" as const }];
 
   async function submitProposal() {
-    if (!id || !proposalAspect || !proposalText.trim()) return;
+    if (!id || !data) return;
     try {
-      let finalValue: string | number | boolean = proposalText.trim();
+      const proposed_specs: Record<string, any> = {};
       
-      const template = data?.spec_templates?.find((t) => t.spec_key === proposalAspect);
-      if (template?.value_type === "number") {
-        finalValue = Number(finalValue);
-        if (isNaN(finalValue)) {
-          alert(`Thông số "${template.display_label}" yêu cầu nhập số hợp lệ.`);
-          return;
+      if (data?.spec_templates) {
+        for (const t of data.spec_templates) {
+          const rawValue = editSpecs[t.spec_key];
+          if (rawValue === undefined) continue;
+          
+          let finalValue: any = String(rawValue).trim();
+          if (t.value_type === "number") {
+            if (finalValue === "") {
+              finalValue = undefined;
+            } else {
+              finalValue = Number(finalValue);
+              if (isNaN(finalValue)) {
+                alert(`Thông số "${t.display_label}" yêu cầu nhập số hợp lệ.`);
+                return;
+              }
+            }
+          } else if (t.value_type === "boolean") {
+            if (finalValue === "") {
+              finalValue = undefined;
+            } else {
+              const lower = String(finalValue).toLowerCase();
+              finalValue = lower === "true" || lower === "1" || lower === "có" || lower === "yes";
+            }
+          } else {
+            if (finalValue === "") {
+              finalValue = undefined;
+            }
+          }
+
+          // Check if different from the original value
+          const originalValue = data.details?.specs?.[t.spec_key];
+          const isOriginalEmpty = originalValue === undefined || originalValue === null || originalValue === "";
+          const isProposedEmpty = finalValue === undefined || finalValue === null || finalValue === "";
+          
+          if (isOriginalEmpty && isProposedEmpty) {
+            continue;
+          }
+          
+          if (originalValue === finalValue) {
+            continue;
+          }
+          
+          proposed_specs[t.spec_key] = finalValue === undefined ? null : finalValue;
         }
-      } else if (template?.value_type === "boolean") {
-        const lower = String(finalValue).toLowerCase();
-        finalValue = lower === "true" || lower === "1" || lower === "có" || lower === "yes";
       }
 
-      const proposed_specs = { [proposalAspect]: finalValue };
-      await api.products.submitDetails(id, { proposed_specs });
+      const origDesc = data.details?.description ?? "";
+      const proposedDesc = editDescription.trim();
+      const descriptionToSend = proposedDesc !== origDesc ? proposedDesc : undefined;
+
+      const origUrl = data.details?.official_url ?? "";
+      const proposedUrl = editOfficialUrl.trim();
+      const officialUrlToSend = proposedUrl !== origUrl ? proposedUrl : undefined;
+
+      const origImg = data.details?.image_url ?? "";
+      const proposedImg = editImageUrl.trim();
+      const imageUrlToSend = proposedImg !== origImg ? proposedImg : undefined;
+
+      const dataToSend = {
+        proposed_specs: Object.keys(proposed_specs).length > 0 ? proposed_specs : undefined,
+        proposed_description: descriptionToSend,
+        proposed_official_url: officialUrlToSend,
+        proposed_image_url: imageUrlToSend,
+      };
+
+      if (!dataToSend.proposed_specs && !dataToSend.proposed_description && !dataToSend.proposed_official_url && !dataToSend.proposed_image_url) {
+        alert("Bạn chưa thay đổi thông tin nào so với thông số hiện tại.");
+        return;
+      }
+
+      await api.products.submitDetails(id, dataToSend);
       setProposalSent(true);
+      setEditModalOpen(false);
     } catch (e) {
       console.error(e);
       alert("Lỗi khi gửi đề xuất. Vui lòng thử lại.");
@@ -228,7 +320,7 @@ export default function ProductDetailPage() {
       <Link href="/" className="muted mb-[18px] inline-flex items-center gap-1.5 text-sm font-semibold hover:text-[var(--primary)]"><Icon name="chevron" size={16} style={{ transform: "rotate(90deg)" }} />Quay lại danh sách</Link>
       <section className="card mb-[18px] p-[26px]">
         <div className="flex flex-wrap justify-between gap-6"><div className="min-w-0 flex-[1_1_320px]"><div className="mb-2.5 flex flex-wrap gap-2"><span className="chip brand">{data.category}</span><span className="chip">{data.brand}</span><span className={`chip ${controversyLabel === "high" ? "neg" : controversyLabel === "medium" ? "neu" : "pos"}`}>{controversyLabel === "high" ? "Nhiều tranh cãi" : controversyLabel === "medium" ? "Tranh cãi vừa" : "Ít tranh cãi"}</span></div><h1 className="m-0 text-[32px] font-extrabold tracking-[-.02em]">{data.product_name}</h1><p className="muted mt-2 max-w-xl text-[14.5px] leading-relaxed">{data.details?.description ?? "Phân tích cảm xúc cộng đồng dựa trên bình luận YouTube Việt Nam."}</p><div className="mt-4 flex flex-wrap gap-2.5"><Button variant="outline" onClick={toggleFavorite} disabled={favoriteLoading}><Icon name={isFavorite ? "heartSolid" : "heart"} size={16} className={isFavorite ? "text-[var(--neg)]" : ""} />{isFavorite ? "Đã lưu" : "Lưu sản phẩm"}</Button>{data.details?.official_url && <a href={data.details.official_url} target="_blank" rel="noreferrer"><Button variant="outline"><Icon name="external" size={16} />Trang chính thức</Button></a>}</div></div><div className="flex min-w-48 flex-col items-center gap-3"><ScoreRing score={data.bayesian_score} statementCount={data.statement_count} size={104} /><div className="text-center"><div className="num text-[15px] font-bold">{data.total_mentions.toLocaleString("vi-VN")}</div><div className="faint text-xs">lượt đề cập đã phân tích</div>{!hasEnoughBayesData(data.statement_count) && <div className="faint mt-1 text-xs font-semibold">Chưa đủ dữ liệu Bayes</div>}</div></div></div>
-        <div className="mt-[18px]"><SentimentBar positivePct={sentiment.positive} negativePct={sentiment.negative} height={12} /><div className="mt-2 flex justify-between text-[13px] font-semibold"><span className="text-[var(--pos)]">{sentiment.positive.toFixed(0)}% tích cực</span><span className="text-[var(--neu)]">{sentiment.neutral.toFixed(0)}% trung lập</span><span className="text-[var(--neg)]">{sentiment.negative.toFixed(0)}% tiêu cực</span></div></div>
+        <div className="mt-[18px]"><SentimentBar positivePct={sentiment.positive} negativePct={sentiment.negative} height={12} /><div className="mt-2 flex justify-between text-[13px] font-semibold"><span className="text-[var(--pos)]">{sentiment.positive.toFixed(0)}% hài lòng</span><span className="text-[var(--neu)]">{sentiment.neutral.toFixed(0)}% trung lập</span><span className="text-[var(--neg)]">{sentiment.negative.toFixed(0)}% bất mãn</span></div></div>
       </section>
 
       <nav className="sticky top-[72px] z-20 mb-[18px] flex flex-wrap gap-1.5 rounded-[14px] border border-[var(--border)] bg-[var(--nav-bg)] p-1.5 backdrop-blur-xl">{sections.map((item) => <button key={item.id} onClick={() => setSection(item.id)} className={`flex items-center gap-1.5 rounded-[9px] px-[15px] py-2.5 text-sm font-semibold transition-all ${section === item.id ? "bg-[var(--primary)] text-[var(--on-primary)]" : "text-[var(--text-2)] hover:bg-[var(--surface-3)]"}`}><Icon name={item.icon} size={16} />{item.label}</button>)}</nav>
@@ -244,7 +336,7 @@ export default function ProductDetailPage() {
             />
             <KpiCard
               icon="heart"
-              label="Tỉ lệ tích cực"
+              label="Tỉ lệ hài lòng"
               value={`${sentiment.positive.toFixed(0)}%`}
               accent="var(--pos)"
             />
@@ -266,7 +358,7 @@ export default function ProductDetailPage() {
           <div className="analytics-grid grid grid-cols-[1.1fr_.9fr] gap-[18px]">
             <div className="card p-[22px]">
               <h3 className="text-[16.5px] font-bold">Đánh giá theo 6 khía cạnh</h3>
-              <p className="faint mb-2 text-[13px]">Tỉ lệ cảm xúc tích cực ở từng khía cạnh sản phẩm.</p>
+              <p className="faint mb-2 text-[13px]">Tỉ lệ cảm xúc hài lòng ở từng khía cạnh sản phẩm.</p>
               <AspectRadarChart aspects={data.aspects} />
             </div>
 
@@ -276,9 +368,9 @@ export default function ProductDetailPage() {
                 <Donut positive={sentiment.positive} neutral={sentiment.neutral} negative={sentiment.negative} />
               </div>
               {[
-                ["Tích cực", sentiment.positive, "var(--pos)"],
+                ["Hài lòng", sentiment.positive, "var(--pos)"],
                 ["Trung lập", sentiment.neutral, "var(--neu)"],
-                ["Tiêu cực", sentiment.negative, "var(--neg)"],
+                ["Bất mãn", sentiment.negative, "var(--neg)"],
               ].map(([label, value, color]) => (
                 <div key={String(label)} className="flex items-center gap-2.5 py-1">
                   <span className="h-2.5 w-2.5 rounded-[3px]" style={{ background: String(color) }} />
@@ -317,7 +409,65 @@ export default function ProductDetailPage() {
           </div>
         </div>
       )}
-      {section === "specs" && <div className="analytics-grid fade-in grid grid-cols-[1.4fr_1fr] gap-[18px]"><div className="card p-[22px]"><h3 className="text-[16.5px] font-bold">Thông số thiết bị</h3><p className="faint mb-4 text-[13px]">Thông tin kỹ thuật chính thức của {data.product_name}.</p><dl className="grid grid-cols-2">{Object.entries(specs).map(([key, value]) => <div key={key} className="border-b border-[var(--border)] px-1 py-[13px]"><dt className="faint mb-1 text-xs font-semibold">{key}</dt><dd className="m-0 text-[14.5px] font-bold">{String(value)}</dd></div>)}</dl></div><div className="card bg-[var(--primary-soft)] p-[22px]"><h3 className="text-[16.5px] font-bold text-[var(--primary)]">Đề xuất bổ sung thông số</h3>{user ? proposalSent ? <div className="mt-2 flex gap-2.5 rounded-xl bg-[var(--surface)] p-3.5 text-sm"><Icon name="check" size={22} style={{ color: "var(--pos)" }} /><div><div className="font-bold">Đã gửi đề xuất</div><div className="faint text-xs">Đang chờ quản trị viên duyệt.</div></div></div> : <><p className="muted mt-1 text-[13.5px]">Bạn thấy thông số chưa chính xác? Gửi đề xuất chỉnh sửa để quản trị viên duyệt.</p><div className="mt-3 flex flex-col gap-2.5"><CustomSelect value={proposalAspect} onChange={setProposalAspect} options={aspectOptions} className="w-full" /><Textarea value={proposalText} onChange={(event) => setProposalText(event.target.value)} placeholder={`Đề xuất thông tin cho ${aspectOptions.find(o => o.value === proposalAspect)?.label || "khía cạnh này"}...`} className="min-h-[80px]" /><Button onClick={submitProposal} disabled={!proposalText.trim()} className="w-full">Gửi đề xuất</Button></div></> : <div className="py-4 text-center"><p className="muted mb-3 text-[13.5px]">Đăng nhập để gửi đề xuất bổ sung thông số sản phẩm.</p><Link href="/login"><Button>Đăng nhập</Button></Link></div>}</div></div>}
+      {section === "specs" && (
+        <div className="analytics-grid fade-in grid grid-cols-[1.4fr_1fr] gap-[18px]">
+          <div className="card p-[22px]">
+            <h3 className="text-[16.5px] font-bold">Thông số thiết bị</h3>
+            <p className="faint mb-4 text-[13px]">Thông tin kỹ thuật chính thức của {data.product_name}.</p>
+            <dl className="grid grid-cols-2">
+              {Object.entries(specs).map(([key, value]) => {
+                const template = data.spec_templates?.find(t => t.spec_key === key);
+                const fallback = SPEC_FALLBACK_INFO[key];
+                
+                const label = template?.display_label || fallback?.label || key;
+                const unitName = template?.unit || fallback?.unit || "";
+                const unit = unitName ? ` ${unitName}` : "";
+                
+                let displayVal = String(value);
+                if (value === true) displayVal = "Có";
+                else if (value === false) displayVal = "Không";
+                return (
+                  <div key={key} className="border-b border-[var(--border)] px-1 py-[13px]">
+                    <dt className="faint mb-1 text-xs font-semibold">{label}</dt>
+                    <dd className="m-0 text-[14.5px] font-bold">{displayVal}{unit}</dd>
+                  </div>
+                );
+              })}
+            </dl>
+          </div>
+          <div className="card bg-[var(--primary-soft)] p-[22px] flex flex-col justify-between">
+            <div>
+              <h3 className="text-[16.5px] font-bold text-[var(--primary)]">Đóng góp thông tin</h3>
+              <p className="muted mt-1.5 text-[13.5px] leading-relaxed">
+                Bạn phát hiện thông tin kỹ thuật hoặc mô tả của sản phẩm này chưa chính xác hoặc còn thiếu? Hãy đóng góp ý kiến chỉnh sửa để quản trị viên kiểm duyệt.
+              </p>
+            </div>
+            <div className="mt-5">
+              {user ? (
+                proposalSent ? (
+                  <div className="flex gap-2.5 rounded-xl bg-[var(--surface)] p-3.5 text-sm">
+                    <Icon name="check" size={22} style={{ color: "var(--pos)" }} />
+                    <div>
+                      <div className="font-bold">Đã gửi đề xuất</div>
+                      <div className="faint text-xs">Đang chờ quản trị viên duyệt.</div>
+                    </div>
+                  </div>
+                ) : (
+                  <Button onClick={() => setEditModalOpen(true)} className="w-full">
+                    <Icon name="plus" size={16} className="mr-1.5" />
+                    Đề xuất chỉnh sửa thông tin
+                  </Button>
+                )
+              ) : (
+                <div className="text-center py-2">
+                  <p className="muted mb-3.5 text-[13.5px]">Đăng nhập để gửi đề xuất bổ sung thông số sản phẩm.</p>
+                  <Link href={`/login?next=${encodeURIComponent(`/product/${id}`)}`}><Button className="w-full">Đăng nhập</Button></Link>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
       {section === "timeline" && (
         <div className="fade-in flex flex-col gap-[18px]">
           {filteredTrend?.length ? (
@@ -364,7 +514,7 @@ export default function ProductDetailPage() {
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="num faint text-xs">{event.change_point_date}</span>
                       <span className={`chip ${event.sentiment_direction === "POSITIVE" ? "pos" : "neg"}`}>
-                        {event.sentiment_direction === "POSITIVE" ? "Tích cực ↑" : "Tiêu cực ↓"}
+                        {event.sentiment_direction === "POSITIVE" ? "Hài lòng ↑" : "Bất mãn ↓"}
                       </span>
                     </div>
                     <div className="mt-1 text-sm font-bold">{event.event_video_title}</div>
@@ -378,7 +528,99 @@ export default function ProductDetailPage() {
           </div>
         </div>
       )}
-      {section === "comments" && (comments.length ? <div className="comments-grid fade-in grid grid-cols-3 gap-4">{[["POSITIVE", "Tích cực", "pos", "var(--pos)"], ["NEGATIVE", "Tiêu cực", "neg", "var(--neg)"], ["NEUTRAL", "Trung lập", "neu", "var(--neu)"]].map(([sentiment, label, cls, color]) => <div key={sentiment} className="flex flex-col gap-3"><div className="flex items-center gap-2"><span className="h-[9px] w-[9px] rounded-full" style={{ background: color }} /><h3 className="text-[15.5px] font-bold">{label}</h3><span className="faint text-xs">({comments.filter((item) => item.sentiment_label === sentiment).length})</span></div>{comments.filter((item) => item.sentiment_label === sentiment).map((item) => <div key={`${item.comment_id}-${item.aspect_label}-${item.text}`} className="card p-4" style={{ borderLeft: `3px solid ${color}` }}><div className="mb-2 flex items-center justify-between"><div className="flex items-center gap-2"><span className="grid h-7 w-7 place-items-center rounded-full bg-[var(--surface-3)] text-xs font-bold">{item.author.charAt(0)}</span><span className="text-[13px] font-bold">{item.author}</span></div><span className={`chip ${cls}`}>{item.aspect_label}</span></div><p className="m-0 text-[13.5px] leading-relaxed">&ldquo;{item.text}&rdquo;</p><div className="faint mt-2.5 flex items-center gap-1 text-[11.5px]"><Icon name="spark" size={12} />Độ tin cậy mô hình: <b className="num" style={{ color }}>{(item.confidence_score * 100).toFixed(0)}%</b></div></div>)}</div>)}</div> : <div className="card faint p-10 text-center">Chưa có bình luận đã phân tích cho sản phẩm này.</div>)}
+      {section === "comments" && (comments.length ? <div className="comments-grid fade-in grid grid-cols-3 gap-4">{[["POSITIVE", "Hài lòng", "pos", "var(--pos)"], ["NEGATIVE", "Bất mãn", "neg", "var(--neg)"], ["NEUTRAL", "Trung lập", "neu", "var(--neu)"]].map(([sentiment, label, cls, color]) => <div key={sentiment} className="flex flex-col gap-3"><div className="flex items-center gap-2"><span className="h-[9px] w-[9px] rounded-full" style={{ background: color }} /><h3 className="text-[15.5px] font-bold">{label}</h3><span className="faint text-xs">({comments.filter((item) => item.sentiment_label === sentiment).length})</span></div>{comments.filter((item) => item.sentiment_label === sentiment).map((item) => <div key={`${item.comment_id}-${item.aspect_label}-${item.text}`} className="card p-4" style={{ borderLeft: `3px solid ${color}` }}><div className="mb-2 flex items-center justify-between"><div className="flex items-center gap-2"><span className="grid h-7 w-7 place-items-center rounded-full bg-[var(--surface-3)] text-xs font-bold">{item.author.charAt(0)}</span><span className="text-[13px] font-bold">{item.author}</span></div><span className={`chip ${cls}`}>{item.aspect_label}</span></div><p className="m-0 text-[13.5px] leading-relaxed">&ldquo;{item.text}&rdquo;</p><div className="faint mt-2.5 flex items-center gap-1 text-[11.5px]"><Icon name="spark" size={12} />Độ tin cậy mô hình: <b className="num" style={{ color }}>{(item.confidence_score * 100).toFixed(0)}%</b></div></div>)}</div>)}</div> : <div className="card faint p-10 text-center">Chưa có bình luận đã phân tích cho sản phẩm này.</div>)}
+
+      {/* Modal đề xuất chỉnh sửa hoàn chỉnh của User */}
+      <Modal open={editModalOpen} title="Đề xuất chỉnh sửa thông tin sản phẩm" onClose={() => setEditModalOpen(false)} size="2xl">
+        <div className="space-y-5 p-1 max-h-[75vh] overflow-y-auto pr-2">
+          <p className="text-sm text-[var(--text-3)] leading-relaxed m-0">
+            Các thay đổi của bạn sẽ được quản trị viên duyệt trước khi cập nhật chính thức vào hệ thống.
+          </p>
+
+          {/* Mô tả & URL */}
+          <div className="space-y-4">
+            <h4 className="text-xs font-bold text-[var(--primary)] uppercase tracking-wider mb-2">Thông tin chung</h4>
+            <div className="space-y-3">
+              <div>
+                <label className="mb-1.5 block text-xs font-bold text-[var(--text-2)]">Mô tả sản phẩm</label>
+                <Textarea
+                  value={editDescription}
+                  onChange={(e) => setEditDescription(e.target.value)}
+                  placeholder="Nhập mô tả tóm tắt về sản phẩm..."
+                  className="min-h-[80px] text-sm"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="mb-1.5 block text-xs font-bold text-[var(--text-2)]">Đường dẫn chính thức</label>
+                  <Input
+                    value={editOfficialUrl}
+                    onChange={(e) => setEditOfficialUrl(e.target.value)}
+                    placeholder="https://example.com/product"
+                    className="text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-xs font-bold text-[var(--text-2)]">Ảnh sản phẩm (URL)</label>
+                  <Input
+                    value={editImageUrl}
+                    onChange={(e) => setEditImageUrl(e.target.value)}
+                    placeholder="https://example.com/image.jpg"
+                    className="text-sm"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="border-t border-[var(--border)] my-4" />
+
+          {/* Thông số kỹ thuật */}
+          <div className="space-y-4">
+            <h4 className="text-xs font-bold text-[var(--primary)] uppercase tracking-wider mb-2">Thông số kỹ thuật</h4>
+            {data.spec_templates && data.spec_templates.length > 0 ? (
+              <div className="grid grid-cols-2 gap-4">
+                {data.spec_templates.map((t) => (
+                  <div key={t.spec_key} className="flex flex-col gap-1.5">
+                    <label className="text-xs font-bold text-[var(--text-2)]">
+                      {t.display_label} {t.unit ? `(${t.unit})` : ""}
+                    </label>
+                    {t.value_type === "boolean" ? (
+                      <CustomSelect
+                        value={String(editSpecs[t.spec_key] ?? "")}
+                        onChange={(val) => setEditSpecs((prev) => ({ ...prev, [t.spec_key]: val }))}
+                        options={[
+                          { value: "", label: "Chọn..." },
+                          { value: "true", label: "Có" },
+                          { value: "false", label: "Không" }
+                        ]}
+                      />
+                    ) : (
+                      <Input
+                        type={t.value_type === "number" ? "number" : "text"}
+                        value={editSpecs[t.spec_key] ?? ""}
+                        onChange={(e) => setEditSpecs((prev) => ({ ...prev, [t.spec_key]: e.target.value }))}
+                        placeholder={`Nhập ${t.display_label.toLowerCase()}...`}
+                        className="text-sm"
+                      />
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-xs text-[var(--text-3)] text-center py-4 bg-[var(--surface-2)] rounded-lg">
+                Danh mục này chưa cấu hình template thông số.
+              </div>
+            )}
+          </div>
+
+          {/* Nút bấm */}
+          <div className="flex justify-end gap-3 pt-4 border-t border-[var(--border)] mt-6">
+            <Button variant="outline" onClick={() => setEditModalOpen(false)}>Hủy</Button>
+            <Button onClick={submitProposal}>Gửi đề xuất</Button>
+          </div>
+        </div>
+      </Modal>
     </main>
   );
 }

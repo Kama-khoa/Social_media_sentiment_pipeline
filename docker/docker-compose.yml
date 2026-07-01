@@ -27,6 +27,7 @@ x-airflow-common: &airflow-common
   user: "${AIRFLOW_UID:-50000}:0"
 
 services:
+  # ── Infrastructure Layer ──
   redis:
     image: redis:7-alpine
     ports:
@@ -65,6 +66,53 @@ services:
       start_period: 5s
     restart: always
 
+  # ── Application Layer (Backend & Frontend) ──
+  backend:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.backend
+    ports:
+      - "8000:8000"
+    environment:
+      - APP_DATABASE_URL=postgresql+psycopg2://webapi:webapi@web-db:5432/sentiment_webapi
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - AIRFLOW_BASE_URL=http://host.docker.internal:8080
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/gcp_credentials.json
+      - GCP_PROJECT_ID=${GCP_PROJECT_ID}
+      - BQ_DATASET=${BQ_DATASET}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - JWT_ALGORITHM=${JWT_ALGORITHM}
+      - JWT_EXPIRE_MINUTES=${JWT_EXPIRE_MINUTES}
+    env_file:
+      - ../.env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ../.env:/app/.env
+      - ${GOOGLE_APPLICATION_CREDENTIALS:?Set GOOGLE_APPLICATION_CREDENTIALS in .env or shell}:/app/gcp_credentials.json:ro
+    depends_on:
+      web-db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    restart: always
+
+  frontend:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.frontend
+      args:
+        - NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
+    depends_on:
+      - backend
+    restart: always
+
+  # ── Airflow Orchestration Layer ──
   airflow-webserver:
     <<: *airflow-common
     command: webserver

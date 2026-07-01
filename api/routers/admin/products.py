@@ -14,6 +14,8 @@ from api.cache import invalidate_prefix
 from api.config import get_settings
 from api.dependencies import require_admin
 from api.models import AppUser
+from api.database import get_db
+from sqlalchemy.orm import Session
 from api.routers.product_helpers import json_value, validate_specs
 from api.schemas.request_schemas import (
     ProductAliasCreateRequest,
@@ -30,6 +32,7 @@ from api.schemas.response_schemas import (
     ProductConfigItem,
     ProductDetailChangeRequestItem,
     ProductSpecTemplateItem,
+    ProductAdminDetailResponse,
 )
 
 router = APIRouter(prefix="/admin/products", tags=["product-catalog"])
@@ -210,11 +213,48 @@ def update_product(product_id: str, body: ProductUpdateRequest, _: AppUser = Dep
             bigquery.ScalarQueryParameter("is_active", "BOOL", values["is_active"]),
         ]),
     ).result()
+
+    if body.specs is not None or body.description is not None or body.official_url is not None or body.image_url is not None:
+        existing_details = query_to_list(
+            f"SELECT specs FROM `{settings.gcp_project_id}.{settings.bq_dataset}.product_details` WHERE product_id = @product_id",
+            [bigquery.ScalarQueryParameter("product_id", "STRING", product_id)]
+        )
+        existing_specs = json_value(existing_details[0].get("specs")) if existing_details else {}
+        if not isinstance(existing_specs, dict):
+            existing_specs = {}
+        merged_specs = {**existing_specs, **(body.specs or {})}
+
+        get_bq_client().query(
+            f"""
+            MERGE `{settings.gcp_project_id}.{settings.bq_dataset}.product_details` target
+            USING (SELECT @product_id AS product_id) source
+            ON target.product_id = source.product_id
+            WHEN MATCHED THEN UPDATE SET
+                specs=PARSE_JSON(@merged_specs),
+                description=COALESCE(@description, target.description),
+                official_url=COALESCE(@official_url, target.official_url),
+                image_url=COALESCE(@image_url, target.image_url),
+                updated_at=CURRENT_TIMESTAMP()
+            WHEN NOT MATCHED THEN INSERT
+                (product_id, specs, description, official_url, image_url, updated_at)
+            VALUES
+                (@product_id, PARSE_JSON(@merged_specs), @description, @official_url, @image_url, CURRENT_TIMESTAMP())
+            """,
+            job_config=bigquery.QueryJobConfig(query_parameters=[
+                bigquery.ScalarQueryParameter("product_id", "STRING", product_id),
+                bigquery.ScalarQueryParameter("merged_specs", "STRING", json.dumps(merged_specs, ensure_ascii=False)),
+                bigquery.ScalarQueryParameter("description", "STRING", body.description),
+                bigquery.ScalarQueryParameter("official_url", "STRING", body.official_url),
+                bigquery.ScalarQueryParameter("image_url", "STRING", body.image_url),
+            ]),
+        ).result()
+
     invalidate_prefix("products:")
     return ProductConfigItem(
         product_id=product_id, created_at=row["created_at"],
         updated_at=datetime.now(timezone.utc), **values,
     )
+
 
 
 @router.delete("/{product_id}", status_code=204)
@@ -328,18 +368,41 @@ def deactivate_template(category: str, spec_key: str, _: AppUser = Depends(requi
 
 
 @router.get("/detail-requests", response_model=list[ProductDetailChangeRequestItem])
-def list_detail_requests(status: str = "pending", _: AppUser = Depends(require_admin)):
+def list_detail_requests(
+    status: str = "pending",
+    db: Session = Depends(get_db),
+    _: AppUser = Depends(require_admin),
+):
     settings = get_settings()
     rows = query_to_list(
         f"""
-        SELECT * FROM `{settings.gcp_project_id}.{settings.bq_dataset}.product_detail_change_requests`
-        WHERE status = @status
-        ORDER BY created_at DESC
+        SELECT r.*, p.product_name FROM `{settings.gcp_project_id}.{settings.bq_dataset}.product_detail_change_requests` r
+        LEFT JOIN `{settings.gcp_project_id}.{settings.bq_marts_dataset}.dim_products` p ON r.product_id = p.product_id
+        WHERE r.status = @status
+        ORDER BY r.created_at DESC
         """,
         [bigquery.ScalarQueryParameter("status", "STRING", status)],
     )
+    
+    # Resolve user details from Postgres
+    user_ids = set()
+    for row in rows:
+        if row.get("submitted_by"):
+            user_ids.add(row["submitted_by"])
+        if row.get("reviewed_by"):
+            user_ids.add(row["reviewed_by"])
+            
+    user_map = {}
+    if user_ids:
+        users = db.query(AppUser).filter(AppUser.id.in_(list(user_ids))).all()
+        user_map = {u.id: u.display_name for u in users}
+        
     for row in rows:
         row["proposed_specs"] = json_value(row.get("proposed_specs"))
+        row["submitted_by"] = user_map.get(row.get("submitted_by"), row.get("submitted_by"))
+        if row.get("reviewed_by"):
+            row["reviewed_by"] = user_map.get(row.get("reviewed_by"), row.get("reviewed_by"))
+            
     return rows
 
 
@@ -376,13 +439,25 @@ def review_detail_request(
     specs = json_value(request.get("proposed_specs"))
     if body.action == "approve":
         validate_specs(request["product_id"], specs)
+        
+        # Fetch existing specs to perform python-side merge instead of relying on non-existent BQ JSON_MERGE_PATCH
+        existing_rows = query_to_list(
+            f"SELECT specs FROM `{settings.gcp_project_id}.{settings.bq_dataset}.product_details` WHERE product_id=@product_id",
+            [bigquery.ScalarQueryParameter("product_id", "STRING", request["product_id"])],
+        )
+        existing_specs = json_value(existing_rows[0].get("specs")) if existing_rows else {}
+        if not isinstance(existing_specs, dict):
+            existing_specs = {}
+            
+        merged_specs = {**existing_specs, **(specs or {})}
+        
         get_bq_client().query(
             f"""
             MERGE `{settings.gcp_project_id}.{settings.bq_dataset}.product_details` target
             USING (SELECT @product_id AS product_id) source
             ON target.product_id = source.product_id
             WHEN MATCHED THEN UPDATE SET
-                specs=JSON_MERGE_PATCH(COALESCE(target.specs, PARSE_JSON('{{}}')), PARSE_JSON(@specs)),
+                specs=PARSE_JSON(@merged_specs),
                 description=COALESCE(@description, target.description),
                 official_url=COALESCE(@official_url, target.official_url),
                 image_url=COALESCE(@image_url, target.image_url),
@@ -390,11 +465,11 @@ def review_detail_request(
             WHEN NOT MATCHED THEN INSERT
                 (product_id, specs, description, official_url, image_url, updated_at, updated_by)
             VALUES
-                (@product_id, PARSE_JSON(@specs), @description, @official_url, @image_url, CURRENT_TIMESTAMP(), @admin_id)
+                (@product_id, PARSE_JSON(@merged_specs), @description, @official_url, @image_url, CURRENT_TIMESTAMP(), @admin_id)
             """,
             job_config=bigquery.QueryJobConfig(query_parameters=[
                 bigquery.ScalarQueryParameter("product_id", "STRING", request["product_id"]),
-                bigquery.ScalarQueryParameter("specs", "STRING", json.dumps(specs or {})),
+                bigquery.ScalarQueryParameter("merged_specs", "STRING", json.dumps(merged_specs, ensure_ascii=False)),
                 bigquery.ScalarQueryParameter("description", "STRING", request.get("proposed_description")),
                 bigquery.ScalarQueryParameter("official_url", "STRING", request.get("proposed_official_url")),
                 bigquery.ScalarQueryParameter("image_url", "STRING", request.get("proposed_image_url")),
@@ -797,3 +872,59 @@ def get_crawl_task_status(task_id: str, _: AppUser = Depends(require_admin)):
         
     with open(task_file, "r", encoding="utf-8") as f:
         return json.load(f)
+
+
+@router.get("/{product_id}", response_model=ProductAdminDetailResponse)
+def get_product(product_id: str, _: AppUser = Depends(require_admin)):
+    settings = get_settings()
+    configs = query_to_list(
+        f"""
+        SELECT 
+            *,
+            (SELECT COUNT(1) FROM `{settings.gcp_project_id}.{settings.bq_marts_dataset}.dim_products` dp WHERE dp.product_id = t.product_id) > 0 AS is_synced,
+            EXISTS(
+                SELECT 1 
+                FROM `{settings.gcp_project_id}.{settings.bq_dataset}.keyword_config` k 
+                WHERE k.search_cluster = t.product_id AND k.is_active = TRUE
+            ) AS has_keyword
+        FROM `{settings.gcp_project_id}.{settings.bq_dataset}.product_config` t
+        WHERE t.product_id = @product_id
+        """,
+        [bigquery.ScalarQueryParameter("product_id", "STRING", product_id)],
+    )
+    if not configs:
+        raise HTTPException(status_code=404, detail="Sản phẩm không tồn tại")
+    config = configs[0]
+
+    details = query_to_list(
+        f"SELECT specs, description, official_url, image_url FROM `{settings.gcp_project_id}.{settings.bq_dataset}.product_details` WHERE product_id = @product_id",
+        [bigquery.ScalarQueryParameter("product_id", "STRING", product_id)],
+    )
+
+    specs = None
+    description = None
+    official_url = None
+    image_url = None
+    if details:
+        detail = details[0]
+        specs = json_value(detail.get("specs"))
+        description = detail.get("description")
+        official_url = detail.get("official_url")
+        image_url = detail.get("image_url")
+
+    return ProductAdminDetailResponse(
+        product_id=config["product_id"],
+        product_name=config["product_name"],
+        brand=config.get("brand"),
+        category=config.get("category"),
+        release_year=config.get("release_year"),
+        is_active=config["is_active"],
+        created_at=config["created_at"],
+        updated_at=config["updated_at"],
+        is_synced=config.get("is_synced"),
+        has_keyword=config.get("has_keyword"),
+        specs=specs,
+        description=description,
+        official_url=official_url,
+        image_url=image_url,
+    )

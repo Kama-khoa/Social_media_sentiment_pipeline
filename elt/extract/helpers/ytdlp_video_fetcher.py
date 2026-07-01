@@ -133,14 +133,16 @@ class YtdlpVideoFetcher:
             })
         return videos
 
-    def filter_by_keywords(self, videos: list[dict]) -> list[dict]:
+    def filter_by_keywords(self, videos: list[dict], custom_keywords: list[KeywordDTO] | None = None) -> list[dict]:
         matched: list[dict] = []
+        filter_keywords = custom_keywords if custom_keywords is not None else self._filter_keywords
+        filter_texts = [kw.keyword_text.lower() for kw in filter_keywords]
         for video in videos:
             title_lower = video.get("title", "").lower()
             desc_lower = video.get("description", "").lower()
-            for idx, kw_text in enumerate(self._filter_texts):
+            for idx, kw_text in enumerate(filter_texts):
                 if kw_text in title_lower or kw_text in desc_lower:
-                    video["_matched_keyword"] = self._filter_keywords[idx].keyword_text
+                    video["_matched_keyword"] = filter_keywords[idx].keyword_text
                     matched.append(video)
                     break
         return matched

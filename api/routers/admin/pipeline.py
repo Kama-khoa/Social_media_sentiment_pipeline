@@ -340,7 +340,7 @@ def _fetch_bq_metrics(settings) -> PipelineMetrics:
         f"""
         SELECT dag_run_id
         FROM `{settings.gcp_project_id}.{settings.bq_dataset}.raw_sentiment_results`
-        ORDER BY created_at DESC
+        ORDER BY processed_at DESC
         LIMIT 1
         """,
     ]

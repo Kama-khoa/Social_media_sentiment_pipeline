@@ -79,6 +79,11 @@ class ProductUpdateRequest(BaseModel):
     category: Optional[str] = None
     release_year: Optional[int] = None
     is_active: Optional[bool] = None
+    specs: Optional[dict[str, Any]] = None
+    description: Optional[str] = None
+    official_url: Optional[str] = None
+    image_url: Optional[str] = None
+
 
 
 class ProductAliasCreateRequest(BaseModel):

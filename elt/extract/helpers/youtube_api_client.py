@@ -58,6 +58,46 @@ class YouTubeApiClient:
             })
         return results
 
+    def search_by_keyword(
+        self,
+        keyword: str,
+        max_results: int = 10,
+    ) -> list[dict]:
+        try:
+            response = (
+                self._service
+                .search()
+                .list(
+                    q=keyword,
+                    type="video",
+                    order="relevance",
+                    maxResults=min(max_results, 50),
+                    part="snippet",
+                    regionCode="VN",
+                    relevanceLanguage="vi",
+                )
+                .execute()
+            )
+        except Exception:
+            logger.exception("search.list failed for keyword=%s", keyword)
+            return []
+
+        results: list[dict] = []
+        for item in response.get("items", []):
+            video_id = item["id"].get("videoId")
+            if not video_id:
+                continue
+            snippet = item.get("snippet", {})
+            published_at = self._parse_iso(snippet.get("publishedAt"))
+            results.append({
+                "id": video_id,
+                "title": snippet.get("title", ""),
+                "description": snippet.get("description") or "",
+                "channel_id": snippet.get("channelId", ""),
+                "published_at": published_at,
+            })
+        return results
+
     def get_video_details(self, video_ids: list[str]) -> list[VideoDTO]:
         if not video_ids:
             return []
